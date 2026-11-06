@@ -1,12 +1,12 @@
-# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v7)
+# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v8)
 
 **Finding ID:** WLA-002  
 **Category:** ARCHITECTURAL  
 **Risk:** Not a runtime defect in current code. An undocumented design boundary that becomes a code defect when DIRECT mode is activated.  
-**Status:** ARCHITECTURE DECISION DEFINED (v7) — pending reviewer acceptance  
-**v1–v6 history:** NOT ACCEPTED (see appendix A for full rejection history)  
-**v7 authored:** 2026-11-06  
-**v6 rejection reason:** (1) Arithmetic error — $1.49 processing cost written as $1.19; provider net $66.76 written as $67.06. (2) Connected-account configuration wrong — recommended Accounts v2 with `fees_collector: "stripe"`, `losses_collector: "stripe"`, Standard account, full Dashboard access; not legacy Express. (3) Refund procedure wrong — provider initiates refunds directly through Stripe, DriveBook does not facilitate; DriveBook processes webhooks only. (4) Dispute handling wrong — provider manages via Stripe Dashboard; DriveBook must not claim zero legal liability. (5) Scope too broad — wallet top-ups and wallet-funded packages out of scope until WLA-005. (6) Australian card-surcharge compliance not reviewed.
+**Status:** ARCHITECTURE DECISION DEFINED (v8) — pending reviewer acceptance  
+**v1–v7 history:** NOT ACCEPTED (see appendix A for full rejection history)  
+**v8 authored:** 2026-11-06  
+**v7 rejection reason:** (1) Partial application-fee refund described as "proportional by default" — incorrect; the full fee is retained unless the platform explicitly refunds it. (2) DIRECT package refunds claimed to use the PLATFORM `calculatePartialPackageRefund()` function — the provider manages DIRECT refunds independently; PLATFORM function does not transfer. (3) Refund funding not documented — connected account balance requirements and insufficient-balance outcomes missing. (4) Webhook specification incomplete — no connected-account event context, signature verification, idempotency, partial/full refund handling, or reconciliation design. (5) G01–G11 references not updated to G01–G12 in section 10 heading and decision summary. (6) Stripe Managed Risk eligibility unverified — must not claim complete legal/financial isolation.
 
 **Sources inspected (code):**  
 - `lib/services/stripe.ts` — `createConnectAccount()`: `type: 'express'`, `country: 'AU'`  
@@ -183,9 +183,23 @@ This means when the provider issues a refund through their Stripe Dashboard, the
 - Stripe processing cost: $1.49 — borne by the provider, not DriveBook
 - DriveBook net: **+$1.75** (full application fee retained)
 
-**Partial refunds:** The provider issues partial refunds through Stripe Dashboard. The application fee is retained proportionally by default (per Stripe: if the provider does not set `refund_application_fee: true`, the fee is not returned). DriveBook processes the webhook to update booking state accordingly.
+**Partial refunds:** The provider issues partial refunds through Stripe Dashboard. The full application fee remains with DriveBook by default — `refund_application_fee: false` (the default) means the application fee is **not refunded at all**, including on partial refunds. A proportional application-fee refund only occurs if the platform explicitly sets `refund_application_fee: true`, which is an operation controlled by DriveBook (the platform that collected the fee), not by the provider. Under the non-refundable policy, DriveBook does not refund the application fee on any refund — partial or full.
 
 **ACL compliance note:** A non-refundable application fee is the intended product policy. Under Australian Consumer Law, consumer statutory rights may override a disclosed non-refundable fee in certain circumstances (e.g. service not delivered, major failure). The terms and refund handling must receive legal review before DIRECT mode launches.
+
+**Refund funding and insufficient-balance behaviour:**
+
+When the provider issues a full or partial refund, the connected account must have sufficient available balance to fund the refund. The provider's remaining proceeds after a successful charge are `bookingRate − applicationFee − StripeProcessingCost` (e.g. $66.76 on $70). If the provider has already withdrawn these funds to their bank account, the connected account balance may be insufficient for a subsequent refund.
+
+| Scenario | Outcome |
+|---|---|
+| Connected account has sufficient balance | Refund proceeds; student receives funds; connected account debited |
+| Connected account has insufficient balance (funds withdrawn) | Refund is created in `pending` status; Stripe waits for the connected account balance to be replenished by new charges or manual top-up |
+| Connected account remains insufficient | Refund stays pending; Stripe may eventually fail the refund. The provider is responsible for resolving the shortfall. DriveBook does not advance funds. |
+| `losses_collector: "stripe"` (recommended Accounts v2) | If the connected account goes negative, Stripe absorbs the loss — but this applies to negative balances, not to refund funding. The provider must still resolve pending refunds. |
+| `losses_collector: "application"` (or legacy Express) | DriveBook is liable for the negative balance. DriveBook may need to fund the refund from its platform balance and recover from the provider. |
+
+DriveBook's contractual obligation to the student on a DIRECT booking is not automatically zeroed by retaining the application fee. The provider's agreement with DriveBook should define who bears the cost when a refund cannot be funded from the connected account.
 
 ### 5.3 Dispute and chargeback handling
 
@@ -212,6 +226,56 @@ The actual configuration must be verified at implementation time. This ADR recom
 **DriveBook's application fee on dispute loss:** If the provider loses a dispute, DriveBook retains the application fee. The provider's loss does not create an obligation for DriveBook to return the fee. Whether DriveBook chooses to return the fee as a goodwill measure is a separate product decision.
 
 **Webhook handling for DIRECT disputes:** The `charge.dispute.created` event fires against the connected account, not the platform. DriveBook must listen to events on connected accounts via Connect webhooks (G11). Dispute event delivery and reconciliation must be verified before DIRECT activation. No `PlatformLedger` entries must be written for DIRECT disputes (see section 6).
+
+### 5.4 Webhook Event-Handling Specification (G03 + G11)
+
+Direct-charge events fire against the **connected account**, not the platform. DriveBook must use Connect webhooks (or per-account webhook endpoints) to receive these events. The following specification defines the minimum event-handling design.
+
+**Connected-account event context:**
+- All DIRECT-mode webhook events arrive with the connected account's ID in the event payload
+- DriveBook must verify the event's `account` field matches a known provider's `stripeAccountId`
+- Events from unknown accounts must be logged and ignored (not 500'd — Stripe retries on non-2xx)
+
+**Event signature verification:**
+- Connect webhook endpoints must verify the Stripe signature using the **Connect webhook signing secret** (separate from the platform-level webhook secret)
+- The endpoint must use `stripe.webhooks.constructEvent(rawBody, signature, connectWebhookSecret)`
+
+**Idempotency and duplicate-event handling:**
+- Stripe may deliver the same event multiple times. Each event has a unique `id` field.
+- DriveBook must maintain an idempotency table (e.g. `WebhookEvent` model already exists for this purpose) keyed on `event.id`
+- If the event ID has already been processed, return 200 without reprocessing
+
+**Refund events — full specification:**
+
+| Event | Handling |
+|---|---|
+| `charge.refunded` (full) | Verify connected account; verify charge belongs to a DIRECT booking; update Booking status to `CANCELLED` or `REFUNDED`; record `DirectSettlementEntry` if application fee was returned; do NOT write `PlatformLedger` entries |
+| `charge.refunded` (partial) | Verify the `amount_refunded` field — this is cumulative, not per-event. Compare against the charge's total amount to determine the remaining unrefunded balance. Update Booking to `PARTIALLY_REFUNDED` (new status if needed). Do NOT mark the booking as fully cancelled. |
+| Multiple refunds on one charge | Stripe allows multiple partial refunds against a single charge. Each `charge.refunded` event represents one refund object, but `amount_refunded` on the charge is cumulative. DriveBook must track individual refund objects and sum them. |
+| `refund.updated` (failed reversal) | If a refund that was `succeeded` transitions to `failed` (e.g. insufficient funds after extended pending), Stripe fires `refund.updated`. DriveBook must revert any booking state change that was made based on the original refund success. |
+| `charge.refund.updated` | Not a standard Stripe event. Use `refund.updated` for refund status changes. |
+
+**Booking state transitions for DIRECT refunds:**
+
+```
+CONFIRMED → PARTIALLY_REFUNDED  (partial refund issued by provider)
+CONFIRMED → REFUNDED             (full refund issued by provider)
+PARTIALLY_REFUNDED → REFUNDED    (subsequent refund brings total to full)
+REFUNDED → CONFIRMED              (refund failed/reversed — rare; must revert)
+```
+
+**Reconciliation against Stripe objects:**
+- After each refund event, DriveBook must reconcile by fetching the charge and its `refunds` collection via the Stripe API (using the `Stripe-Account` header)
+- Verify the `amount_refunded` matches DriveBook's expected refund total
+- Verify the `application_fee` object on the charge — check whether the fee was refunded by checking the `amount_refunded` field on the `ApplicationFee` object. If the fee was refunded (which requires the platform to have set `refund_application_fee: true`), record `APPLICATION_FEE_REFUNDED` in `DirectSettlementEntry`
+- The provider cannot independently refund the application fee — only the platform can. If the application fee appears refunded, it was DriveBook's action (or a Stripe Dashboard setting the platform configured)
+
+**Dispute events:**
+
+| Event | Handling |
+|---|---|
+| `charge.dispute.created` (on connected account) | Verify connected account; log dispute; do NOT write `PlatformLedger` entries; alert admin if needed |
+| `charge.dispute.closed` | Record outcome in `DirectSettlementEntry` if applicable; do NOT write `DISPUTE_OPENED/WON/LOST` LedgerEntries against `PlatformLedger` |
 
 ---
 
@@ -315,11 +379,15 @@ DriveBook's refund position is positive because Stripe's processing cost was nev
 
 Wallet ownership semantics (WLA-005) must be resolved before any DIRECT wallet integration is designed. This ADR covers single-booking and package purchases only.
 
-**Package purchases in scope:**
+**Package purchases in scope (single-booking charge structure only):**
 - Provider pays the 2.5% application fee (same as single bookings)
 - Student pays the package price only
-- Package refund clawback rules (from `calculatePartialPackageRefund()`) apply in both modes for the booking-rate portion
 - Application fee is retained on refund under the non-refundable policy
+
+**DIRECT package refund policy — not yet defined:**
+The existing `calculatePartialPackageRefund()` is a PLATFORM-mode implementation that applies DriveBook's discounted-package repricing formula. It does **not** automatically apply to DIRECT mode, where the provider manages refunds independently through their Stripe Dashboard. The provider's package refund calculation (including discount clawback, used-hours repricing, and minimum-hours qualification) is a separate policy that must be defined contractually with the provider. The ADR does not assume the PLATFORM calculation transfers to DIRECT.
+
+DIRECT package refund policy is **out of scope for this ADR** until a provider-facing package refund contract is defined. Single-booking DIRECT refunds are in scope.
 
 **Marketplace behaviour unchanged:** This ADR does not change any PLATFORM-mode behaviour, including wallet top-ups, wallet-funded bookings, commission rates, payout schedules, or package refund clawback.
 
@@ -345,7 +413,7 @@ The Marketplace mode charges students a 3.6% platform fee surcharge. Under the [
 
 ---
 
-## 10. Implementation Pre-Conditions (G01–G11)
+## 10. Implementation Pre-Conditions (G01–G12)
 
 These must all be resolved before DIRECT mode is activated. No code changes are authorised by this ADR.
 
@@ -361,7 +429,7 @@ These must all be resolved before DIRECT mode is activated. No code changes are 
 | G08 | `lib/services/platform-pricing.ts` / schema | No `directApplicationFeeRate` config — needs `PlatformSettings.directApplicationFeePercentage Decimal @default(2.5)` |
 | G09 | `lib/services/saas-payment.ts` | `application_fee_amount` without connected-account context — validity unresolved pending WLA-004 |
 | G10 | `prisma/schema.prisma` | `DirectSettlementEntry` model and `DirectSettlementEntryType` enum not implemented |
-| G11 | `lib/services/` | No Connect webhook listener for events on connected accounts (required for DIRECT dispute and refund visibility) |
+| G11 | `app/api/stripe/webhook/route.ts` | No Connect webhook listener for connected-account events — required for DIRECT refund and dispute visibility. Design specified in section 5.4 (event context, signature verification, idempotency, partial/full refund handling, reconciliation) |
 | G12 | `lib/services/stripe.ts` | `createConnectAccount()` creates Express accounts (v1); must migrate to Accounts v2 Standard with `fees_collector: "stripe"`, `losses_collector: "stripe"` — migration not authorised by this ADR |
 
 ---
@@ -396,7 +464,7 @@ No current code is modified by this ADR. The following are verified correct and 
 | Does DriveBook have zero legal liability? | Not claimed — depends on provider agreement, Stripe config, and Australian law |
 | Are DIRECT wallet top-ups in scope? | No — out of scope until WLA-005 is resolved |
 | Can PLATFORM and DIRECT share PlatformLedger? | No — DIRECT must use `DirectSettlementEntry` only |
-| Can DIRECT be activated from current source? | No — G01–G11 must be resolved |
+| Can DIRECT be activated from current source? | No — G01–G12 must be resolved |
 | Is PLATFORM behaviour changed by this ADR? | No |
 | Is account migration authorised? | No — migration to Accounts v2 is a precondition, not authorised by this ADR |
 
@@ -412,6 +480,7 @@ No current code is modified by this ADR. The following are verified correct and 
 | v4 | NOT ACCEPTED | Platform fee inverted — charged on top of booking rate instead of additive |
 | v5 | NOT ACCEPTED | Entire charge type wrong — destination charge assumed; correct model is direct charge on connected account; fee is provider-funded not student-funded |
 | v6 | NOT ACCEPTED | Arithmetic error ($1.49 written as $1.19); wrong account config (Express, not Accounts v2 Standard); DriveBook facilitating refunds (should be provider-initiated); zero-liability claim for disputes; wallet top-ups in scope (should be out until WLA-005); no AU surcharge compliance review |
+| v7 | NOT ACCEPTED | Partial application-fee refund described as proportional (incorrect — full fee retained unless platform explicitly refunds); DIRECT package refunds claimed to use PLATFORM function (provider manages independently); refund funding/insufficient-balance not documented; webhook specification incomplete; G01–G11 not updated to G01–G12; Managed Risk eligibility unverified |
 
 ---
 
@@ -434,10 +503,12 @@ These assumptions must be verified before the ADR is accepted or DIRECT mode is 
 7. **WLA-004 dependency:** The SaaS `application_fee_amount` path in `saas-payment.ts` remains unverified. This ADR does not treat the SaaS flow as a confirmed baseline.
 
 8. **Merchant-of-record and tax obligations:** Out of scope for this ADR. Requires separate legal/tax assessment.
+9. **DIRECT package refund policy:** The provider manages DIRECT refunds independently. The existing PLATFORM `calculatePartialPackageRefund()` function does not transfer to DIRECT mode. A provider-facing package refund contract (including discount clawback, used-hours repricing, and minimum-hours qualification) must be defined before DIRECT package purchases are activated. Single-booking DIRECT refunds are in scope; DIRECT packages are deferred.
+10. **Refund funding and provider obligations:** When a provider issues a refund with insufficient connected-account balance, the refund may pend or fail. DriveBook's contractual obligations to the student in this scenario are not defined. The provider agreement must specify who bears the cost when a refund cannot be funded from the connected account.
 
 ---
 
-*This document is an architecture decision record. No code changes, account migration, or DIRECT activation are authorised by this ADR. DIRECT mode remains blocked until G01–G12 are resolved, this ADR is accepted by independent review, and all unresolved assumptions in Appendix B are verified.*
+*This document is an architecture decision record. No code changes, account migration, or DIRECT activation are authorised by this ADR. DIRECT mode remains blocked until G01–G12 are resolved, this ADR is accepted by independent review, and all unresolved assumptions in Appendix B are verified. Stripe Managed Risk eligibility for DriveBook's Australian platform agreement is not confirmed and must not be treated as a verified guarantee.*
 
 *Stripe documentation sources are cited inline. Content was paraphrased for compliance with licensing restrictions.*
 
