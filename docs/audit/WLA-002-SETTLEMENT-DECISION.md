@@ -1,12 +1,12 @@
-# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v6)
+# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v7)
 
 **Finding ID:** WLA-002  
 **Category:** ARCHITECTURAL  
 **Risk:** Not a runtime defect in current code. An undocumented design boundary that becomes a code defect when DIRECT mode is activated.  
-**Status:** ARCHITECTURE DECISION DEFINED (v6) — pending reviewer acceptance  
-**v1–v5 history:** NOT ACCEPTED (see appendix A for full rejection history)  
-**v6 authored:** 2026-11-06  
-**Central correction from v5:** v1–v5 assumed a destination charge (Model A): student pays booking rate + platform fee; DriveBook is the charge merchant; `transfer_data.destination` routes money to the instructor. This is wrong. The intended DIRECT model is a **direct charge on the instructor's connected account**: student pays the provider's advertised price only; DriveBook collects a provider-funded application fee from the instructor's proceeds. This is a different Stripe charge type with different fund flow, different dispute/refund mechanics, and different fee funding.
+**Status:** ARCHITECTURE DECISION DEFINED (v7) — pending reviewer acceptance  
+**v1–v6 history:** NOT ACCEPTED (see appendix A for full rejection history)  
+**v7 authored:** 2026-11-06  
+**v6 rejection reason:** (1) Arithmetic error — $1.49 processing cost written as $1.19; provider net $66.76 written as $67.06. (2) Connected-account configuration wrong — recommended Accounts v2 with `fees_collector: "stripe"`, `losses_collector: "stripe"`, Standard account, full Dashboard access; not legacy Express. (3) Refund procedure wrong — provider initiates refunds directly through Stripe, DriveBook does not facilitate; DriveBook processes webhooks only. (4) Dispute handling wrong — provider manages via Stripe Dashboard; DriveBook must not claim zero legal liability. (5) Scope too broad — wallet top-ups and wallet-funded packages out of scope until WLA-005. (6) Australian card-surcharge compliance not reviewed.
 
 **Sources inspected (code):**  
 - `lib/services/stripe.ts` — `createConnectAccount()`: `type: 'express'`, `country: 'AU'`  
@@ -114,12 +114,22 @@ stripe.paymentIntents.create(
 
 ### 4.3 Connected account configuration
 
-`createConnectAccount()` creates `type: 'express'` accounts (v1 legacy). For the direct charge model:
+**Current state:** `createConnectAccount()` creates `type: 'express'` accounts (v1 legacy model). This is not the intended configuration for DIRECT mode.
 
-- **Stripe processing fees:** deducted from the connected account's balance (provider-funded)
-- **Dispute fees (`fees_collector`):** for legacy Express accounts (`application_express`), dispute fees are charged to the **connected account** — this is consistent with the provider-funded model
-- **Negative balances:** DriveBook (platform) remains responsible for connected account negative balances — this is an Express account limitation that cannot be avoided without migrating to Accounts v2 with `losses_collector: "stripe"`
-- **Express Dashboard:** connected accounts can view payments, issue refunds, and manage disputes from their Express Dashboard — appropriate for DIRECT mode where provider handles their own refund flow
+**Recommended configuration for DIRECT mode (Accounts v2):**
+
+| Setting | Value | Rationale |
+|---|---|---|
+| Account type | **Standard** (Accounts v2) | Full Stripe Dashboard access — provider can manage payments, issue refunds, and respond to disputes directly |
+| `fees_collector` | **`"stripe"`** | Stripe collects its own processing fees from the connected account's payment; provider sees Stripe's standard pricing, not DriveBook's |
+| `losses_collector` | **`"stripe"`** | Stripe absorbs negative balances on connected accounts — DriveBook is not liable for connected-account shortfalls (unlike Express) |
+| Charge type | **Direct charges** | Charge created on the connected account using `Stripe-Account` header |
+
+**Accounts v2 with Managed Risk:** Per [Stripe docs](https://docs.stripe.com/connect/risk-management/connected-accounts-with-managed-risk), Stripe manages credit and fraud risk and assumes losses from unrecoverable negative balances when `losses_collector: "stripe"` is configured. This is recommended for SaaS platforms using direct charges.
+
+**Unresolved assumption — Australian eligibility:** Accounts v2 features (`fees_collector: "stripe"`, `losses_collector: "stripe"`) must be verified for Australian-registered connected accounts. The Stripe changelog indicates Express connected accounts v2 support was added with Stripe-owned pricing and negative-balance liability, but actual availability for DriveBook's AU integration must be confirmed with Stripe before recording this as an established capability.
+
+**Migration required:** Current `createConnectAccount()` creates Express accounts. Migrating to Accounts v2 Standard accounts is a precondition for DIRECT mode. This migration has not been authorised and is out of scope for this ADR.
 
 ---
 
@@ -131,62 +141,51 @@ stripe.paymentIntents.create(
 Student pays:               $70.00  (provider's advertised rate — nothing added)
 Stripe creates charge on:   Provider's connected account
 Stripe deducts:             application_fee = $1.75  (2.5% × $70)
-Stripe deducts:             processing cost = $1.19  (1.70% × $70 + $0.30)
-Provider nets:              $70.00 − $1.75 − $1.19 = $67.06
+Stripe deducts:             processing cost = $1.49  (1.70% × $70 + $0.30 = $1.19 + $0.30)
+Provider nets:              $70.00 − $1.75 − $1.49 = $66.76
 DriveBook receives:         $1.75  (application fee transferred to platform)
 DriveBook's Stripe balance: +$1.75 only (not $70)
 ```
 
-### 5.2 Refund — student requests refund, provider handles it
+### 5.2 Refund — provider manages refunds directly
 
-**Who handles refunds in DIRECT mode:** Per the product rule, the provider handles refunds. DriveBook facilitates the API call (using its platform secret key with the `Stripe-Account` header pointing to the provider's account) but the refund is debited from the **provider's connected account balance**.
+**Who handles refunds in DIRECT mode:** The provider initiates and manages refunds directly through their Stripe Dashboard. DriveBook must **not** initiate or facilitate provider refunds through its application. DriveBook's role is limited to processing refund webhooks to update booking status and accounting records.
 
 **Application fee policy: non-refundable**
 
-On a DIRECT mode booking refund, DriveBook retains the 2.5% application fee. The student receives back the booking rate ($70). The refund comes from the provider's connected account balance.
-
-```typescript
-// Refund on a direct charge — authenticated as the connected account
-await stripe.refunds.create(
-  {
-    charge: chargeId,
-    amount: bookingRateInCents,       // $70.00 in cents — full booking rate
-    // refund_application_fee: false  (default) — DriveBook retains the $1.75 fee
-  },
-  { stripeAccount: providerStripeAccountId }
-)
-// Result:
-// Student receives: $70.00 (from provider's connected account balance)
-// Provider's account: debited $70.00
-// DriveBook retains: $1.75 application fee (non-refundable)
-// Stripe sunk cost: $1.19 processing cost (non-refundable by Stripe)
-```
-
-**Important Stripe note (from [direct charges docs](https://docs.stripe.com/connect/direct-charges)):**
+On a DIRECT mode booking refund, DriveBook retains the 2.5% application fee. Per [Stripe docs](https://docs.stripe.com/connect/direct-charges):
 
 > "Application fees aren't automatically refunded when issuing a refund. Your platform must explicitly refund the application fee or the connected account loses that amount."
 
-This means the default behaviour (`refund_application_fee` omitted or `false`) correctly retains the application fee on DriveBook's platform account. No extra step needed to retain it.
+This means when the provider issues a refund through their Stripe Dashboard, the default behaviour retains the application fee on DriveBook's platform account. The provider would need to explicitly choose to refund the application fee for it to be returned.
 
-**DriveBook net position on full refund:**
-- Application fee retained: $1.75
-- Stripe processing cost (non-refundable): $1.19 — this was paid from the **provider's account**, not DriveBook's
-- DriveBook net: **+$1.75** (full application fee, since Stripe's processing cost was never DriveBook's)
+**Refund flow:**
 
-This is materially different from v5 (destination charges) where DriveBook paid Stripe's processing cost and lost ~$1.59 on refund. In the direct charge model, Stripe's processing cost is the provider's, not DriveBook's. DriveBook's only cost is any application fee it chooses to refund — which under the non-refundable policy is zero.
-
-**Partial refund (e.g. 50% of booking rate):**
-```typescript
-await stripe.refunds.create(
-  {
-    charge: chargeId,
-    amount: 3500,    // $35.00 — 50% of $70
-    // refund_application_fee: false — application fee retained in full
-  },
-  { stripeAccount: providerStripeAccountId }
-)
 ```
-Per Stripe: if `refund_application_fee: true`, a partial refund returns a proportional fee amount. Under the non-refundable policy, we do not set `refund_application_fee: true`.
+1. Provider issues refund in Stripe Dashboard (or via Stripe API on their own account)
+   → Student receives bookingRate ($70.00) from provider's connected account balance
+   → Application fee ($1.75) retained by DriveBook (default: refund_application_fee = false)
+
+2. Stripe fires charge.refunded webhook (on connected account)
+   → DriveBook webhook listener receives event
+   → Updates Booking status (CANCELLED / REFUNDED)
+   → Records DirectSettlementEntry if application fee was returned or retained
+   → Does NOT write PlatformLedger entries
+
+3. Application-fee retention recorded separately:
+   → DirectSettlementEntry(APPLICATION_FEE_RECEIVED) already exists from original charge
+   → If provider refunded with refund_application_fee: false (default): no APPLICATION_FEE_REFUNDED entry
+   → If provider chose to refund the fee: APPLICATION_FEE_REFUNDED entry (negative)
+```
+
+**DriveBook net position on full refund (application fee retained):**
+- Application fee retained: $1.75
+- Stripe processing cost: $1.49 — borne by the provider, not DriveBook
+- DriveBook net: **+$1.75** (full application fee retained)
+
+**Partial refunds:** The provider issues partial refunds through Stripe Dashboard. The application fee is retained proportionally by default (per Stripe: if the provider does not set `refund_application_fee: true`, the fee is not returned). DriveBook processes the webhook to update booking state accordingly.
+
+**ACL compliance note:** A non-refundable application fee is the intended product policy. Under Australian Consumer Law, consumer statutory rights may override a disclosed non-refundable fee in certain circumstances (e.g. service not delivered, major failure). The terms and refund handling must receive legal review before DIRECT mode launches.
 
 ### 5.3 Dispute and chargeback handling
 
@@ -197,15 +196,22 @@ Per Stripe: if `refund_application_fee: true`, a partial refund returns a propor
 | Step | Action |
 |---|---|
 | `charge.dispute.created` fires | Stripe debits **provider's connected account** (not DriveBook's platform) |
-| Dispute fee (`fees_collector: application_express`) | Charged to **connected account** |
-| Dispute response | DriveBook provides embedded dispute components or the provider responds via Express Dashboard |
+| Dispute response | **Provider manages dispute responses through the full Stripe Dashboard** (requires Standard account type) |
 | If dispute lost | Connected account balance is debited; provider bears the loss |
-| If connected account has insufficient balance | **DriveBook (platform) is liable** for the negative balance — Express account limitation |
-| DriveBook's application fee on dispute loss | DriveBook retains it (provider lost the dispute, not DriveBook's obligation to refund) |
+| Negative-balance responsibility | **Depends on account configuration** — see below |
 
-**Key difference from PLATFORM mode:** In DIRECT mode, disputes debit the **provider's** account, not DriveBook's. DriveBook's direct financial exposure on a dispute is limited to the case where the connected account has insufficient funds — then DriveBook bears the negative balance as the platform responsible for Express accounts.
+**Negative-balance responsibility (unresolved assumption):**
 
-**Webhook handling for DIRECT disputes:** The webhook fires `charge.dispute.created` against the connected account, not the platform. DriveBook must listen to events on connected accounts or use Connect webhooks. No `PlatformLedger` entries must be written for DIRECT disputes (see section 6).
+The configured negative-balance responsibility depends on the connected account configuration:
+- **Accounts v2 with `losses_collector: "stripe"` (recommended):** Stripe absorbs negative balances — DriveBook is not financially liable for connected-account shortfalls
+- **Accounts v1 Express (current):** DriveBook (platform) is liable for connected-account negative balances
+- **Accounts v2 with `losses_collector: "application"`:** DriveBook is liable
+
+The actual configuration must be verified at implementation time. This ADR recommends `losses_collector: "stripe"` but does not claim it has been configured or verified. DriveBook's legal and financial liability for disputes cannot be determined from Stripe settlement mechanics alone — it depends on the agreement with the provider, the Stripe account configuration, and Australian law.
+
+**DriveBook's application fee on dispute loss:** If the provider loses a dispute, DriveBook retains the application fee. The provider's loss does not create an obligation for DriveBook to return the fee. Whether DriveBook chooses to return the fee as a goodwill measure is a separate product decision.
+
+**Webhook handling for DIRECT disputes:** The `charge.dispute.created` event fires against the connected account, not the platform. DriveBook must listen to events on connected accounts via Connect webhooks (G11). Dispute event delivery and reconciliation must be verified before DIRECT activation. No `PlatformLedger` entries must be written for DIRECT disputes (see section 6).
 
 ---
 
@@ -293,28 +299,33 @@ DriveBook's refund position is positive because Stripe's processing cost was nev
 | Scenario | DriveBook exposure |
 |---|---|
 | Dispute debit | Connected account debited (not DriveBook) |
-| Dispute fee | Connected account (Express: `application_express`) |
-| If connected account has funds | DriveBook exposure = $0 |
-| If connected account has insufficient funds | DriveBook covers negative balance — up to full disputed amount |
+| Dispute fee | Connected account (depends on `fees_collector` configuration) |
+| If connected account has sufficient funds | DriveBook's direct Stripe-balance exposure is limited, but legal liability is not determined by balance alone |
+| If connected account has insufficient funds | Depends on `losses_collector`: Stripe absorbs (v2 recommended) or DriveBook liable (v1 Express current) |
+| DriveBook's legal liability | Not determined by this ADR — depends on provider agreement, Stripe configuration, and Australian law |
 
 ---
 
-## 8. Wallet Top-Ups and Package Purchases in DIRECT Mode
+## 8. Scope Limitations
 
-Per the product rule, the platform fee applies consistently to packages, single bookings, and wallet top-ups.
+**Out of scope until WLA-005 is resolved:**
+- DIRECT-mode wallet top-ups
+- DIRECT-mode wallet-funded package purchases
+- Wallet credit reversals and cash refund distinctions
 
-**Wallet top-ups (DIRECT):**
-- Student pays the requested top-up amount (e.g. $100) — no surcharge added to student
-- Provider's connected account is charged $100
-- DriveBook collects application fee (2.5% = $2.50) from provider's proceeds
-- Wallet is credited with the top-up amount ($100) — only the requested amount, not the application fee
-- Application fee is recorded separately in `DirectSettlementEntry`
+Wallet ownership semantics (WLA-005) must be resolved before any DIRECT wallet integration is designed. This ADR covers single-booking and package purchases only.
 
-**Package purchases (DIRECT):**
-- Same additive fee structure as single bookings: provider pays the 2.5% application fee
+**Package purchases in scope:**
+- Provider pays the 2.5% application fee (same as single bookings)
 - Student pays the package price only
 - Package refund clawback rules (from `calculatePartialPackageRefund()`) apply in both modes for the booking-rate portion
-- Application fee is retained on refund under the non-refundable policy regardless of partial/full refund
+- Application fee is retained on refund under the non-refundable policy
+
+**Marketplace behaviour unchanged:** This ADR does not change any PLATFORM-mode behaviour, including wallet top-ups, wallet-funded bookings, commission rates, payout schedules, or package refund clawback.
+
+**Australian card-surcharge compliance note:**
+
+The Marketplace mode charges students a 3.6% platform fee surcharge. Under the [RBA surcharging framework](https://www.rba.gov.au/payments-and-infrastructure/review-of-retail-payments-regulation/), Australian merchants may apply cost-based surcharges but must not exceed the cost of accepting that card payment type. The RBA's March 2026 Conclusions Paper indicates the removal of surcharging on all designated card networks is under consideration. DriveBook's 3.6% Marketplace surcharge must be reviewed against the actual cost of acceptance and any regulatory changes before the surcharge is relied upon. This compliance review is separate from this ADR and is required for Marketplace mode, not DIRECT mode.
 
 ---
 
@@ -350,7 +361,8 @@ These must all be resolved before DIRECT mode is activated. No code changes are 
 | G08 | `lib/services/platform-pricing.ts` / schema | No `directApplicationFeeRate` config — needs `PlatformSettings.directApplicationFeePercentage Decimal @default(2.5)` |
 | G09 | `lib/services/saas-payment.ts` | `application_fee_amount` without connected-account context — validity unresolved pending WLA-004 |
 | G10 | `prisma/schema.prisma` | `DirectSettlementEntry` model and `DirectSettlementEntryType` enum not implemented |
-| G11 | `lib/services/` | No Connect webhook listener for events on connected accounts (required for DIRECT dispute visibility) |
+| G11 | `lib/services/` | No Connect webhook listener for events on connected accounts (required for DIRECT dispute and refund visibility) |
+| G12 | `lib/services/stripe.ts` | `createConnectAccount()` creates Express accounts (v1); must migrate to Accounts v2 Standard with `fees_collector: "stripe"`, `losses_collector: "stripe"` — migration not authorised by this ADR |
 
 ---
 
@@ -373,15 +385,20 @@ No current code is modified by this ADR. The following are verified correct and 
 | Stripe charge type for DIRECT? | **Direct charge on connected account** (`Stripe-Account` header) |
 | Who pays DriveBook's fee in DIRECT? | **Provider** (deducted from their payment proceeds) |
 | Student pays in DIRECT? | Provider's advertised price only — no surcharge added |
-| Who pays Stripe processing cost in DIRECT? | **Provider** (connected account) |
+| Who pays Stripe processing cost in DIRECT? | **Provider** (connected account, if `fees_collector: "stripe"`) |
 | DriveBook's revenue per DIRECT booking? | Application fee only (2.5% × bookingRate) |
-| Who handles refunds in DIRECT? | Provider (connected account is debited); DriveBook facilitates via API with `Stripe-Account` header |
+| Who initiates refunds in DIRECT? | **Provider** — directly through Stripe Dashboard; DriveBook does not facilitate |
+| DriveBook's refund role | Processes refund webhooks to update booking/accounting state only |
 | Is application fee refunded? | No — non-refundable policy; `refund_application_fee` defaults to `false` |
-| DriveBook net on full DIRECT refund? | +application_fee_amount (retained); Stripe processing cost is provider's — not DriveBook's |
-| Who bears dispute cost in DIRECT? | Provider (connected account debited first); DriveBook only if connected account has insufficient funds |
+| DriveBook net on full DIRECT refund? | +$1.75 (full application fee retained; Stripe processing cost is provider's) |
+| Who manages dispute responses? | **Provider** — through full Stripe Dashboard (Standard account) |
+| Who bears dispute cost? | Connected account debited first; negative-balance responsibility depends on `losses_collector` configuration |
+| Does DriveBook have zero legal liability? | Not claimed — depends on provider agreement, Stripe config, and Australian law |
+| Are DIRECT wallet top-ups in scope? | No — out of scope until WLA-005 is resolved |
 | Can PLATFORM and DIRECT share PlatformLedger? | No — DIRECT must use `DirectSettlementEntry` only |
 | Can DIRECT be activated from current source? | No — G01–G11 must be resolved |
 | Is PLATFORM behaviour changed by this ADR? | No |
+| Is account migration authorised? | No — migration to Accounts v2 is a precondition, not authorised by this ADR |
 
 ---
 
@@ -394,9 +411,34 @@ No current code is modified by this ADR. The following are verified correct and 
 | v3 | NOT ACCEPTED | Refund loss calculation incorrect; G10 design insufficient |
 | v4 | NOT ACCEPTED | Platform fee inverted — charged on top of booking rate instead of additive |
 | v5 | NOT ACCEPTED | Entire charge type wrong — destination charge assumed; correct model is direct charge on connected account; fee is provider-funded not student-funded |
+| v6 | NOT ACCEPTED | Arithmetic error ($1.49 written as $1.19); wrong account config (Express, not Accounts v2 Standard); DriveBook facilitating refunds (should be provider-initiated); zero-liability claim for disputes; wallet top-ups in scope (should be out until WLA-005); no AU surcharge compliance review |
 
 ---
 
-*This document is an architecture decision record. No code changes are implemented here. DIRECT mode remains blocked until G01–G11 are resolved and this ADR is accepted.*
+## Appendix B — Unresolved Assumptions
+
+These assumptions must be verified before the ADR is accepted or DIRECT mode is activated:
+
+1. **Accounts v2 Australian eligibility:** `fees_collector: "stripe"` and `losses_collector: "stripe"` must be confirmed available for Australian-registered connected accounts on DriveBook's Stripe platform. The Stripe changelog indicates support was added but actual availability must be verified.
+
+2. **Standard account Dashboard access:** The recommendation assumes Standard accounts provide full Stripe Dashboard access in Australia. This must be confirmed for the specific Stripe product configuration DriveBook uses.
+
+3. **Connect webhook event delivery:** Direct-charge dispute and refund events fire against the connected account. DriveBook must verify that Connect webhooks deliver these events reliably to the platform for reconciliation.
+
+4. **Negative-balance responsibility:** The recommended `losses_collector: "stripe"` shifts negative-balance liability to Stripe. This must be confirmed in the actual account configuration — if not available or not configured, DriveBook remains liable.
+
+5. **Australian Consumer Law and non-refundable fees:** The non-refundable application fee policy must be reviewed by legal counsel. ACL statutory rights may override the disclosed policy in certain circumstances.
+
+6. **Australian card-surcharge compliance:** The Marketplace 3.6% surcharge must be reviewed against the RBA surcharging framework and any regulatory changes. This is a Marketplace compliance item, not a DIRECT-mode item, but is noted here for completeness.
+
+7. **WLA-004 dependency:** The SaaS `application_fee_amount` path in `saas-payment.ts` remains unverified. This ADR does not treat the SaaS flow as a confirmed baseline.
+
+8. **Merchant-of-record and tax obligations:** Out of scope for this ADR. Requires separate legal/tax assessment.
+
+---
+
+*This document is an architecture decision record. No code changes, account migration, or DIRECT activation are authorised by this ADR. DIRECT mode remains blocked until G01–G12 are resolved, this ADR is accepted by independent review, and all unresolved assumptions in Appendix B are verified.*
 
 *Stripe documentation sources are cited inline. Content was paraphrased for compliance with licensing restrictions.*
+
+*Sources: [Create direct charges](https://docs.stripe.com/connect/direct-charges), [Handle refunds and disputes (SaaS)](https://docs.stripe.com/connect/saas/tasks/refunds-disputes), [Disputes on Connect](https://docs.stripe.com/connect/disputes), [Fee behavior on connected accounts](https://docs.stripe.com/connect/direct-charges-fee-payer-behavior), [Managed Risk](https://docs.stripe.com/connect/risk-management/connected-accounts-with-managed-risk), [Stripe AU pricing](https://stripe.com/AU/pricing), [RBA surcharging framework](https://www.rba.gov.au/payments-and-infrastructure/review-of-retail-payments-regulation/).*
