@@ -1,12 +1,12 @@
-# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v9)
+# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v10)
 
 **Finding ID:** WLA-002  
 **Category:** ARCHITECTURAL  
 **Risk:** Not a runtime defect in current code. An undocumented design boundary that becomes a code defect when DIRECT mode is activated.  
-**Status:** ARCHITECTURE DECISION DEFINED (v9) — pending reviewer acceptance  
-**v1–v8 history:** NOT ACCEPTED (see appendix A for full rejection history)  
-**v9 authored:** 2026-11-06  
-**v8 rejection reason:** (1) Accounts v2 terminology imprecise — "Standard (Accounts v2)" should be "Accounts v2 connected account with full Dashboard access" with `dashboard: "full"`; must address whether existing Express accounts require replacement and provider re-onboarding. (2) DIRECT package purchases still partially in scope — must be fully excluded until provider-facing refund policy defined. (3) Webhook specification covered only connected-account events — must also specify platform-account handling for `application_fee.created` and `application_fee.refunded`; two separate webhook contexts required.
+**Status:** ARCHITECTURE DECISION DEFINED (v10) — pending reviewer acceptance  
+**v1–v9 history:** NOT ACCEPTED (see appendix A for full rejection history)  
+**v10 authored:** 2026-11-06  
+**v9 rejection reason:** (1) ApplicationFee identification used `originating_transaction` — should use `ApplicationFee.account` for connected account and `ApplicationFee.charge` for the originating Direct Charge. (2) Refund lifecycle incorrectly described `succeeded → failed` transition; should be `pending → succeeded` or `pending → failed`; individual Refund objects and IDs must be treated as authoritative records; bookings must not be marked refunded when a refund is merely `pending`. (3) Webhook endpoint configuration claimed "a single endpoint cannot receive both event types" and implied separate routes are mandatory — should specify two separately registered Stripe webhook configurations (which may share the same URL) with preserved signature verification.
 
 **Sources inspected (code):**  
 - `lib/services/stripe.ts` — `createConnectAccount()`: `type: 'express'`, `country: 'AU'`  
@@ -261,19 +261,29 @@ DIRECT mode requires **two separate webhook contexts**. Direct-charge events (re
 
 | Event | Handling |
 |---|---|
-| `charge.refunded` (full) | Verify connected account; verify charge belongs to a DIRECT booking; update Booking status to `CANCELLED` or `REFUNDED`; do NOT write `PlatformLedger` entries |
-| `charge.refunded` (partial) | Check `amount_refunded` on the charge (cumulative, not per-event). Compare against charge total to determine remaining unrefunded balance. Update Booking to `PARTIALLY_REFUNDED`. Do NOT mark as fully cancelled. |
-| Multiple refunds on one charge | Stripe allows multiple partial refunds. Each `charge.refunded` event represents one refund object; `amount_refunded` on the charge is cumulative. DriveBook must track individual refund objects and sum them. |
-| `refund.updated` (failed reversal) | If a `succeeded` refund transitions to `failed`, Stripe fires `refund.updated`. DriveBook must revert any booking state change made based on the original refund success. |
+| `charge.refunded` (full) | Verify connected account; verify charge belongs to a DIRECT booking; check the individual Refund object's status (see lifecycle below). Only update Booking status when the Refund is `succeeded`. Do NOT write `PlatformLedger` entries. |
+| `charge.refunded` (partial) | Check the individual Refund object. Treat `Charge.amount_refunded` as a cumulative reconciliation value (not per-event). Compare cumulative total against charge amount to determine remaining unrefunded balance. Update Booking to `PARTIALLY_REFUNDED` only when the Refund is `succeeded`. Do NOT mark as fully cancelled. |
+| Multiple refunds on one charge | Stripe allows multiple partial refunds. The `charge.refunded` event fires when a refund is created, but the individual Refund object and its ID is the authoritative record — not the event itself. DriveBook must track individual Refund objects by their IDs and sum their `amount` values. `Charge.amount_refunded` is a cumulative reconciliation value for verification, not the primary record. |
+| `refund.updated` (status transition) | A Refund transitions `pending → succeeded` or `pending → failed`. A `succeeded` refund does **not** transition to `failed`. When `refund.updated` fires: if the Refund moved to `succeeded`, update booking state accordingly. If the Refund moved to `failed`, do NOT mark the booking as refunded — log the failure and alert admin. |
 
-**Booking state transitions:**
+**Refund lifecycle:**
+```
+pending → succeeded    (refund completed — student received funds)
+pending → failed        (refund could not be completed — insufficient balance or other failure)
+```
+A `succeeded` refund does not transition to `failed`. DriveBook must not revert a booking state change based on a succeeded refund unless the Refund object's status explicitly shows `failed` (which only occurs from `pending`, not from `succeeded`).
+
+**Do not mark a booking as refunded merely because a refund was requested or created.** A refund in `pending` status means Stripe has not yet transferred funds to the student. Booking state should only transition to `REFUNDED` or `PARTIALLY_REFUNDED` when the individual Refund object's status is `succeeded`.
+
+**Booking state transitions (only when individual Refund status is `succeeded`):**
 
 ```
-CONFIRMED → PARTIALLY_REFUNDED  (partial refund issued by provider)
-CONFIRMED → REFUNDED             (full refund issued by provider)
-PARTIALLY_REFUNDED → REFUNDED    (subsequent refund brings total to full)
-REFUNDED → CONFIRMED              (refund failed/reversed — rare; must revert)
+CONFIRMED → PARTIALLY_REFUNDED  (partial refund succeeded)
+CONFIRMED → REFUNDED             (full refund succeeded)
+PARTIALLY_REFUNDED → REFUNDED    (subsequent refund brings cumulative total to full)
 ```
+
+Do NOT transition booking state when a refund is `pending` or `failed`. A `pending` refund has not transferred funds to the student and the booking remains in its current state until the Refund object transitions to `succeeded`.
 
 **Dispute events:**
 
@@ -300,8 +310,11 @@ REFUNDED → CONFIRMED              (refund failed/reversed — rare; must rever
 - `stripe.webhooks.constructEvent(rawBody, signature, platformWebhookSecret)`
 
 **Account identification:**
-- The `ApplicationFee` object contains an `account` field (the connected account ID) and an `originating_transaction` (the charge ID)
-- DriveBook must look up the DIRECT booking by matching the charge ID in `originating_transaction`
+- The `ApplicationFee` object contains an `account` field (the connected account ID) and a `charge` field (the originating Direct Charge ID)
+- DriveBook must identify the connected account using `ApplicationFee.account`
+- DriveBook must identify the originating charge using `ApplicationFee.charge`
+- DriveBook must look up the DIRECT booking by matching the charge ID from `ApplicationFee.charge`
+- Retrieve the charge in the correct connected-account context (using `Stripe-Account: ApplicationFee.account` header)
 - If no DIRECT booking matches: this may be a PLATFORM-mode event — route to existing PLATFORM handler
 
 **Idempotency:**
@@ -318,13 +331,15 @@ REFUNDED → CONFIRMED              (refund failed/reversed — rare; must rever
 **Reconciliation (platform-account context):**
 - After `application_fee.created`, verify the `ApplicationFee.amount` matches the expected 2.5% × bookingRate
 - After `application_fee.refunded`, verify the refunded amount matches DriveBook's records
-- Cross-reference: the `ApplicationFee.originating_transaction` links to the charge on the connected account. DriveBook can fetch the charge using the `Stripe-Account` header to verify the full picture.
+- Cross-reference: `ApplicationFee.account` identifies the connected account and `ApplicationFee.charge` identifies the originating Direct Charge. DriveBook can fetch the charge using the `Stripe-Account` header (set to `ApplicationFee.account`) to verify the full picture.
 
-**Why two endpoints are needed:**
-- Connected-account events (`charge.refunded`, `charge.dispute.created`) are scoped to the connected account and require the Connect webhook signing secret
-- Platform-account events (`application_fee.created`, `application_fee.refunded`) are scoped to the platform account and use the platform webhook signing secret
-- A single endpoint cannot receive both event types — Stripe routes events to the webhook endpoint registered for the account that owns the event
-- The existing `app/api/stripe/webhook/route.ts` handles platform-account events; a new endpoint (G11) is required for connected-account events
+**Why two webhook configurations are needed:**
+- Connected-account events (`charge.refunded`, `charge.dispute.created`) are scoped to the connected account and require a webhook endpoint registered with the **Connect webhook signing secret**
+- Platform-account events (`application_fee.created`, `application_fee.refunded`) are scoped to the platform account and require a webhook endpoint registered with the **platform webhook signing secret**
+- Stripe routes events to the webhook endpoint registered for the account that owns the event. Two separately registered Stripe webhook endpoint configurations are required — one for connected-account events and one for platform-account events.
+- These two configurations may point to the **same application URL** or to **separate URLs**. If they share the same URL, the endpoint must distinguish event contexts by inspecting the event type and account fields, and apply the correct signature verification for each context.
+- Two separate application routes are **not** mandatory. However, separate account contexts and signature verification must be preserved regardless of URL configuration.
+- The existing `app/api/stripe/webhook/route.ts` handles platform-account events. Connected-account event handling (G11) may be added to the same route (with context-based dispatch) or to a separate route.
 
 ---
 
@@ -527,6 +542,7 @@ No current code is modified by this ADR. The following are verified correct and 
 | v6 | NOT ACCEPTED | Arithmetic error ($1.49 written as $1.19); wrong account config (Express, not Accounts v2 Standard); DriveBook facilitating refunds (should be provider-initiated); zero-liability claim for disputes; wallet top-ups in scope (should be out until WLA-005); no AU surcharge compliance review |
 | v7 | NOT ACCEPTED | Partial application-fee refund described as proportional (incorrect — full fee retained unless platform explicitly refunds); DIRECT package refunds claimed to use PLATFORM function (provider manages independently); refund funding/insufficient-balance not documented; webhook specification incomplete; G01–G11 not updated to G01–G12; Managed Risk eligibility unverified |
 | v8 | NOT ACCEPTED | Accounts v2 terminology imprecise ("Standard" not "Accounts v2 with full Dashboard"); DIRECT packages still partially in scope (must be fully excluded); webhook specification covered only connected-account events (must also cover platform-account `application_fee.created`/`application_fee.refunded`); two webhook contexts not defined |
+| v9 | NOT ACCEPTED | ApplicationFee identification used `originating_transaction` (should use `account` and `charge`); refund lifecycle described `succeeded → failed` (should be `pending → succeeded` or `pending → failed`); bookings marked refunded on refund creation not success; webhook endpoint claimed separate routes mandatory (should allow same URL with separate registrations) |
 
 ---
 
