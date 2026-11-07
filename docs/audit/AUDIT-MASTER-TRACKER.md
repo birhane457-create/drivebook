@@ -1,6 +1,6 @@
 # DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.49 (WLA-002 research refinement — terminology separated: DIRECT=charge type, Options A/B/C=revenue models; revenue-share noted under Option A; Stripe handles pricing clarified; Option C coexistence research expanded; written Stripe confirmation required on 6 items)
+**Version:** 6.50 (WLA-002 research assumptions corrected — Option A DriveBook own costs clarified; Option C hypothesis not confirmed; next step: formal Stripe enquiry)
 **Last Updated:** 2026-11-06
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
