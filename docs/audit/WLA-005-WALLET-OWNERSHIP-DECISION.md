@@ -204,12 +204,25 @@ These transfers establish the intended accounting model: customer wallet value i
 
 **Step 5 call-site investigation: complete for all 9 paths.** Expected-versus-actual accounting reconciliation remains incomplete. The remaining accounting questions are:
 
-1. Does `recordBookingPayment()` receive the correct platform fee and instructor payable amounts for wallet-funded bookings?
+1. **Accounting Question 1 — source-verified at commit `11e6f781`:** Does `recordBookingPayment()` receive correct amounts for wallet-funded bookings?
+
+   **Finding: the equality holds, with qualifications.**
+
+   - `WalletTransaction.DEBIT.amount = pricing.price` (createBooking, booking-service.ts)
+   - `recordBookingPayment(totalAmount: booking.price, ...)` where `booking.price = pricing.price`
+   - `recordBookingPayment()` has a built-in assertion: `platformFee + providerPayout === totalAmount` — throws if violated
+   - Therefore: **wallet_debit = platform_revenue + instructor_payable** is enforced by the function itself
+
+   **Qualifications:**
+   - The call is **non-atomic** — it runs after the transaction in a separate try/catch. If the ledger write fails, the wallet debit and booking are committed with no FinancialLedger entries. Failure is logged but does not block the booking response.
+   - `booking.platformFee` ≠ `ledgerFee`. At every call site: `ledgerFee = booking.price − booking.providerPayout`. The `booking.platformFee` field stores the student-facing 3.6% surcharge (a different amount, separately visible in the booking row). The `PLATFORM_REVENUE` FinancialLedger account records the commission spread, not the surcharge.
+   - The `create-bulk` route is confirmed missing `recordBookingPayment()` entirely — the equality holds only for booking paths that reach the call.
+
 2. Are package credits, promotional credits and refunds represented consistently in the wallet liability?
 3. Does a cancellation refund reverse the correct original booking movements?
 4. Can every `WalletTransaction` be reconciled to its corresponding `FinancialLedger` entries using stable identifiers?
 
-**Step 5 status: call-site investigation complete; accounting reconciliation incomplete.**
+**Step 5 status: Accounting Question 1 complete. Questions 2–4 pending.**
 
 ### 1.10 Expiry implementation status (Step 1 correction)
 
@@ -425,11 +438,11 @@ Before WLA-005 can be closed:
 | 2 | Cross-provider booking | **Partially verified** | Pooled wallet confirmed; `lockedHourlyRate` framing corrected; `confirm-package-booking` has test coverage but no confirmed production caller |
 | 3 | Refunds and cancellations | **Verified with qualifications** | Three paths traced; public cancel defect confirmed; synthetic paymentIntentId case added |
 | 4 | Top-ups and ownership | **Verified; conclusion corrected** | P0-01 is a user-facing integration mismatch, not a dormant check |
-| 5 | Ledger and reconciliation | **Call-site complete; accounting reconciliation incomplete** | All 9 wallet-affecting paths inspected. 7 of 9 missing FinancialLedger transfers. 2 conditionally covered (reliability concerns). `approveCancellation` reclassified as missing (REFUND_ISSUED is LedgerEntry, not FinancialLedger). Accounting model documented. 4 accounting reconciliation questions remain. |
+| 5 | Ledger and reconciliation | **Accounting Q1 complete; Q2–Q4 pending** | All 9 wallet-affecting paths inspected. 7 of 9 missing FinancialLedger transfers. 2 conditionally covered. Accounting Q1: wallet_debit = platform_revenue + instructor_payable — equality enforced by built-in assertion; non-atomic (ledger write can fail silently); booking.platformFee ≠ ledgerFee (surcharge vs commission). |
 | 6 | Account closure | **Partially verified** | No self-service deletion; cascade is latent risk; Terms clause 22 unimplemented |
 | 7 | Architecture decision | **Pending** | Credit-lot model proposed; legal assessment required |
 
-**Next work:** complete Step 5 accounting reconciliation — answer the 4 remaining accounting questions (correct amounts in `recordBookingPayment`, package/promo credit consistency, refund reversal correctness, `WalletTransaction`-to-`FinancialLedger` reconciliation using stable identifiers).
+**Next work:** Step 5 Accounting Questions 2–4 — package/promo credit consistency, cancellation refund reversal correctness, `WalletTransaction`-to-`FinancialLedger` reconciliation using stable identifiers.
 
 ---
 
