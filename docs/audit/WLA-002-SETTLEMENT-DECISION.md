@@ -1,12 +1,14 @@
-# WLA-002 — Provider Settlement Semantics: Architecture Decision Record (v11)
+# WLA-002 — Provider Settlement Semantics: Architecture Decision Record
 
 **Finding ID:** WLA-002  
 **Category:** ARCHITECTURAL  
 **Risk:** Not a runtime defect in current code. An undocumented design boundary that becomes a code defect when DIRECT mode is activated.  
-**Status:** ARCHITECTURE DECISION DEFINED (v11) — pending reviewer acceptance  
-**v1–v10 history:** NOT ACCEPTED (see appendix A for full rejection history)  
-**v11 authored:** 2026-11-06  
-**v10 rejection reason:** (1) Account configuration used `fees_collector: "stripe"` — per Stripe docs, this means Stripe deducts its processing fee from the connected account directly, which conflicts with the intended product model where DriveBook pays Stripe and the 2.5% application fee covers both Stripe costs and DriveBook revenue. The correct value is `fees_collector: "application"`, which means the platform (DriveBook) pays Stripe's processing fee and the `application_fee_amount` must cover both. (2) Fund flow consequently wrong: with `fees_collector: "application"`, provider receives `studentTotal − applicationFee` (Stripe does not separately deduct its processing fee from the provider's proceeds). (3) Dispute fees: with `fees_collector: "application"`, the platform pays dispute fees (not the connected account). These are material differences from v10.
+**Status:** OPEN — PAYMENT MODEL OPTIONS UNDER RESEARCH  
+**v1–v11 history:** v1–v10 NOT ACCEPTED; v11 documented one model (2.5% combined fee, `fees_collector: "application"`) but product owner determined the fee model should not be finalised before comparing commercial options and Stripe Connect costs.  
+**v11 status:** v11's technical analysis (webhook specs, ledger separation, DirectSettlementEntry, refund lifecycle, dispute handling) remains useful research. The fee model itself (2.5% vs subscription-only vs provider choice) is unresolved and under research.  
+**Document authored:** 2026-11-06 (v11 corrections committed `07f17cd4`; research direction added this revision)  
+
+**Product-owner direction:** Investigate three payment model options before committing. Use Option A (SaaS subscription only) as the initial baseline. Do not commit to the 2.5% fee model. Do not commit to subscription-only as the final choice. Research whether both models can coexist. Separate the SaaS subscription decision from the payment-processing decision.
 
 **Sources inspected (code):**  
 - `lib/services/stripe.ts` — `createConnectAccount()`: `type: 'express'`, `country: 'AU'`  
@@ -32,7 +34,98 @@ This ADR defines the settlement boundary for DIRECT mode (SaaS/white-label) and 
 
 ---
 
+## 1-A. Payment Model Options Under Research
+
+The product owner has determined that the fee model should not be finalised before comparing commercial options. Three options are under investigation. The technical analysis in sections 2–12 below describes Option B in detail and remains useful research, but **does not represent the decided architecture**.
+
+### Option A — SaaS subscription only (recommended initial baseline)
+
+The provider connects an existing or new Stripe account to DriveBook. The provider:
+- Receives customer payments directly into their connected Stripe account
+- Pays Stripe's normal processing fees (1.70% + A$0.30 AU domestic)
+- Manages refunds and disputes through their Stripe Dashboard
+- Controls their own Stripe balance and payouts
+- Pays DriveBook a monthly or annual SaaS subscription
+
+**Stripe configuration to investigate:**
+- Charge type: Direct charge
+- `dashboard: "full"`
+- `fees_collector: "stripe"` — Stripe collects processing fees from the connected account directly
+- `losses_collector: "stripe"` — Stripe absorbs negative balances
+- `application_fee_amount`: none (DriveBook earns subscription revenue, not per-transaction fees)
+
+**Stripe Connect pricing (Stripe handles pricing):** No platform fees. No per-account charge. No payout fee. Stripe collects processing fees from connected accounts. Source: [Stripe AU Connect pricing](https://stripe.com/au/connect/pricing).
+
+**Advantages:** Simpler reconciliation; no per-transaction margin calculation; no 2.5% fee to explain; less financial exposure for DriveBook; clear separation of SaaS revenue from payment revenue.
+
+**Disadvantages:** DriveBook does not earn transaction-based revenue; providers manage their own Stripe account.
+
+### Option B — SaaS subscription plus DriveBook's 2.5% combined fee (described in sections 2–12)
+
+The provider pays 2.5% of the booking amount as a combined application fee. DriveBook receives that fee, pays Stripe's processing costs from it, and retains the remainder.
+
+**Stripe configuration:**
+- `fees_collector: "application"` — DriveBook pays Stripe processing; application fee covers both Stripe cost and DriveBook net
+- `losses_collector: "stripe"`
+- `application_fee_amount`: 2.5% of booking rate
+
+**Stripe Connect pricing (You handle pricing):** A$2 per monthly active account + 0.25% + A$0.25 per payout sent. Source: [Stripe AU Connect pricing](https://stripe.com/au/connect/pricing).
+
+**Cost not accounted for in v11:** The A$2/month per active account and 0.25% + A$0.25 per payout are Connect fees charged to DriveBook under "You handle pricing." The v11 $0.26 net margin on a $70 booking does not include these costs. For a low-volume provider (e.g. 10 lessons/month), the A$2 monthly fee alone consumes the entire margin from ~8 transactions.
+
+**Net contribution formula (corrected):**
+```
+Net contribution per transaction = Application fee − Stripe processing − Connect fees − other costs
+```
+
+**Advantages:** Transaction-based revenue; bundled pricing simpler for providers who don't want to manage Stripe costs.
+
+**Disadvantages:** Narrow margin before all costs; Connect fees may exceed margin for low-volume providers; greater financial-management role for DriveBook; fee-margin risk on higher-cost payment methods.
+
+### Option C — Let the provider choose
+
+The provider chooses one payment arrangement during Stripe onboarding. Plan A (independent payments) or Plan B (DriveBook-managed pricing).
+
+**Technical constraint:** Stripe's Accounts v2 documentation states that `fees_collector` and `losses_collector` are set when the account configuration is created and **cannot be updated later**. Providers cannot freely switch between models without account replacement. Source: [Stripe configuration docs](https://docs.stripe.com/connect/accounts-v2/connected-account-configuration).
+
+**Research required:** Whether one Australian Connect platform can support both `fees_collector` configurations simultaneously; whether both models offer full Dashboard access; what the Connect fees are under each model; whether providers can connect existing Stripe accounts.
+
+### Research questions (mandatory before WLA-002 is resolved)
+
+| Research question | Why it matters |
+|---|---|
+| Can one Australian Connect platform support both fee-collector arrangements? | Determines whether provider choice is technically viable |
+| Can providers use full Stripe Dashboard access in both models? | Important for independent business operations |
+| What are all Connect fees under each model? | Determines actual DriveBook profitability |
+| Who pays processing, dispute and refund-related fees? | Determines the real financial responsibilities |
+| Can providers switch models later? | Determines whether onboarding decisions are permanent |
+| What are the Australian Managed Risk requirements? | Determines whether Stripe accepts the proposed loss allocation |
+| Can providers connect existing Stripe accounts? | Affects onboarding friction and provider independence |
+| How should DriveBook charge SaaS subscriptions separately? | Keeps subscription billing independent of lesson transactions |
+
+**Official starting points for research:**
+- [Stripe Australia Connect pricing](https://stripe.com/au/connect/pricing)
+- [Stripe — Build a SaaS platform](https://docs.stripe.com/connect/integrate-billing-connect)
+- [Stripe — Connect configuration recommendations](https://docs.stripe.com/connect/configuration-migration-guide)
+
+### Key principle: separate subscription from payment processing
+
+A provider can pay DriveBook for software (SaaS subscription) while separately deciding how their customers' payments are processed. These do not need to be the same commercial decision. This separation is the strongest direction to investigate before the ADR is revised.
+
+### Boundaries (preserve while research is ongoing)
+
+- Existing PLATFORM marketplace payments remain unchanged
+- No DIRECT implementation or account migration
+- No commitment to the 2.5% fee model
+- No commitment to subscription-only payments as the final choice
+- Research both models and whether provider choice is supported
+- Make a final product-owner decision only after technical, commercial and Stripe eligibility evidence is available
+
+---
+
 ## 2. The Two Payment Arrangements
+
+> **Note:** Sections 2–12 below describe Option B (the 2.5% combined fee model with `fees_collector: "application"`) in detail. This technical analysis is research material, not the decided architecture. The fee model is under research per section 1-A.
 
 There are two distinct payment arrangements. The critical distinction is **who funds DriveBook's fee**.
 
@@ -583,6 +676,7 @@ No current code is modified by this ADR. The following are verified correct and 
 | v8 | NOT ACCEPTED | Accounts v2 terminology imprecise ("Standard" not "Accounts v2 with full Dashboard"); DIRECT packages still partially in scope (must be fully excluded); webhook specification covered only connected-account events (must also cover platform-account `application_fee.created`/`application_fee.refunded`); two webhook contexts not defined |
 | v9 | NOT ACCEPTED | ApplicationFee identification used `originating_transaction` (should use `account` and `charge`); refund lifecycle described `succeeded → failed` (should be `pending → succeeded` or `pending → failed`); bookings marked refunded on refund creation not success; webhook endpoint claimed separate routes mandatory (should allow same URL with separate registrations) |
 | v10 | NOT ACCEPTED | `fees_collector: "stripe"` — conflicts with product decision that DriveBook pays Stripe processing; correct value is `fees_collector: "application"` (platform pays Stripe, application_fee covers both); fund flow wrong (provider gets $66.76 not $68.25); dispute fees assigned to connected account (with `fees_collector: "application"` platform pays dispute fees) |
+| v11 | OPEN — PAYMENT MODEL UNDER RESEARCH | v11 documented one model (2.5% combined fee, `fees_collector: "application"`) in detail. Product owner determined the fee model should not be finalised before comparing: Option A (subscription only, `fees_collector: "stripe"`, no Connect fees), Option B (2.5% fee, `fees_collector: "application"`, A$2/month + payout fees), Option C (provider choice). v11 did not account for Stripe Connect fees (A$2/active account + 0.25% + A$0.25/payout under "You handle pricing"). Technical analysis (webhook specs, ledger separation, refund lifecycle) remains useful research. Fee model unresolved. |
 
 ---
 
