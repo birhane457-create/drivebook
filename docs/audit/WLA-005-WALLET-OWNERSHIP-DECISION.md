@@ -172,23 +172,44 @@ The normal wallet top-up flow has a **user-facing integration mismatch**, not me
 
 **`verifyLedgerIntegrity()` weakness** (`lib/services/ledger.ts`): calculates `totalDebits` and `totalCredits` from the same aggregate sum of `FinancialLedger.amount`, then compares identical values. It reports a balanced ledger even if an expected transaction is entirely missing. This function cannot establish completeness or detect omitted wallet flows.
 
-**Per-flow assessment (corrected):**
+**Per-flow assessment (corrected — all 9 paths inspected at commit `8aa0919c`):**
 
-| Flow | FinancialLedger call | Assessment |
+| # | Flow | FinancialLedger call | Assessment |
+|---|---|---|---|
+| 1 | Plain PaymentIntent top-up webhook | `recordWalletCredit()` | **Conditionally covered** — call is inside the receipt-email branch (only runs if user has an email address); wrapped in catch (failure does not roll back the wallet credit); multiple pending credits confirmed together are recorded as one combined ledger transfer using only the first transaction's ID |
+| 2 | Book Later Checkout package credit (webhook) | No call | **Missing** |
+| 3 | Book Now package credit (webhook) | No call | **Missing** |
+| 4 | `create-bulk` wallet debit | No call | **Missing** — creates ordinary `Transaction` records but no `FinancialLedger` paired transfer |
+| 5 | `confirm-package-booking` wallet debit | No call | **Missing** — confirmed at `8aa0919c`; creates `WalletTransaction` + `Transaction` but no `recordBookingPayment()` |
+| 6 | Admin manual credit (`add-credit` route) | No call | **Missing** — creates `WalletTransaction` + `AuditLog` but does not call `recordAdminWalletAdjustment()` |
+| 7 | Admin manual debit (`deduct-credit` route) | No call | **Missing** — same as above |
+| 8 | Authenticated cancellation refund (`cancelBooking`) | `recordFullRefund()`/`recordPartialRefund()` | **Conditionally covered** — runs after the transaction (non-critical); reliability needs examination |
+| 9 | Admin-approved cancellation refund (`approveCancellation`) | `REFUND_ISSUED` to `LedgerEntry` only | **Missing** — writes to `LedgerEntry` (single-entry audit table), NOT to `FinancialLedger` (double-entry). These are separate tables; a `LedgerEntry` write does not satisfy a missing `FinancialLedger` transfer. |
+
+**Result: 6 of 9 wallet-affecting paths are missing `FinancialLedger` transfers.** Two are conditionally covered (plain top-up and authenticated cancellation — both have reliability concerns). Only the plain top-up's `recordWalletCredit()` is reliably present, and even that has the email-branch and non-atomic caveats.
+
+**The actual FinancialLedger account movements** (from `lib/services/ledger-operations.ts` and `lib/services/ledger.ts`):
+
+| Operation | Debit account | Credit account |
 |---|---|---|
-| Plain PaymentIntent top-up webhook | `recordWalletCredit()` | **Conditionally covered** — call is inside the receipt-email branch (only runs if user has an email address); wrapped in catch (failure does not roll back the wallet credit); multiple pending credits confirmed together are recorded as one combined ledger transfer using only the first transaction's ID |
-| Book Later Checkout package credit (webhook) | No call | **Missing** |
-| Book Now package credit (webhook) | No call | **Missing** |
-| `create-bulk` wallet debit | No call | **Missing** — creates ordinary `Transaction` records but no `FinancialLedger` paired transfer |
-| Older `confirm-package-booking` | No call | **Missing** (not yet rechecked at this baseline — needs verification) |
-| Admin manual credit (`add-credit` route) | No call | **Missing** — creates `WalletTransaction` + `AuditLog` but does not call `recordAdminWalletAdjustment()`; the function exists in `ledger-operations.ts` but is never called by any admin route |
-| Admin manual debit (`deduct-credit` route) | No call | **Missing** — same as above; the word "ledger" in route comments refers to the WalletTransaction-derived balance, not `FinancialLedger` |
-| Authenticated cancellation refund (`cancelBooking`) | `recordFullRefund()`/`recordPartialRefund()` | **Conditionally covered** — runs after the transaction (non-critical); reliability needs examination |
-| Admin-approved cancellation refund (`approveCancellation`) | `REFUND_ISSUED` LedgerEntry | **Partially covered** — writes to `LedgerEntry` (audit table), not `FinancialLedger` (double-entry); needs verification of whether `FinancialLedger` entries are also created |
+| Wallet credit (top-up) | `STRIPE_CLEARING:platform` | `CLIENT_WALLET:userId` |
+| Booking payment | `CLIENT_WALLET:userId` | `PLATFORM_ESCROW:platform` |
+| Booking commission | `PLATFORM_ESCROW:platform` | `PLATFORM_REVENUE:platform` |
+| Instructor payable | `PLATFORM_ESCROW:platform` | `INSTRUCTOR_PAYABLE:providerId` |
+| Refund to wallet | `PLATFORM_ESCROW:platform` | `CLIENT_WALLET:userId` |
+
+These transfers establish the intended accounting model: customer wallet value is represented as a liability, and booking expenditure moves value from the wallet into platform escrow. However, six paths that affect wallet value do not create these paired transfers.
 
 **Correction from previous revision:** the plain top-up flow was described as "covered." This is too strong. Its ledger write can be skipped (no email on file) or fail (caught and swallowed) without reversing the wallet credit. The assessment is "conditionally covered," not "covered."
 
-**Step 5 status: further investigation needed.** A complete reconciliation of expected entries against actual application writes is required. The `verifyLedgerIntegrity()` function cannot substitute for this reconciliation.
+**Step 5 call-site investigation: complete for all 9 paths.** Expected-versus-actual accounting reconciliation remains incomplete. The remaining accounting questions are:
+
+1. Does `recordBookingPayment()` receive the correct platform fee and instructor payable amounts for wallet-funded bookings?
+2. Are package credits, promotional credits and refunds represented consistently in the wallet liability?
+3. Does a cancellation refund reverse the correct original booking movements?
+4. Can every `WalletTransaction` be reconciled to its corresponding `FinancialLedger` entries using stable identifiers?
+
+**Step 5 status: call-site investigation complete; accounting reconciliation incomplete.**
 
 ### 1.10 Expiry implementation status (Step 1 correction)
 
@@ -404,11 +425,11 @@ Before WLA-005 can be closed:
 | 2 | Cross-provider booking | **Partially verified** | Pooled wallet confirmed; `lockedHourlyRate` framing corrected; `confirm-package-booking` caller status unresolved |
 | 3 | Refunds and cancellations | **Verified with qualifications** | Three paths traced; public cancel defect confirmed; synthetic paymentIntentId case added |
 | 4 | Top-ups and ownership | **Verified; conclusion corrected** | P0-01 is a user-facing integration mismatch, not a dormant check |
-| 5 | Ledger and reconciliation | **In progress** | 4 source files traced. Plain top-up corrected from "covered" to "conditionally covered" (email-branch conditional + non-atomic catch). Admin credit/debit confirmed: NO FinancialLedger write. `verifyLedgerIntegrity()` cannot detect missing entries. 2 flows remain to recheck at this baseline. |
+| 5 | Ledger and reconciliation | **Call-site complete; accounting reconciliation incomplete** | All 9 wallet-affecting paths inspected. 6 of 9 missing FinancialLedger transfers. 2 conditionally covered (reliability concerns). `approveCancellation` reclassified as missing (REFUND_ISSUED is LedgerEntry, not FinancialLedger). Accounting model documented. 4 accounting reconciliation questions remain. |
 | 6 | Account closure | **Partially verified** | No self-service deletion; cascade is latent risk; Terms clause 22 unimplemented |
 | 7 | Architecture decision | **Pending** | Credit-lot model proposed; legal assessment required |
 
-**Next work:** complete Step 5 — recheck `confirm-package-booking` and `approveCancellation` at the current baseline. Then compare expected vs actual `FinancialLedger` entries for all flows.
+**Next work:** complete Step 5 accounting reconciliation — answer the 4 remaining accounting questions (correct amounts in `recordBookingPayment`, package/promo credit consistency, refund reversal correctness, `WalletTransaction`-to-`FinancialLedger` reconciliation using stable identifiers).
 
 ---
 
