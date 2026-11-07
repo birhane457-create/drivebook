@@ -186,7 +186,7 @@ The normal wallet top-up flow has a **user-facing integration mismatch**, not me
 | 8 | Authenticated cancellation refund (`cancelBooking`) | `recordFullRefund()`/`recordPartialRefund()` | **Conditionally covered** — runs after the transaction (non-critical); reliability needs examination |
 | 9 | Admin-approved cancellation refund (`approveCancellation`) | `REFUND_ISSUED` to `LedgerEntry` only | **Missing** — writes to `LedgerEntry` (single-entry audit table), NOT to `FinancialLedger` (double-entry). These are separate tables; a `LedgerEntry` write does not satisfy a missing `FinancialLedger` transfer. |
 
-**Result: 6 of 9 wallet-affecting paths are missing `FinancialLedger` transfers.** Two are conditionally covered (plain top-up and authenticated cancellation — both have reliability concerns). Only the plain top-up's `recordWalletCredit()` is reliably present, and even that has the email-branch and non-atomic caveats.
+**Result: 7 of 9 wallet-affecting paths are missing `FinancialLedger` transfers.** Two are conditionally covered (plain top-up and authenticated cancellation — both have reliability concerns). Neither conditionally-covered path guarantees a ledger entry for every confirmed wallet credit: the plain top-up's `recordWalletCredit()` is conditional on the email branch and can fail without rolling back the credit; the authenticated cancellation's `recordFullRefund()` runs after the transaction and is non-critical.
 
 **The actual FinancialLedger account movements** (from `lib/services/ledger-operations.ts` and `lib/services/ledger.ts`):
 
@@ -422,10 +422,10 @@ Before WLA-005 can be closed:
 | Step | Subject | Status | Notes |
 |---|---|---|---|
 | 1 | Purchase and expiry | **Source investigation complete** | Product rule confirmed; implementation does not support it at any stage — purchase, storage, balance, or spend enforcement. 8 source files traced. |
-| 2 | Cross-provider booking | **Partially verified** | Pooled wallet confirmed; `lockedHourlyRate` framing corrected; `confirm-package-booking` caller status unresolved |
+| 2 | Cross-provider booking | **Partially verified** | Pooled wallet confirmed; `lockedHourlyRate` framing corrected; `confirm-package-booking` has test coverage but no confirmed production caller |
 | 3 | Refunds and cancellations | **Verified with qualifications** | Three paths traced; public cancel defect confirmed; synthetic paymentIntentId case added |
 | 4 | Top-ups and ownership | **Verified; conclusion corrected** | P0-01 is a user-facing integration mismatch, not a dormant check |
-| 5 | Ledger and reconciliation | **Call-site complete; accounting reconciliation incomplete** | All 9 wallet-affecting paths inspected. 6 of 9 missing FinancialLedger transfers. 2 conditionally covered (reliability concerns). `approveCancellation` reclassified as missing (REFUND_ISSUED is LedgerEntry, not FinancialLedger). Accounting model documented. 4 accounting reconciliation questions remain. |
+| 5 | Ledger and reconciliation | **Call-site complete; accounting reconciliation incomplete** | All 9 wallet-affecting paths inspected. 7 of 9 missing FinancialLedger transfers. 2 conditionally covered (reliability concerns). `approveCancellation` reclassified as missing (REFUND_ISSUED is LedgerEntry, not FinancialLedger). Accounting model documented. 4 accounting reconciliation questions remain. |
 | 6 | Account closure | **Partially verified** | No self-service deletion; cascade is latent risk; Terms clause 22 unimplemented |
 | 7 | Architecture decision | **Pending** | Credit-lot model proposed; legal assessment required |
 
