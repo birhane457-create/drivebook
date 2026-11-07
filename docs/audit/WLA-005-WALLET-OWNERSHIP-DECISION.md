@@ -3,9 +3,19 @@
 **Finding ID:** WLA-005  
 **Category:** ARCHITECTURAL  
 **Original finding:** "Wallet balance is currently user-wide, not provider-attributed; whether that is a defect depends on the approved white-label wallet contract."  
-**Status:** OPEN — ARCHITECTURE DECISION REQUIRED  
+**Status:** OPEN — SOURCE INVESTIGATION AND RECONCILIATION IN PROGRESS  
 **Authored:** 2026-11-06  
-**Source inspected:** commit `7df9f946` (origin/main)
+**Last revised:** 2026-11-06 (reviewer corrections applied — false claims removed, incomplete traces marked)  
+**Source inspected:** commit `cc22e8d8` (origin/main)
+
+**Reviewer corrections applied this revision:**
+1. Step 1: removed false claim that `packageExpiryDate` is set to 365 days in the webhook — no current purchase path writes this field
+2. Step 2: corrected `lockedHourlyRate` framing — saved price provides booking-time amount; missing field is auditability concern, not repricing risk; removed "active callers" claim for `confirm-package-booking` — test suites are not production callers
+3. Step 3: added synthetic `package-...` paymentIntentId failure case
+4. Step 4: changed P0-01 from "dormant security check" to "user-facing integration mismatch" — wallet credits via webhook while customer-facing modal reports failure
+5. Step 5: expanded ledger reconciliation table with all missing FinancialLedger calls
+6. Step 6: corrected wording — no self-service deletion endpoint; cascade-delete is latent risk, not active defect; Terms of Service clause 22 promises refund but no workflow implements it
+7. Architecture reframed: pooled wallet is intentional, not a defect; real problem is credit-lot tracking with per-purchase expiry
 
 ---
 
@@ -17,14 +27,22 @@
 - `userId String @unique` — one wallet per User (1:1)
 - `balance Decimal @default(0)` — a **cached** balance, NOT authoritative
 - `onDelete: Cascade` from User
-- **No `providerId`** — the wallet is strictly per-user, not partitioned by provider
+- **No `providerId`** — the wallet is strictly per-user, pooled across all providers
+- **No `providerId` is a deliberate design choice**, not a defect — see architecture section
 
 **WalletTransaction** (`prisma/schema.prisma`):
 - `walletId`, `amount`, `type` (`CREDIT` | `DEBIT` | `PLATFORM_SUBSIDY`), `status` (`PENDING` | `CONFIRMED` | `EXPIRED`)
 - `bookingId String?` — links to the booking that caused the debit
 - **No `providerId`** — transactions are not attributed to any provider
+- **No expiry date field** — wallet credits do not carry their own expiry; no field exists for per-purchase expiry
 - DB unique index on `metadata->>'stripePaymentIntentId'` (prevents concurrent double-credit, P0-01B fix)
-- **No expiry date field** — wallet credits do not carry their own expiry; expiry is tracked on `Booking.packageExpiryDate` (parent package row only)
+
+**Booking package fields** (`prisma/schema.prisma`):
+- `packageExpiryDate` exists on the `Booking` model (the parent package row)
+- **No current purchase path writes this field** — confirmed by source inspection of `app/api/public/bookings/bulk/route.ts` and `app/api/stripe/webhook/route.ts`
+- The field is READ by package listing, scheduling, and notification routes, but never WRITTEN
+
+**No `walletCreditValidityMonths` setting exists** in `PlatformSettings`.
 
 **No provider wallet exists.** Only `ClientWallet` (per-User). Providers are compensated through the `Payout`/Stripe Connect flow, tracked in `FinancialLedger` under `INSTRUCTOR_PAYABLE`/`INSTRUCTOR_PAID` accounts — completely separate from client wallets.
 
@@ -37,25 +55,19 @@ The wallet balance is an **accounting liability** of DriveBook to the client —
 2. DriveBook-funded promotional subsidy (the discount residual on packages — not backed by cash received)
 3. Minus the non-refundable platform fee (already recognized as revenue via `PACKAGE_FEE` Transaction)
 
-### 1.3 Wallet top-up flows
+### 1.3 Contradictory expiry messaging (source-verified)
 
-**Path A — Package purchase via Stripe Checkout (primary):**
-- Client buys package → Stripe Checkout Session with `metadata.type='wallet_credit'`
-- On `checkout.session.completed` webhook: validates payment, then inside SERIALIZABLE transaction credits wallet with **face value** (undiscounted total, e.g. $700 for 10h@$70 even if customer paid $630)
-- Creates three records atomically:
-  1. `WalletTransaction(CREDIT, faceValue, CONFIRMED)` — spendable; **no expiry date field**
-  2. `WalletTransaction(PLATFORM_SUBSIDY, faceValue − amountPaid)` — audit-only, non-spendable
-  3. `Transaction(PACKAGE_FEE, platformFee, SETTLED)` — non-refundable platform revenue
-- **Expiry date stored on the parent `Booking` row** (`packageExpiryDate = purchase_date + 365 days`), not on the `WalletTransaction`
+The codebase contains at least four different expiry policies, none of which is enforced:
 
-**Path B — Plain top-up via PaymentIntent:**
-- `POST /api/client/wallet-topup-intent` creates a PENDING WalletTransaction, then a Stripe PaymentIntent
-- On `payment_intent.succeeded` webhook: validates amount, flips PENDING → CONFIRMED
-- **No expiry date** — plain top-ups never expire (no `packageExpiryDate` equivalent for top-ups)
+| Source | Current statement |
+|---|---|
+| Terms of Service (`app/terms/page.tsx` clause 15.2, 21) | "expire after 12 months of account inactivity" — "no booking has been made and no wallet transaction has occurred within the preceding 12 months" |
+| Privacy page (`app/privacy/page.tsx`) | "365 days of account inactivity" |
+| Packages API (`app/api/packages/route.ts`) | "All packages expire 365 days from purchase" |
+| Stripe Checkout description (`app/api/public/bookings/bulk/route.ts`) | "Credit valid for 12 months from last account activity" |
+| Product owner's confirmed requirement | "12 calendar months from successful payment confirmation" |
 
-**Path C — Client-pull confirmation via wallet-add:**
-- `POST /api/client/wallet-add` re-fetches PaymentIntent from Stripe, enforces P0-01 ownership check
-- P0-01 gap: `wallet-topup-intent` does NOT pass `userId` to `createPaymentIntent`, so the ownership check fails-closed for plain top-ups; plain top-ups confirmed through the webhook
+**These are contradictory.** The Terms of Service says "account inactivity"; the packages API says "from purchase"; the product owner says "from successful payment confirmation." No code enforces any of them.
 
 ### 1.4 Confirmed product rules (Steps 1–2, 2026-11-06)
 
@@ -65,96 +77,147 @@ The wallet balance is an **accounting liability** of DriveBook to the client —
 | Expiry start | Successful payment confirmation only |
 | Expiry type | Each purchase expires independently |
 | Activity | Does not reset expiry |
-| Cross-provider spending | Supported — pooled wallet, any instructor |
+| Cross-provider spending | Supported — pooled wallet, any instructor (intentional design) |
 | Cron frequency | Daily acceptable on current hosting plan |
 | Configuration | `walletCreditValidityMonths` in `PlatformSettings` |
 | Rate changes | Do not change an already confirmed booking |
 | Existing purchases on policy change | New policy affects new purchases only |
+| Provider attribution | Pooled wallet is intentional — not a defect |
 
-### 1.5 Wallet-funded bookings (`create-bulk` route, source-verified)
+### 1.5 Wallet top-up flows
 
-`app/api/client/bookings/create-bulk/route.ts` (Step 2 source inspection):
+**Path A — Package purchase via Stripe Checkout (Book Later):**
+- Client buys package → Stripe Checkout Session with `metadata.type='wallet_credit'`
+- Creates a Stripe Checkout Session — does NOT create a parent Booking record at this stage
+- On `checkout.session.completed` webhook: validates payment, credits wallet with face value, creates PLATFORM_SUBSIDY and PACKAGE_FEE records
+- **No expiry date is saved** — neither `Booking.packageExpiryDate` nor any WalletTransaction field
+
+**Path B — Package purchase via bulk route (Book Now):**
+- `app/api/public/bookings/bulk/route.ts` creates a parent Booking record
+- The inspected creation block does NOT set `packageExpiryDate`
+- The successful-payment webhook also does NOT set this field
+- **No expiry date is saved**
+
+**Path C — Plain top-up via PaymentIntent:**
+- `POST /api/client/wallet-topup-intent` creates a PENDING WalletTransaction, then a Stripe PaymentIntent
+- On `payment_intent.succeeded` webhook: validates amount, flips PENDING → CONFIRMED
+- **No expiry date** — plain top-ups never expire (no expiry mechanism at all)
+
+**Path D — Client-pull confirmation via wallet-add:**
+- `POST /api/client/wallet-add` re-fetches PaymentIntent from Stripe, enforces P0-01 ownership check
+- **User-facing integration mismatch (see §1.8):** wallet-topup-intent does NOT pass `userId` to `createPaymentIntent`, so the P0-01 check in wallet-add fails-closed (403). The customer-facing modal (`AddCreditsModal.tsx`) calls wallet-add after payment succeeds, receives 403, and reports "adding credits failed" to the user — while the webhook has already successfully credited the wallet. The customer sees a failure message but the credit is applied.
+
+### 1.6 Cross-provider booking (Step 2, source-verified)
+
+`app/api/client/bookings/create-bulk/route.ts`:
 1. Identifies student from authenticated session
 2. Accepts multiple cart items, each with its own `providerId`
 3. Fetches hourly rate for each instructor; recalculates price server-side
-4. Loads one wallet using student's `userId` (pooled, cross-provider)
+4. Loads one wallet using student's `userId` (pooled, cross-provider — intentional)
 5. Checks combined booking cost against aggregate wallet balance
 6. Creates individual bookings for each instructor inside a transaction
-7. Creates **one aggregated wallet DEBIT** for the combined cost (no per-booking breakdown, no per-purchase allocation)
-8. `lockedHourlyRate` is **NOT populated** in the `create-bulk` route — `booking.price` is stored but not the locked rate field
+7. Creates **one aggregated wallet DEBIT** for the combined cost (no per-booking attribution, no per-purchase allocation)
+8. `lockedHourlyRate` is **NOT populated** — but the route calculates and saves each booking's `price` using the instructor's current rate. The saved price provides a booking-time financial amount. The missing `lockedHourlyRate` field is an auditability and data-consistency concern; it does not prove the student will be repriced later.
 
-**Cross-provider spending is confirmed at source.** A student can spend wallet credit on different instructors in the same transaction.
+**Cross-provider spending is confirmed at source.** The pooled wallet is an intentional design choice, not a defect.
 
-**Balance check does not exclude expired credit** — `getWalletBalance` sums all CONFIRMED credits regardless of purchase date.
-
-### 1.6 Package lesson confirmation (`confirm-package-booking` route)
-
-`app/api/client/confirm-package-booking/route.ts` — **has active callers** (referenced in test suites `h02-child-booking-pricing.test.ts`, `h02b-confirm-package-booking.test.ts`, and mentioned in mobile route).
-
-This route uses the **older package-child confirmation flow** with hour counters as an additional limit, separate from the bulk-booking flow. It is a separate mechanism that still exists and is used.
+**`confirm-package-booking` route:** The older package-child confirmation flow exists in the codebase and has test coverage, but test suites are not production callers. The current packages dashboard directs students to the standard booking screen. A genuine frontend/API caller trace is needed before classifying this route as active in production.
 
 ### 1.7 Booking cancellations and refunds (Step 3, source-verified)
 
 Three entry points with materially different refund behavior:
 
 **Entry point A — `POST /api/bookings/[id]/cancel` (authenticated, delegates to `cancelBooking()`):**
-- `cancelBooking` (booking-service.ts) issues a **wallet CREDIT** for the refund amount
-- SECURITY: only issues credit if `booking.source === 'platform'` (offline bookings excluded)
+- Issues a **wallet CREDIT** for the refund amount
+- Only if `booking.source === 'platform'` (offline bookings excluded)
 - Uses `calculatePartialPackageRefund` for package bookings (tier-aware, capped at `totalPaid − platformFee`)
 - Time policy: 48h+ = 100%, 24–48h = 50%, <24h = 0%
-- **Wallet-funded bookings: wallet credit issued correctly**
-- Creates `REFUND_APPROVAL_TASK` for post-payout refunds > 24h
-- FinancialLedger `recordFullRefund`/`recordPartialRefund` runs after the transaction (non-critical)
+- **Wallet-funded bookings: wallet credit issued correctly** ✅
 
 **Entry point B — `POST /api/public/bookings/[id]/cancel` (voice agent / self-service):**
 - Cancels the booking atomically via `updateMany` status guard
 - Issues **Stripe card refund** if `booking.isPaid && refundAmount > 0 && paymentIntentId`
-- **Wallet-funded bookings: no refund** — `console.warn("No paymentIntentId — refund must be processed manually")` — no wallet credit, no Stripe refund
-- **Source-confirmed defect:** a student who booked using wallet credit and cancels via the public/voice route receives nothing
+- **Wallet-funded bookings: no refund** — two failure cases:
+  1. `paymentIntentId` is null (wallet debit came from wallet, no card charge) → logs "No paymentIntentId — refund must be processed manually"
+  2. `paymentIntentId` is a synthetic `package-...` value (older package-child confirmation path) → not a real Stripe PaymentIntent → `stripe.refunds.create` fails
+- **No wallet credit is issued in either case** — the student receives nothing
+- **Confirmed defect**
 
 **Entry point C — `approveCancellation()` (admin-approved package cancellations):**
-- Atomic CAS on `cancellationStatus: PENDING → APPROVING` prevents concurrent admin approvals
+- Atomic CAS on `cancellationStatus: PENDING → APPROVING`
 - Issues **Stripe card refund** first, then in a transaction creates a wallet **DEBIT** to reverse the face-value credit
-- Requires `booking.paymentIntentId` — throws "No payment intent found - cannot issue Stripe refund" if missing
-- `PACKAGE_FEE` Transaction is retained (non-refundable)
+- Requires real `booking.paymentIntentId` — throws "No payment intent found" if missing or synthetic
 
-### 1.8 Administrative credits and adjustments
+### 1.8 P0-01 ownership check — user-facing integration mismatch (Step 4 correction)
 
-- Admin routes require RBAC `FINANCE_CREDITS_MANAGE` permission and `Idempotency-Key` header
-- Claim-first idempotency via `AdminWalletIdempotencyKey`
-- Audit trail: `AuditLog` row + receipt email + `WalletTransaction`
-- **Gap:** admin routes do NOT call `recordAdminWalletAdjustment` — no `FinancialLedger` double-entry
+The normal wallet top-up flow has a **user-facing integration mismatch**, not merely a dormant security check:
 
-### 1.9 Expiry and account closure
+1. `AddCreditsModal.tsx` calls `wallet-topup-intent` → creates PENDING WalletTransaction + Stripe PaymentIntent
+2. `wallet-topup-intent` passes `transactionId` and `walletId` to `createPaymentIntent()` but NOT `userId`
+3. `createPaymentIntent` only stamps `metadata.userId` if the caller supplies it — so this PaymentIntent has no `userId`
+4. After payment succeeds, `AddCreditsModal.tsx` calls `wallet-add`
+5. `wallet-add` requires `metadata.userId` to match `session.user.id` — returns **HTTP 403** because metadata is absent
+6. **The customer sees "adding credits failed"** — but the Stripe webhook has already independently confirmed the pending transaction and credited the wallet
 
-**Package expiry (source-verified):**
-- `packageExpiryDate` stored on `Booking` (parent package row), set to `purchaseDate + 365 days` — hardcoded, not from `PlatformSettings`
-- `packageExpiryAlerts.ts` sends notifications saying "unused wallet credit has been forfeited"
-- **No financial action taken.** The wallet `WalletTransaction` credit remains CONFIRMED and spendable
-- Scheduling new lessons from an expired package is blocked; dollar balance is not removed
-- The notification overstates what the code actually does — misleading
+**Result:** the wallet is credited successfully (via webhook) while the customer-facing UI reports failure. This is an integration mismatch between the client-pull confirmation path and the webhook confirmation path. A cross-user exploitation scenario has not been demonstrated by this trace.
 
-**Account closure / provider suspension:**
-- No code debits/settles wallet balances on closure
-- `onDelete: Cascade` from User — hard-deletes wallet and all transactions (data loss, no settlement)
+**Assessment needed:** either supply the authenticated user ID consistently to `wallet-topup-intent` (so `wallet-add` can serve as client-pull confirmation with ownership enforced), or remove the redundant client-pull path and rely on the webhook.
 
-### 1.10 Balance calculation and ledger coverage
+### 1.9 Ledger and financial reconciliation (Step 5, expanded)
+
+The `FinancialLedger` double-entry table is written by `recordWalletCredit()`, `recordBookingPayment()`, `recordFullRefund()`, `recordPartialRefund()`, and `recordAdminWalletAdjustment()`. Coverage analysis:
+
+| Flow | FinancialLedger call | Status |
+|---|---|---|
+| Plain PaymentIntent top-up webhook | `recordWalletCredit()` | ✅ Covered |
+| Book Later Checkout package credit (webhook) | No `recordWalletCredit()` call | ❌ Missing |
+| Book Now package credit (webhook) | No `recordWalletCredit()` call | ❌ Missing |
+| Client multi-booking wallet debit (`create-bulk`) | No `recordBookingPayment()` call | ❌ Missing |
+| Older package-child confirmation | No `recordBookingPayment()` call | ❌ Missing |
+| Admin manual credit/debit | No `recordAdminWalletAdjustment()` call | ❌ Missing (function exists but never called) |
+| `cancelBooking` wallet refund | `recordFullRefund()`/`recordPartialRefund()` | ✅ Covered (after tx, non-critical) |
+| `approveCancellation` card refund | `REFUND_ISSUED` LedgerEntry | ✅ Covered |
+
+**Five of eight wallet-affecting flows do not write to the FinancialLedger.** The double-entry ledger balance for `CLIENT_WALLET` will diverge from the `WalletTransaction`-derived balance after any of these flows execute. A complete reconciliation of expected entries against actual application writes is needed.
+
+### 1.10 Expiry implementation status (Step 1 correction)
+
+**No current purchase path writes an expiry date.** Specifically:
+- `app/api/public/bookings/bulk/route.ts` does NOT set `packageExpiryDate` when creating the package Booking
+- `app/api/stripe/webhook/route.ts` does NOT set `packageExpiryDate` in either the Book Later or Book Now package-credit handler
+- `WalletTransaction` has no expiry field
+- `PlatformSettings` has no `walletCreditValidityMonths` field
+
+The `packageExpiryDate` field exists on `Booking` and is READ by package listing, scheduling, and notification routes — but no code WRITES it. Existing package records likely have `packageExpiryDate = null`.
+
+**`getWalletBalance()` includes every confirmed credit regardless of purchase date.** No expiry check exists in the balance calculation or in the booking creation path.
+
+### 1.11 Account closure (Step 6, corrected)
+
+- **No self-service User deletion endpoint exists.** Account deletion requests go through support email and are not automatically processed.
+- `ClientWallet`/`WalletTransaction` have `onDelete: Cascade` from User — a physical User deletion would hard-delete wallet data (latent data-loss risk, not an active customer-facing defect)
+- **Terms of Service clause 22** promises: "Upon account closure, unused wallet balance will be refunded to the original payment method (minimum $10.00)"
+- **No application settlement/refund workflow implements this promise**
+- The cascade-delete is a latent risk that would destroy evidence and prevent settlement if triggered
+
+### 1.12 Balance calculation
 
 - Derived is authoritative: `getWalletBalance` sums CONFIRMED WalletTransactions (CREDIT − DEBIT)
-- **Does not exclude expired credits** — no expiry check in `getWalletBalance`
+- **Does not exclude expired credits** — no expiry check exists
 - `ClientWallet.balance` stored field drifts (only updated by some paths)
-- Admin manual adjustments do not write to `FinancialLedger` (gap)
+- `reconcileWalletBalance` exists to correct drift but is not called automatically on every path
 
-### 1.11 Confirmed gaps against product rules (Steps 1–2)
+### 1.13 Confirmed gaps against product rules
 
 | Product rule | Current code | Gap |
 |---|---|---|
-| Expiry per purchase, 12 calendar months from payment confirmation | Expiry on parent `Booking` row only, 365 days hardcoded, no per-WalletTransaction expiry | WalletTransaction has no expiry date; plain top-ups never expire |
-| `getWalletBalance` must exclude expired credits | `getWalletBalance` includes all CONFIRMED credits regardless of date | Expired credit remains spendable |
-| Configurable expiry via `PlatformSettings` | `packageExpiryDate = +365 days` hardcoded in webhook | No `walletCreditValidityMonths` setting exists |
-| Each purchase expires independently | No per-purchase expiry field on WalletTransaction | Cannot enforce per-purchase expiry |
-| `lockedHourlyRate` on bookings | Not populated in `create-bulk` route | Rate-lock requirement partially unmet |
-| Expiry starts at payment confirmation | `packageExpiryDate` set in webhook `checkout.session.completed` (correct path) | Correct for packages; plain top-ups have no expiry at all |
+| Per-purchase expiry, 12 months from payment confirmation | No expiry field on `WalletTransaction`; `packageExpiryDate` never written by any purchase path | No expiry is persisted or enforced |
+| `getWalletBalance` must exclude expired credits | Includes all CONFIRMED credits regardless of date | Expired credit remains spendable |
+| Configurable expiry via `PlatformSettings` | No `walletCreditValidityMonths` setting | Hardcoded nowhere — expiry is entirely unimplemented |
+| Each purchase expires independently | No per-purchase tracking on WalletTransaction | Cannot enforce per-purchase expiry |
+| Debits allocated to specific purchase credits | One aggregated DEBIT, no per-purchase allocation | Cannot determine remaining value per purchase |
+| `lockedHourlyRate` on bookings | Not populated in `create-bulk` route | Auditability gap (saved price provides booking-time amount) |
+| Consistent expiry messaging | 4+ contradictory statements across Terms, API, UI | Customer-facing text conflicts with product rule |
 
 ---
 
@@ -167,7 +230,7 @@ Student ──pays──> DriveBook Stripe account (platform)
                    │
                    ▼ payment confirmed (webhook)
 DriveBook credits ClientWallet
-  ├── WalletTransaction(CREDIT, faceValue)     [spendable]
+  ├── WalletTransaction(CREDIT, faceValue)     [spendable, NO expiry date]
   ├── WalletTransaction(PLATFORM_SUBSIDY)       [audit-only, non-spendable]
   └── Transaction(PACKAGE_FEE, platformFee)     [non-refundable revenue]
   
@@ -175,17 +238,18 @@ DriveBook now holds: cash (in Stripe balance)
 DriveBook owes client: faceValue (wallet liability)
 DriveBook's revenue: platformFee (retained)
 DriveBook's subsidy cost: faceValue − amountPaid (promotional)
+NO expiry date written anywhere
 ```
 
 ### 2.2 Wallet-funded booking flow
 
 ```
-ClientWallet (balance $700)
-  ├── createBooking: checks aggregate balance ≥ price
-  │   └── Inside $transaction: re-verifies, creates DEBIT WalletTransaction
-  │       (ClientWallet.balance stored field NOT updated — drifts)
+ClientWallet (aggregate balance)
+  ├── create-bulk: checks aggregate balance ≥ total cost
+  │   └── Inside transaction: creates individual bookings, one aggregated DEBIT
+  │       (no per-booking attribution, no per-purchase allocation)
   │
-  ├── FinancialLedger: CLIENT_WALLET → PLATFORM_ESCROW → PLATFORM_REVENUE + INSTRUCTOR_PAYABLE
+  ├── FinancialLedger: NO recordBookingPayment() call (gap)
   │
   └── Provider does NOT receive funds from wallet
       Provider's earnings accrue in INSTRUCTOR_PAYABLE ledger account
@@ -195,15 +259,15 @@ ClientWallet (balance $700)
 ### 2.3 Cancellation refund flows
 
 ```
-Path A (cancelBooking):
-  Wallet CREDIT back → student can re-use for other lessons
-  FinancialLedger: reverses CLIENT_WALLET → ESCROW entries
+Path A (authenticated cancel → cancelBooking):
+  Wallet CREDIT back → student can re-use for other lessons ✅
 
 Path B (public cancel — wallet-funded booking):
-  ❌ NO automatic refund (no paymentIntentId to refund to card)
-  Logs "refund must be processed manually"
+  Case 1: paymentIntentId = null → logs warning, NO refund ❌
+  Case 2: paymentIntentId = synthetic "package-..." → Stripe refund fails ❌
+  No wallet credit issued in either case
 
-Path C (admin package cancel):
+Path C (admin package cancel → approveCancellation):
   Card refund → student gets cash back
   Wallet DEBIT → reverses the face-value credit
   PACKAGE_FEE → retained (non-refundable)
@@ -211,116 +275,94 @@ Path C (admin package cancel):
 
 ---
 
-## 3. Ownership and Responsibility Analysis
+## 3. Architecture Reframing
 
-### 3.1 Who owns the wallet funds?
+### 3.1 The pooled wallet is intentional, not a defect
 
-**Current state:** DriveBook owns and holds all wallet funds. The client has a contractual credit (a liability DriveBook owes them), not a segregated cash holding. The funds are commingled in DriveBook's Stripe balance with platform revenue.
+The product owner has confirmed: a pooled student wallet is the intended marketplace design. Packages are provider-independent. Individual bookings identify their selected providers. The absence of `providerId` on `ClientWallet` or `WalletTransaction` is **not** a defect.
 
-| Question | Current answer |
-|---|---|
-| Who legally owns the wallet funds? | **Undetermined** — DriveBook holds the cash, but legal ownership depends on the terms of service and Australian consumer law |
-| Who holds the funds? | DriveBook's Stripe platform account |
-| Who controls credits? | DriveBook (via webhooks for Stripe payments; via admin routes for manual adjustments) |
-| Who controls debits? | DriveBook (via booking creation and package confirmation routes) |
-| Who bears refund responsibility? | DriveBook (for wallet credit refunds) or the student's card (for card refunds) |
-| Who bears reconciliation responsibility? | DriveBook (via FinancialLedger double-entry, but coverage is partial) |
-| Is the wallet provider-attributed? | **No** — one wallet per user, pooled across all instructors |
-| Is the wallet balance segregated cash? | **No** — commingled in DriveBook's Stripe balance |
+Provider-restricted wallets should not be treated as the marketplace baseline. Custody, legal obligations, and accounting are separate questions.
 
-### 3.2 Legal and regulatory questions requiring professional confirmation
+### 3.2 The real architecture problem: credit-lot tracking
 
-1. **Is the wallet a "stored value facility" under Australian law?** If DriveBook holds customer prepaid funds, it may be subject to AUSTRAC reporting, e-money regulation, or financial services licensing requirements.
-2. **Does commingling wallet funds with platform revenue create a fiduciary breach?** If wallet funds are not segregated, DriveBook may be using customer prepaid money to fund operations, which may be legally problematic.
-3. **What are the consumer protection obligations for forfeited balances?** The `WALLET_TERMS.md` says balances "may be forfeited" on closure, but Australian Consumer Law may override this for services not delivered.
-4. **Is the "face-value crediting" model legally sound?** The wallet is credited with more than the customer paid (face value > discounted price), and the promotional subsidy is non-refundable. This is a creative accounting approach that may have legal implications.
-5. **What happens to wallet funds if DriveBook becomes insolvent?** If funds are commingled, customers may lose their prepaid balances.
-6. **Is the package-expiry notification ("forfeited") misleading under Australian Consumer Law?** The code says "forfeited" but doesn't actually forfeit the balance — this is a gap between communicated and actual behavior.
+The current code's aggregate calculation — all confirmed credits minus all confirmed debits — cannot independently establish remaining value for each purchase. The product rules require:
+
+1. **Each purchase creates a credit lot** with its own expiry date (12 calendar months from payment confirmation)
+2. **Debits must be allocated** to the relevant purchase credit and booking
+3. **At expiry, DriveBook must determine how much of each purchase remains** and remove or forfeit it
+4. **`getWalletBalance()` must exclude expired credits** at spend time, not just rely on a cron
+
+This requires a **credit-lot model**:
+- Each `WalletTransaction(CREDIT)` gets its own `expiryDate` field
+- Each `WalletTransaction(DEBIT)` references the specific credit lot(s) it consumes
+- `getWalletBalance()` sums only non-expired credit lots minus their allocated debits
+- A daily cron marks expired credit lots and removes their remaining value from the spendable balance
+- The application enforces expiry at spend time by checking each credit lot's `expiryDate` — not depending on the cron running at the exact expiry moment
+
+### 3.3 Legal, regulatory, and accounting questions
+
+These require professional assessment before the architecture is finalised:
+
+1. Is the wallet a "stored value facility" under Australian law?
+2. Does commingling wallet funds with platform revenue create a fiduciary breach?
+3. What consumer protection obligations apply to forfeited/expired balances?
+4. Is the "face-value crediting" model (crediting more than the customer paid) legally sound?
+5. What happens to wallet funds if DriveBook becomes insolvent?
+6. Are the contradictory expiry statements across Terms of Service, privacy page, API, and UI a consumer law violation?
+7. Does Terms of Service clause 22 (refund on closure) require a settlement workflow?
 
 ---
 
-## 4. Risks and Unresolved Assumptions
-
-### 4.1 Implementation risks
+## 4. Implementation Risks
 
 | Risk | Description | Severity |
 |---|---|---|
-| R1 | Wallet-funded bookings cancelled via public route get no refund | Medium — customer may lose funds |
-| R2 | Admin manual adjustments don't write to FinancialLedger | Medium — ledger drift, audit trail gap |
-| R3 | Package expiry notification says "forfeited" but balance remains spendable | Low — misleading but not financially harmful to customer |
-| R4 | P0-01 ownership check dormant for plain top-ups | Medium — security gap mitigated by server-side walletId |
-| R5 | No account closure settlement flow | Medium — cascade-delete loses wallet data without settlement |
-| R6 | `ClientWallet.balance` stored field drifts from authoritative aggregate | Low — all reads use aggregate, but direct reads of stored field are wrong |
-| R7 | No provider attribution on wallet transactions | Architectural — current design is user-wide, not per-provider |
-
-### 4.2 Unresolved assumptions
-
-1. **Legal ownership of wallet funds** — not determined; requires legal/tax assessment
-2. **Whether the wallet is a regulated stored-value facility** — requires AUSTRAC/legal assessment
-3. **Whether wallet funds must be segregated** — requires legal assessment
-4. **Whether the face-value crediting model is legally sound** — requires legal assessment
-5. **Whether WLA-002's DIRECT payment model affects wallet ownership** — SaaS/DIRECT wallet functionality is out of scope until WLA-002 is resolved
-6. **Whether providers should have visibility into their clients' wallet balances** — current design: no provider attribution
+| R1 | Wallet-funded bookings cancelled via public route get no refund (null or synthetic paymentIntentId) | Medium — customer loses funds |
+| R2 | Admin manual adjustments don't write to FinancialLedger | Medium — ledger drift, audit gap |
+| R3 | 5 of 8 wallet flows don't write FinancialLedger entries | Medium — double-entry ledger unreliable |
+| R4 | P0-01 integration mismatch: customer sees "failed" while wallet is credited | Medium — user-facing error |
+| R5 | No expiry date written by any purchase path | High — product rule cannot be enforced |
+| R6 | `getWalletBalance` includes all confirmed credits regardless of date | High — expired credit spendable |
+| R7 | No account closure settlement flow (Terms clause 22 unimplemented) | Medium — legal promise without implementation |
+| R8 | No per-purchase credit-lot tracking — debits not allocated to purchases | High — cannot determine per-purchase remaining value |
+| R9 | `ClientWallet.balance` stored field drifts from authoritative aggregate | Low — all reads use aggregate |
+| R10 | 4+ contradictory expiry statements across customer-facing surfaces | Medium — consumer law risk |
 
 ---
 
-## 5. Architecture Options
-
-### Option 1 — Maintain current user-wide wallet (status quo)
-
-The wallet remains per-user, pooled across all instructors. DriveBook holds all funds in its platform Stripe account. The wallet is a contractual credit, not segregated cash.
-
-**Advantages:** Simple; no schema changes; existing code works; familiar to users (like a store credit).
-**Disadvantages:** No provider attribution; DriveBook bears all custody risk; commingled funds; legal questions about stored-value regulation; wallet-funded booking cancellation gap (Path B).
-
-### Option 2 — Provider-attributed wallet balances
-
-Wallet remains per-user but transactions carry a `providerId`. The balance is partitioned by provider — a client's $700 wallet shows "$400 with Instructor A, $300 with Instructor B."
-
-**Advantages:** Provider can see their clients' prepaid balances; clearer attribution for refunds; supports future SaaS/DIRECT model where provider manages their own clients.
-**Disadvantages:** Complex schema migration; breaks the "any instructor, any lesson" flexibility; requires partitioning logic in every wallet read; doesn't solve the custody or legal questions.
-
-### Option 3 — Segregated client funds (trust account model)
-
-Wallet funds are held in a separate Stripe account or trust account, not commingled with DriveBook's operational revenue. The wallet represents actual cash held in trust for the client.
-
-**Advantages:** Clearer legal separation; addresses commingling risk; may satisfy regulatory requirements for stored-value facilities.
-**Disadvantages:** Requires a separate Stripe account or trust structure; complex fund movement (separate account → instructor payout); requires legal and tax assessment; Stripe may not support this directly without a custom integration.
-
-### Option 4 — No wallet; direct payment per booking (remove prepaid model)
-
-Eliminate the wallet entirely. Every booking is paid by card at booking time. Packages become pre-paid lesson credits tracked as hours, not as dollar balances.
-
-**Advantages:** Eliminates all custody, commingling, and stored-value regulatory questions; simplest fund flow; each payment goes directly to the booking.
-**Disadvantages:** Major schema and code changes; loses the "prepaid convenience" feature; package discount model would need restructuring; existing users would need wallet balances refunded.
-
----
-
-## 6. Recommended Next Steps
-
-1. **Do not change current PLATFORM wallet behaviour** until an approved architecture decision is made
-2. **Obtain legal/tax assessment** on questions in section 3.2 before choosing an option
-3. **Fix the wallet-funded booking cancellation gap** (Path B) regardless of architecture decision — this is a defect, not an architecture question
-4. **Fix the admin adjustment FinancialLedger gap** — admin credits/debits should write double-entry entries
-5. **Fix the package expiry notification** — either implement actual forfeiture or change the notification wording
-6. **Keep SaaS/DIRECT wallet functionality out of scope** until WLA-002 is resolved
-7. **Document the wallet terms** accurately — the current `WALLET_TERMS.md` must match the actual implementation
-
----
-
-## 7. Acceptance Criteria
+## 5. Acceptance Criteria
 
 Before WLA-005 can be closed:
 
+- [ ] Credit-lot model designed: each `WalletTransaction(CREDIT)` has its own `expiryDate`
+- [ ] `getWalletBalance()` excludes expired credit lots at spend time
+- [ ] `walletCreditValidityMonths` added to `PlatformSettings`
+- [ ] Debits allocated to specific purchase credit lots
+- [ ] Wallet-funded booking cancellation defect (Path B) fixed
+- [ ] All 8 wallet flows write FinancialLedger entries
+- [ ] P0-01 integration mismatch resolved (supply userId or remove client-pull path)
+- [ ] Account closure settlement flow defined or Terms clause 22 revised
+- [ ] Contradictory expiry messaging unified across all customer-facing surfaces
 - [ ] Legal assessment of wallet fund ownership, custody, and regulatory status obtained
-- [ ] Architecture option selected and approved by product owner
-- [ ] Wallet-funded booking cancellation gap (Path B) fixed or documented as accepted limitation
-- [ ] Admin adjustment FinancialLedger gap fixed or documented as accepted limitation
-- [ ] Package expiry notification aligned with actual behavior
-- [ ] Account closure settlement flow defined or explicitly deferred
+- [ ] `confirm-package-booking` production caller status determined (active or deprecated)
 - [ ] SaaS/DIRECT wallet scope defined (after WLA-002 resolution)
-- [ ] Wallet terms of service reviewed by legal counsel
 
 ---
 
-*This document is an architecture decision record. No code changes are implemented here. WLA-005 remains OPEN — ARCHITECTURE DECISION REQUIRED.*
+## 6. Investigation Status
+
+| Step | Subject | Status | Notes |
+|---|---|---|---|
+| 1 | Purchase and expiry | **Reopened** | Product rule confirmed; existing implementation NOT verified — no purchase path writes expiry; false claim removed |
+| 2 | Cross-provider booking | **Partially verified** | Pooled wallet confirmed; `lockedHourlyRate` framing corrected; `confirm-package-booking` caller status unresolved |
+| 3 | Refunds and cancellations | **Verified with qualifications** | Three paths traced; public cancel defect confirmed; synthetic paymentIntentId case added |
+| 4 | Top-ups and ownership | **Verified; conclusion corrected** | P0-01 is a user-facing integration mismatch, not a dormant check |
+| 5 | Ledger and reconciliation | **Further investigation needed** | 5 of 8 flows missing FinancialLedger calls; complete reconciliation required |
+| 6 | Account closure | **Partially verified** | No self-service deletion; cascade is latent risk; Terms clause 22 unimplemented |
+| 7 | Architecture decision | **Pending** | Credit-lot model proposed; legal assessment required |
+
+**Next work:** narrowly focus on Step 1 — establish the complete purchase-to-expiry data lifecycle, including the credit-lot allocation required for partial spending and expiry. Then Step 5 should reconcile the actual double-entry ledger.
+
+---
+
+*This document is an architecture decision record. No code changes are implemented here. WLA-005 remains OPEN — SOURCE INVESTIGATION AND RECONCILIATION IN PROGRESS.*
