@@ -66,7 +66,7 @@ The provider connects an existing or new Stripe account to DriveBook. The provid
 
 **Revenue share:** Under the "Stripe handles pricing" model, Stripe's published AU Connect pricing states that platforms "can qualify and earn a revenue share from Stripe." This is subject to Stripe qualification and is **not guaranteed**. DriveBook may separately investigate the revenue-share programme as an additional revenue stream alongside SaaS subscriptions, but must not assume eligibility.
 
-**Disadvantages:** DriveBook does not earn transaction-based revenue (unless revenue share is qualified); providers manage their own Stripe account.
+**Disadvantages:** DriveBook does not earn transaction-based revenue (unless revenue share is qualified); providers manage their own Stripe account. DriveBook still incurs its own payment-related costs (SaaS subscription billing, disputes on its own platform-level transactions, other platform services) — these are separate from provider lesson-payment processing, which has no additional platform account or payout fees under the published Stripe-handled pricing model.
 
 ### Option B — SaaS subscription plus DriveBook's 2.5% combined fee (described in sections 2–12)
 
@@ -96,7 +96,7 @@ The provider chooses one payment arrangement during Stripe onboarding. Plan A (i
 
 **Technical constraint:** Stripe's Accounts v2 documentation states that `fees_collector` and `losses_collector` are set when the account configuration is created and **cannot be updated later**. Providers cannot freely switch between models without account replacement. Source: [Stripe configuration docs](https://docs.stripe.com/connect/accounts-v2/connected-account-configuration).
 
-**Research required (coexistence under one platform):** The question is not merely whether each `fees_collector` configuration is individually valid — both are documented as valid by Stripe. The critical question is whether **one Australian Connect platform agreement** can support both `fees_collector: "stripe"` (Option A) and `fees_collector: "application"` (Option B) simultaneously, with some connected accounts on each model. This must be confirmed with Stripe in writing, as the platform agreement and pricing tier may restrict mixing configurations.
+**Research required (coexistence under one platform):** The fact that both `fees_collector` configurations are individually documented as valid does **not** establish that Stripe will approve a mixed configuration under one Australian platform agreement. Option C is a hypothesis, not a confirmed Stripe capability. The critical question is whether **one Australian Connect platform agreement** can support both `fees_collector: "stripe"` (Option A) and `fees_collector: "application"` (Option B) simultaneously, with some connected accounts on each model. This must be confirmed with Stripe in writing, as the platform agreement and pricing tier may restrict mixing configurations.
 
 ### Research questions (mandatory before WLA-002 is resolved)
 
@@ -127,7 +127,19 @@ The following must be confirmed **in writing** with Stripe before any fee model 
 5. **Existing provider Stripe account connection:** Confirmation of whether providers can connect their own existing Stripe accounts to DriveBook's platform, and what the onboarding requirements are for existing accounts.
 6. **Platform revenue-share eligibility:** Confirmation of whether DriveBook qualifies for Stripe's revenue-share programme under the "Stripe handles pricing" model, and what the terms are.
 
+### Recommended next research step
+
+Prepare a formal Stripe support enquiry covering the six confirmation items above. Ask for answers specific to DriveBook's Australian platform account, not generic documentation explanations.
+
+The most important question: Can one Australian Stripe Connect platform operate two groups of connected accounts simultaneously — one using Stripe-handled pricing (providers pay their own processing fees) and another using application-handled pricing (DriveBook pays processing fees from the application fee)?
+
+Also request confirmation of the actual pricing schedule and whether full Dashboard access is available in both arrangements.
+
+The next meaningful evidence should come from Stripe's written response, not another round of ADR wording changes.
+
 ### Key principle: separate subscription from payment processing
+
+A provider can pay DriveBook for software (SaaS subscription) while separately deciding how their customers' payments are processed. These do not need to be the same commercial decision. This separation is the strongest direction to investigate before the ADR is revised.
 
 A provider can pay DriveBook for software (SaaS subscription) while separately deciding how their customers' payments are processed. These do not need to be the same commercial decision. This separation is the strongest direction to investigate before the ADR is revised.
 
