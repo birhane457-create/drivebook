@@ -38,6 +38,12 @@ This ADR defines the settlement boundary for DIRECT mode (SaaS/white-label) and 
 
 The product owner has determined that the fee model should not be finalised before comparing commercial options. Three options are under investigation. The technical analysis in sections 2–12 below describes Option B in detail and remains useful research, but **does not represent the decided architecture**.
 
+### Terminology
+
+- **DIRECT** = the Stripe charge type: direct charges created on the provider's connected account (using the `Stripe-Account` header). This is the technical integration pattern, not a commercial model.
+- **Option A / Option B / Option C** = the payment-fee collection and commercial revenue models that can be layered on top of the DIRECT charge type. These determine who pays Stripe's processing fees, whether DriveBook collects an application fee, and how DriveBook earns revenue.
+- Both Option A and Option B use DIRECT charges. The difference is the fee-collector configuration and whether an application fee is charged.
+
 ### Option A — SaaS subscription only (recommended initial baseline)
 
 The provider connects an existing or new Stripe account to DriveBook. The provider:
@@ -54,11 +60,13 @@ The provider connects an existing or new Stripe account to DriveBook. The provid
 - `losses_collector: "stripe"` — Stripe absorbs negative balances
 - `application_fee_amount`: none (DriveBook earns subscription revenue, not per-transaction fees)
 
-**Stripe Connect pricing (Stripe handles pricing):** No platform fees. No per-account charge. No payout fee. Stripe collects processing fees from connected accounts. Source: [Stripe AU Connect pricing](https://stripe.com/au/connect/pricing).
+**Stripe Connect pricing (Stripe handles pricing):** Under the published Australian Connect pricing, the "Stripe handles pricing" model has **no additional platform account fees or payout fees** charged to DriveBook. Connected providers still pay Stripe's standard payment-processing fees (1.70% + A$0.30 AU domestic per transaction) directly to Stripe — these are the provider's own Stripe costs, not DriveBook's. DriveBook pays nothing per account or per payout. Source: [Stripe AU Connect pricing](https://stripe.com/au/connect/pricing).
 
 **Advantages:** Simpler reconciliation; no per-transaction margin calculation; no 2.5% fee to explain; less financial exposure for DriveBook; clear separation of SaaS revenue from payment revenue.
 
-**Disadvantages:** DriveBook does not earn transaction-based revenue; providers manage their own Stripe account.
+**Revenue share:** Under the "Stripe handles pricing" model, Stripe's published AU Connect pricing states that platforms "can qualify and earn a revenue share from Stripe." This is subject to Stripe qualification and is **not guaranteed**. DriveBook may separately investigate the revenue-share programme as an additional revenue stream alongside SaaS subscriptions, but must not assume eligibility.
+
+**Disadvantages:** DriveBook does not earn transaction-based revenue (unless revenue share is qualified); providers manage their own Stripe account.
 
 ### Option B — SaaS subscription plus DriveBook's 2.5% combined fee (described in sections 2–12)
 
@@ -88,7 +96,7 @@ The provider chooses one payment arrangement during Stripe onboarding. Plan A (i
 
 **Technical constraint:** Stripe's Accounts v2 documentation states that `fees_collector` and `losses_collector` are set when the account configuration is created and **cannot be updated later**. Providers cannot freely switch between models without account replacement. Source: [Stripe configuration docs](https://docs.stripe.com/connect/accounts-v2/connected-account-configuration).
 
-**Research required:** Whether one Australian Connect platform can support both `fees_collector` configurations simultaneously; whether both models offer full Dashboard access; what the Connect fees are under each model; whether providers can connect existing Stripe accounts.
+**Research required (coexistence under one platform):** The question is not merely whether each `fees_collector` configuration is individually valid — both are documented as valid by Stripe. The critical question is whether **one Australian Connect platform agreement** can support both `fees_collector: "stripe"` (Option A) and `fees_collector: "application"` (Option B) simultaneously, with some connected accounts on each model. This must be confirmed with Stripe in writing, as the platform agreement and pricing tier may restrict mixing configurations.
 
 ### Research questions (mandatory before WLA-002 is resolved)
 
@@ -107,6 +115,17 @@ The provider chooses one payment arrangement during Stripe onboarding. Plan A (i
 - [Stripe Australia Connect pricing](https://stripe.com/au/connect/pricing)
 - [Stripe — Build a SaaS platform](https://docs.stripe.com/connect/integrate-billing-connect)
 - [Stripe — Connect configuration recommendations](https://docs.stripe.com/connect/configuration-migration-guide)
+
+### Written Stripe confirmation required
+
+The following must be confirmed **in writing** with Stripe before any fee model is accepted or DIRECT mode is activated:
+
+1. **Australian platform eligibility:** Confirmation that DriveBook's Australian Stripe account can use the proposed Connect configurations (Accounts v2, direct charges, both `fees_collector` values).
+2. **Both pricing arrangements coexisting:** Confirmation that one Australian Connect platform agreement can support both `fees_collector: "stripe"` (Option A) and `fees_collector: "application"` (Option B) simultaneously, with different connected accounts on each model.
+3. **Full Dashboard access:** Confirmation that `dashboard: "full"` provides connected accounts with full Stripe Dashboard access under both fee-collector configurations.
+4. **Existing Express account migration:** Confirmation of whether existing v1 Express accounts can be migrated in place to Accounts v2, or whether replacement and provider re-onboarding is required.
+5. **Existing provider Stripe account connection:** Confirmation of whether providers can connect their own existing Stripe accounts to DriveBook's platform, and what the onboarding requirements are for existing accounts.
+6. **Platform revenue-share eligibility:** Confirmation of whether DriveBook qualifies for Stripe's revenue-share programme under the "Stripe handles pricing" model, and what the terms are.
 
 ### Key principle: separate subscription from payment processing
 
