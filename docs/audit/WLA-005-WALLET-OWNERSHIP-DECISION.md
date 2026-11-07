@@ -207,6 +207,41 @@ The `packageExpiryDate` field exists on `Booking` and is READ by package listing
 - `ClientWallet.balance` stored field drifts (only updated by some paths)
 - `reconcileWalletBalance` exists to correct drift but is not called automatically on every path
 
+### 1.13 Spend-time expiry checks (Step 1 — source file 6, source-verified)
+
+The reviewer asked whether any booking path independently blocks expired value despite `getWalletBalance()` not checking expiry. Source inspection of all spend paths:
+
+| Route | Expiry check? | Details |
+|---|---|---|
+| `create-bulk` (main booking path) | **NO** | Checks aggregate wallet balance only; no expiry check of any kind |
+| `schedule-package-hours` (older flow) | **YES, but dormant** | Checks `packageExpiryDate` — but since no purchase path writes this field, it is always null → the `if (packageExpiryDate && ...)` guard is always false → check never fires |
+| `confirm-package-booking` (older flow) | **NO** | Only sets `packageStatus` to 'completed'/'active' based on hours consumed; no expiry check |
+| `getWalletBalance()` (wallet helper) | **NO** | Sums all confirmed credits regardless of date |
+| Package listing API (`client/packages/route.ts`) | Display only | Shows `isExpired` status to user but does not block spending |
+
+**Conclusion: No booking path independently blocks expired value.** The one path with an expiry check (`schedule-package-hours`) can never fire because `packageExpiryDate` is never written by any purchase path. The main booking path (`create-bulk`) does not check expiry at all.
+
+This means that even if a daily cron were to mark `packageStatus = 'expired'` on a `Booking` row, the student's wallet credit from that purchase would remain spendable through the `create-bulk` route, which neither checks `packageExpiryDate` nor `packageStatus`.
+
+### 1.14 Step 1 consolidated result
+
+The product rule is confirmed. The implementation does not support it. This is a source-level finding at commit `fea62e35`.
+
+| Requirement | Source evidence | Result |
+|---|---|---|
+| Expiry starts at successful payment | Webhook identifies successful payment | Payment event exists |
+| Expiry date saved per purchase | Neither package webhook creates it | **Missing** |
+| Plain top-up expiry | PaymentIntent handler only confirms transaction | **Missing** |
+| Expiry configurable centrally | PlatformSettings has no validity-month setting | **Missing** |
+| Expired credit excluded from balance | `getWalletBalance()` includes all confirmed credits | **Missing** |
+| Partial spending tracked per purchase | No credit-lot allocation relation | **Missing** |
+| Expiry job removes unused value | Job only updates package status | **Missing** |
+| Spend-time expiry enforcement | No booking path checks expiry | **Missing** |
+
+**Step 1 status: source investigation complete.** The product rule is clear; the existing implementation does not support it at any stage — purchase, storage, balance calculation, or spend enforcement.
+
+The appropriate design direction remains a pooled dollar wallet with independently expiring purchase lots. Do not implement yet: first settle how existing credits, partial spending, refunds and promotional credits are represented.
+
 ### 1.13 Confirmed gaps against product rules
 
 | Product rule | Current code | Gap |
@@ -353,7 +388,7 @@ Before WLA-005 can be closed:
 
 | Step | Subject | Status | Notes |
 |---|---|---|---|
-| 1 | Purchase and expiry | **Reopened** | Product rule confirmed; existing implementation NOT verified — no purchase path writes expiry; false claim removed |
+| 1 | Purchase and expiry | **Source investigation complete** | Product rule confirmed; implementation does not support it at any stage — purchase, storage, balance, or spend enforcement. 8 source files traced. |
 | 2 | Cross-provider booking | **Partially verified** | Pooled wallet confirmed; `lockedHourlyRate` framing corrected; `confirm-package-booking` caller status unresolved |
 | 3 | Refunds and cancellations | **Verified with qualifications** | Three paths traced; public cancel defect confirmed; synthetic paymentIntentId case added |
 | 4 | Top-ups and ownership | **Verified; conclusion corrected** | P0-01 is a user-facing integration mismatch, not a dormant check |
@@ -361,7 +396,7 @@ Before WLA-005 can be closed:
 | 6 | Account closure | **Partially verified** | No self-service deletion; cascade is latent risk; Terms clause 22 unimplemented |
 | 7 | Architecture decision | **Pending** | Credit-lot model proposed; legal assessment required |
 
-**Next work:** narrowly focus on Step 1 — establish the complete purchase-to-expiry data lifecycle, including the credit-lot allocation required for partial spending and expiry. Then Step 5 should reconcile the actual double-entry ledger.
+**Next work:** Step 5 — reconcile the actual double-entry ledger. Complete the expected-vs-actual FinancialLedger entry analysis for all 8 wallet flows.
 
 ---
 
