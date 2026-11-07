@@ -24,6 +24,7 @@
 - `bookingId String?` — links to the booking that caused the debit
 - **No `providerId`** — transactions are not attributed to any provider
 - DB unique index on `metadata->>'stripePaymentIntentId'` (prevents concurrent double-credit, P0-01B fix)
+- **No expiry date field** — wallet credits do not carry their own expiry; expiry is tracked on `Booking.packageExpiryDate` (parent package row only)
 
 **No provider wallet exists.** Only `ClientWallet` (per-User). Providers are compensated through the `Payout`/Stripe Connect flow, tracked in `FinancialLedger` under `INSTRUCTOR_PAYABLE`/`INSTRUCTOR_PAID` accounts — completely separate from client wallets.
 
@@ -42,81 +43,118 @@ The wallet balance is an **accounting liability** of DriveBook to the client —
 - Client buys package → Stripe Checkout Session with `metadata.type='wallet_credit'`
 - On `checkout.session.completed` webhook: validates payment, then inside SERIALIZABLE transaction credits wallet with **face value** (undiscounted total, e.g. $700 for 10h@$70 even if customer paid $630)
 - Creates three records atomically:
-  1. `WalletTransaction(CREDIT, faceValue, CONFIRMED)` — spendable
+  1. `WalletTransaction(CREDIT, faceValue, CONFIRMED)` — spendable; **no expiry date field**
   2. `WalletTransaction(PLATFORM_SUBSIDY, faceValue − amountPaid)` — audit-only, non-spendable
   3. `Transaction(PACKAGE_FEE, platformFee, SETTLED)` — non-refundable platform revenue
+- **Expiry date stored on the parent `Booking` row** (`packageExpiryDate = purchase_date + 365 days`), not on the `WalletTransaction`
 
 **Path B — Plain top-up via PaymentIntent:**
 - `POST /api/client/wallet-topup-intent` creates a PENDING WalletTransaction, then a Stripe PaymentIntent
 - On `payment_intent.succeeded` webhook: validates amount, flips PENDING → CONFIRMED
+- **No expiry date** — plain top-ups never expire (no `packageExpiryDate` equivalent for top-ups)
 
 **Path C — Client-pull confirmation via wallet-add:**
-- `POST /api/client/wallet-add` re-fetches PaymentIntent from Stripe, enforces P0-01 ownership check (`metadata.userId` must match `session.user.id`), creates CONFIRMED credit
-- P0-01 gap: `wallet-topup-intent` does NOT pass `userId` to `createPaymentIntent`, so the ownership check in `wallet-add` fails-closed for plain top-ups. Plain top-ups are confirmed through the webhook (which has no userId ownership check). The P0-01 enforcement is effectively dormant for plain top-ups.
+- `POST /api/client/wallet-add` re-fetches PaymentIntent from Stripe, enforces P0-01 ownership check
+- P0-01 gap: `wallet-topup-intent` does NOT pass `userId` to `createPaymentIntent`, so the ownership check fails-closed for plain top-ups; plain top-ups confirmed through the webhook
 
-### 1.4 Wallet-funded bookings
+### 1.4 Confirmed product rules (Steps 1–2, 2026-11-06)
 
-In `createBooking` (`booking-service.ts`):
-- Balance computed as aggregate of CONFIRMED WalletTransactions (not stored field)
-- If `walletBalance >= price`: inside `$transaction`, re-verifies balance via `getWalletBalanceTx` (TOCTOU-safe), creates DEDIT WalletTransaction atomically with booking
-- No hold/reservation mechanism — debit is immediate and final
-- `ClientWallet.balance` is NOT updated by this path (only WalletTransaction written — stored field drifts)
+| Rule | Decision |
+|---|---|
+| Expiry period | 12 calendar months (not 365 days) |
+| Expiry start | Successful payment confirmation only |
+| Expiry type | Each purchase expires independently |
+| Activity | Does not reset expiry |
+| Cross-provider spending | Supported — pooled wallet, any instructor |
+| Cron frequency | Daily acceptable on current hosting plan |
+| Configuration | `walletCreditValidityMonths` in `PlatformSettings` |
+| Rate changes | Do not change an already confirmed booking |
+| Existing purchases on policy change | New policy affects new purchases only |
 
-### 1.5 Package lesson confirmation
+### 1.5 Wallet-funded bookings (`create-bulk` route, source-verified)
 
-`confirm-package-booking` route:
-- SERIALIZABLE transaction
-- Debits wallet by `lessonPrice = authorizedHours × instructor's CURRENT hourlyRate`
-- Updates package hour counters
-- Creates `BOOKING_PAYMENT` Transaction with `platformFee=0` (fee collected at package purchase)
-- This route DOES decrement `ClientWallet.balance` (unlike `createBooking`) — an inconsistency
+`app/api/client/bookings/create-bulk/route.ts` (Step 2 source inspection):
+1. Identifies student from authenticated session
+2. Accepts multiple cart items, each with its own `providerId`
+3. Fetches hourly rate for each instructor; recalculates price server-side
+4. Loads one wallet using student's `userId` (pooled, cross-provider)
+5. Checks combined booking cost against aggregate wallet balance
+6. Creates individual bookings for each instructor inside a transaction
+7. Creates **one aggregated wallet DEBIT** for the combined cost (no per-booking breakdown, no per-purchase allocation)
+8. `lockedHourlyRate` is **NOT populated** in the `create-bulk` route — `booking.price` is stored but not the locked rate field
 
-### 1.6 Booking cancellations and refunds (three paths with inconsistent behavior)
+**Cross-provider spending is confirmed at source.** A student can spend wallet credit on different instructors in the same transaction.
 
-| Path | Entry point | Refund destination | Wallet-funded bookings |
-|---|---|---|---|
-| A | `cancelBooking` (booking-service.ts) | Wallet CREDIT | Wallet credited back |
-| B | `POST /api/public/bookings/[id]/cancel` | Card via `stripe.refunds.create` | **No automatic refund** — logs "No paymentIntentId — refund must be processed manually" |
-| C | `approveCancellation` (admin package cancel) | Card refund + wallet DEBIT | Card refund + wallet debited to reverse face-value credit |
+**Balance check does not exclude expired credit** — `getWalletBalance` sums all CONFIRMED credits regardless of purchase date.
 
-**Key gap:** wallet-funded bookings cancelled through the public/voice-agent route (Path B) get **no refund at all** unless handled manually — because the booking has no `paymentIntentId` (the debit came from the wallet, not a card charge).
+### 1.6 Package lesson confirmation (`confirm-package-booking` route)
 
-### 1.7 Administrative credits and adjustments
+`app/api/client/confirm-package-booking/route.ts` — **has active callers** (referenced in test suites `h02-child-booking-pricing.test.ts`, `h02b-confirm-package-booking.test.ts`, and mentioned in mobile route).
+
+This route uses the **older package-child confirmation flow** with hour counters as an additional limit, separate from the bulk-booking flow. It is a separate mechanism that still exists and is used.
+
+### 1.7 Booking cancellations and refunds (Step 3, source-verified)
+
+Three entry points with materially different refund behavior:
+
+**Entry point A — `POST /api/bookings/[id]/cancel` (authenticated, delegates to `cancelBooking()`):**
+- `cancelBooking` (booking-service.ts) issues a **wallet CREDIT** for the refund amount
+- SECURITY: only issues credit if `booking.source === 'platform'` (offline bookings excluded)
+- Uses `calculatePartialPackageRefund` for package bookings (tier-aware, capped at `totalPaid − platformFee`)
+- Time policy: 48h+ = 100%, 24–48h = 50%, <24h = 0%
+- **Wallet-funded bookings: wallet credit issued correctly**
+- Creates `REFUND_APPROVAL_TASK` for post-payout refunds > 24h
+- FinancialLedger `recordFullRefund`/`recordPartialRefund` runs after the transaction (non-critical)
+
+**Entry point B — `POST /api/public/bookings/[id]/cancel` (voice agent / self-service):**
+- Cancels the booking atomically via `updateMany` status guard
+- Issues **Stripe card refund** if `booking.isPaid && refundAmount > 0 && paymentIntentId`
+- **Wallet-funded bookings: no refund** — `console.warn("No paymentIntentId — refund must be processed manually")` — no wallet credit, no Stripe refund
+- **Source-confirmed defect:** a student who booked using wallet credit and cancels via the public/voice route receives nothing
+
+**Entry point C — `approveCancellation()` (admin-approved package cancellations):**
+- Atomic CAS on `cancellationStatus: PENDING → APPROVING` prevents concurrent admin approvals
+- Issues **Stripe card refund** first, then in a transaction creates a wallet **DEBIT** to reverse the face-value credit
+- Requires `booking.paymentIntentId` — throws "No payment intent found - cannot issue Stripe refund" if missing
+- `PACKAGE_FEE` Transaction is retained (non-refundable)
+
+### 1.8 Administrative credits and adjustments
 
 - Admin routes require RBAC `FINANCE_CREDITS_MANAGE` permission and `Idempotency-Key` header
-- Claim-first idempotency via `AdminWalletIdempotencyKey` raw SQL
-- Audit trail: `AuditLog` row + receipt email + `WalletTransaction` row
-- **Gap:** admin routes do NOT call `recordAdminWalletAdjustment` — no `FinancialLedger` double-entry. The double-entry ledger diverges from the WalletTransaction-derived balance after any admin credit/debit.
+- Claim-first idempotency via `AdminWalletIdempotencyKey`
+- Audit trail: `AuditLog` row + receipt email + `WalletTransaction`
+- **Gap:** admin routes do NOT call `recordAdminWalletAdjustment` — no `FinancialLedger` double-entry
 
-### 1.8 Expiry and account closure
+### 1.9 Expiry and account closure
 
-**Package expiry:**
-- `packageExpiryDate` set to 365 days from purchase
+**Package expiry (source-verified):**
+- `packageExpiryDate` stored on `Booking` (parent package row), set to `purchaseDate + 365 days` — hardcoded, not from `PlatformSettings`
 - `packageExpiryAlerts.ts` sends notifications saying "unused wallet credit has been forfeited"
-- **But no financial action is taken.** No WalletTransaction created, no balance modification, no Stripe refund. The dollar credit remains in the wallet. Scheduling new lessons from an expired package is blocked, but the underlying dollar balance remains spendable for non-package bookings.
-- The notification overstates what the code actually does — a gap between communicated and actual behavior.
+- **No financial action taken.** The wallet `WalletTransaction` credit remains CONFIRMED and spendable
+- Scheduling new lessons from an expired package is blocked; dollar balance is not removed
+- The notification overstates what the code actually does — misleading
 
 **Account closure / provider suspension:**
-- No code debits/settles wallet balances on account closure or provider suspension
-- `ClientWallet`/`WalletTransaction` have `onDelete: Cascade` from User — deleting a User hard-deletes the wallet and all transactions (data loss, no settlement)
-- `WALLET_TERMS.md` states unused balance "may be forfeited" on closure (case-by-case), but no implementing route exists
+- No code debits/settles wallet balances on closure
+- `onDelete: Cascade` from User — hard-deletes wallet and all transactions (data loss, no settlement)
 
-### 1.9 Balance calculation
+### 1.10 Balance calculation and ledger coverage
 
-- **Derived is authoritative.** `getWalletBalance` sums all CONFIRMED WalletTransactions (CREDIT − DEBIT) using Decimal arithmetic
-- `reconcileWalletBalance` recomputes from ledger and corrects stored field if drift > $0.01
-- **Drift risk:** `ClientWallet.balance` is updated inconsistently across paths. `confirm-package-booking` and admin routes update it; `createBooking`, `wallet-add`, webhook credits, and `cancelBooking` do NOT. All reads use the aggregate, so this is tolerated, but any code reading `ClientWallet.balance` directly gets a wrong value.
+- Derived is authoritative: `getWalletBalance` sums CONFIRMED WalletTransactions (CREDIT − DEBIT)
+- **Does not exclude expired credits** — no expiry check in `getWalletBalance`
+- `ClientWallet.balance` stored field drifts (only updated by some paths)
+- Admin manual adjustments do not write to `FinancialLedger` (gap)
 
-### 1.10 Double-entry ledger coverage
+### 1.11 Confirmed gaps against product rules (Steps 1–2)
 
-**FinancialLedger** (double-entry) covers:
-- Stripe top-ups (`recordWalletCredit`: STRIPE_CLEARING → CLIENT_WALLET) ✅
-- Booking payments (`recordBookingPayment`: CLIENT_WALLET → ESCROW → REVENUE + INSTRUCTOR_PAYABLE) ✅
-- Refunds (`recordFullRefund`/`recordPartialRefund`) ✅
-
-**FinancialLedger does NOT cover:**
-- Admin manual credits/debits (function `recordAdminWalletAdjustment` exists but is never called) ❌
-- Checkout Session package-credit path (the `wallet_credit` handler in the webhook — unclear if it calls `recordWalletCredit`) ❌
+| Product rule | Current code | Gap |
+|---|---|---|
+| Expiry per purchase, 12 calendar months from payment confirmation | Expiry on parent `Booking` row only, 365 days hardcoded, no per-WalletTransaction expiry | WalletTransaction has no expiry date; plain top-ups never expire |
+| `getWalletBalance` must exclude expired credits | `getWalletBalance` includes all CONFIRMED credits regardless of date | Expired credit remains spendable |
+| Configurable expiry via `PlatformSettings` | `packageExpiryDate = +365 days` hardcoded in webhook | No `walletCreditValidityMonths` setting exists |
+| Each purchase expires independently | No per-purchase expiry field on WalletTransaction | Cannot enforce per-purchase expiry |
+| `lockedHourlyRate` on bookings | Not populated in `create-bulk` route | Rate-lock requirement partially unmet |
+| Expiry starts at payment confirmation | `packageExpiryDate` set in webhook `checkout.session.completed` (correct path) | Correct for packages; plain top-ups have no expiry at all |
 
 ---
 
