@@ -1,6 +1,6 @@
 # DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.46 (WLA-002 ADR v11 — fees_collector: application confirmed; DriveBook pays Stripe processing; provider receives bookingRate minus application fee only; dispute fees charged to platform; economics corrected; AU eligibility still required)
+**Version:** 6.47 (WLA-002 ADR v11 residual corrections — $66.76 → $68.25; DISPUTE_FEE comment corrected; reconciliation invariants net $0.26 not $1.75; G12 config corrected; decision summary provider proceeds and DriveBook net fixed; fee-margin risk note added)
 **Last Updated:** 2026-11-06
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
