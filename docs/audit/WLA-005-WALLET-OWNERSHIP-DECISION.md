@@ -163,22 +163,32 @@ The normal wallet top-up flow has a **user-facing integration mismatch**, not me
 
 **Assessment needed:** either supply the authenticated user ID consistently to `wallet-topup-intent` (so `wallet-add` can serve as client-pull confirmation with ownership enforced), or remove the redundant client-pull path and rely on the webhook.
 
-### 1.9 Ledger and financial reconciliation (Step 5, expanded)
+### 1.9 Ledger and financial reconciliation (Step 5, expanded and corrected)
 
-The `FinancialLedger` double-entry table is written by `recordWalletCredit()`, `recordBookingPayment()`, `recordFullRefund()`, `recordPartialRefund()`, and `recordAdminWalletAdjustment()`. Coverage analysis:
+**Two separate ledger tables — must not be conflated:**
+- `FinancialLedger` — the double-entry table (`debitAccount`, `creditAccount`, `amount`, `idempotencyKey`). Written by `recordWalletCredit()`, `recordBookingPayment()`, `recordFullRefund()`, `recordPartialRefund()`, `recordAdminWalletAdjustment()`.
+- `LedgerEntry` — a separate single-entry audit table (`type`, `amount`, `referenceId`). Written by `appendLedgerEntry()` for event-style entries.
+- A write to `LedgerEntry` does NOT satisfy a missing `FinancialLedger` transfer, and vice versa.
 
-| Flow | FinancialLedger call | Status |
+**`verifyLedgerIntegrity()` weakness** (`lib/services/ledger.ts`): calculates `totalDebits` and `totalCredits` from the same aggregate sum of `FinancialLedger.amount`, then compares identical values. It reports a balanced ledger even if an expected transaction is entirely missing. This function cannot establish completeness or detect omitted wallet flows.
+
+**Per-flow assessment (corrected):**
+
+| Flow | FinancialLedger call | Assessment |
 |---|---|---|
-| Plain PaymentIntent top-up webhook | `recordWalletCredit()` | ✅ Covered |
-| Book Later Checkout package credit (webhook) | No `recordWalletCredit()` call | ❌ Missing |
-| Book Now package credit (webhook) | No `recordWalletCredit()` call | ❌ Missing |
-| Client multi-booking wallet debit (`create-bulk`) | No `recordBookingPayment()` call | ❌ Missing |
-| Older package-child confirmation | No `recordBookingPayment()` call | ❌ Missing |
-| Admin manual credit/debit | No `recordAdminWalletAdjustment()` call | ❌ Missing (function exists but never called) |
-| `cancelBooking` wallet refund | `recordFullRefund()`/`recordPartialRefund()` | ✅ Covered (after tx, non-critical) |
-| `approveCancellation` card refund | `REFUND_ISSUED` LedgerEntry | ✅ Covered |
+| Plain PaymentIntent top-up webhook | `recordWalletCredit()` | **Conditionally covered** — call is inside the receipt-email branch (only runs if user has an email address); wrapped in catch (failure does not roll back the wallet credit); multiple pending credits confirmed together are recorded as one combined ledger transfer using only the first transaction's ID |
+| Book Later Checkout package credit (webhook) | No call | **Missing** |
+| Book Now package credit (webhook) | No call | **Missing** |
+| `create-bulk` wallet debit | No call | **Missing** — creates ordinary `Transaction` records but no `FinancialLedger` paired transfer |
+| Older `confirm-package-booking` | No call | **Missing** (not yet rechecked at this baseline — needs verification) |
+| Admin manual credit (`add-credit` route) | No call | **Missing** — creates `WalletTransaction` + `AuditLog` but does not call `recordAdminWalletAdjustment()`; the function exists in `ledger-operations.ts` but is never called by any admin route |
+| Admin manual debit (`deduct-credit` route) | No call | **Missing** — same as above; the word "ledger" in route comments refers to the WalletTransaction-derived balance, not `FinancialLedger` |
+| Authenticated cancellation refund (`cancelBooking`) | `recordFullRefund()`/`recordPartialRefund()` | **Conditionally covered** — runs after the transaction (non-critical); reliability needs examination |
+| Admin-approved cancellation refund (`approveCancellation`) | `REFUND_ISSUED` LedgerEntry | **Partially covered** — writes to `LedgerEntry` (audit table), not `FinancialLedger` (double-entry); needs verification of whether `FinancialLedger` entries are also created |
 
-**Five of eight wallet-affecting flows do not write to the FinancialLedger.** The double-entry ledger balance for `CLIENT_WALLET` will diverge from the `WalletTransaction`-derived balance after any of these flows execute. A complete reconciliation of expected entries against actual application writes is needed.
+**Correction from previous revision:** the plain top-up flow was described as "covered." This is too strong. Its ledger write can be skipped (no email on file) or fail (caught and swallowed) without reversing the wallet credit. The assessment is "conditionally covered," not "covered."
+
+**Step 5 status: further investigation needed.** A complete reconciliation of expected entries against actual application writes is required. The `verifyLedgerIntegrity()` function cannot substitute for this reconciliation.
 
 ### 1.10 Expiry implementation status (Step 1 correction)
 
@@ -239,6 +249,8 @@ The product rule is confirmed. The implementation does not support it. This is a
 | Spend-time expiry enforcement | No booking path checks expiry | **Missing** |
 
 **Step 1 status: source investigation complete.** The product rule is clear; the existing implementation does not support it at any stage — purchase, storage, balance calculation, or spend enforcement.
+
+**Qualification:** the claim that `packageExpiryDate` is "always null" is stronger than the evidence. The schema permits it to be populated. The defensible conclusion is that the field is not populated by the inspected purchase paths, so the associated guard in `schedule-package-hours` is ineffective for credits created through them.
 
 The appropriate design direction remains a pooled dollar wallet with independently expiring purchase lots. Do not implement yet: first settle how existing credits, partial spending, refunds and promotional credits are represented.
 
@@ -392,11 +404,11 @@ Before WLA-005 can be closed:
 | 2 | Cross-provider booking | **Partially verified** | Pooled wallet confirmed; `lockedHourlyRate` framing corrected; `confirm-package-booking` caller status unresolved |
 | 3 | Refunds and cancellations | **Verified with qualifications** | Three paths traced; public cancel defect confirmed; synthetic paymentIntentId case added |
 | 4 | Top-ups and ownership | **Verified; conclusion corrected** | P0-01 is a user-facing integration mismatch, not a dormant check |
-| 5 | Ledger and reconciliation | **Further investigation needed** | 5 of 8 flows missing FinancialLedger calls; complete reconciliation required |
+| 5 | Ledger and reconciliation | **In progress** | 4 source files traced. Plain top-up corrected from "covered" to "conditionally covered" (email-branch conditional + non-atomic catch). Admin credit/debit confirmed: NO FinancialLedger write. `verifyLedgerIntegrity()` cannot detect missing entries. 2 flows remain to recheck at this baseline. |
 | 6 | Account closure | **Partially verified** | No self-service deletion; cascade is latent risk; Terms clause 22 unimplemented |
 | 7 | Architecture decision | **Pending** | Credit-lot model proposed; legal assessment required |
 
-**Next work:** Step 5 — reconcile the actual double-entry ledger. Complete the expected-vs-actual FinancialLedger entry analysis for all 8 wallet flows.
+**Next work:** complete Step 5 — recheck `confirm-package-booking` and `approveCancellation` at the current baseline. Then compare expected vs actual `FinancialLedger` entries for all flows.
 
 ---
 
