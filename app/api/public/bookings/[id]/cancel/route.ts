@@ -238,6 +238,7 @@ export async function POST(
     // Issue Stripe refund when booking was paid and a refund applies
     let stripeRefundId: string | null = null
     let stripeRefundError: string | null = null
+    let walletCreditIssued = false
 
     if (refundAmount > 0 && booking.isPaid) {
       // Look up the PaymentIntent on the booking
@@ -278,7 +279,37 @@ export async function POST(
           // Non-fatal — booking is cancelled, but refund needs manual action
         }
       } else if (!paymentIntentId) {
-        console.warn(`⚠️ No paymentIntentId on booking ${params.id} — refund must be processed manually`)
+        // WLA-005 FIX: wallet-funded booking — no card charge to refund.
+        // Issue a wallet credit instead so the student gets their credit back.
+        const customerUserId = booking.customer?.userId as string | null
+        if (customerUserId && refundAmount > 0 && booking.source === 'platform') {
+          try {
+            const wallet = await prisma.clientWallet.findUnique({
+              where: { userId: customerUserId },
+            })
+            if (wallet) {
+              await prisma.walletTransaction.create({
+                data: {
+                  walletId: wallet.id,
+                  type: 'CREDIT',
+                  amount: refundAmount,
+                  description: `Booking cancelled — ${refundPercentage}% refund (wallet credit)`,
+                  status: 'CONFIRMED',
+                  bookingId: params.id,
+                },
+              })
+              walletCreditIssued = true
+              console.log(`✅ Wallet credit issued: $${refundAmount} for wallet-funded booking ${params.id}`)
+            } else {
+              console.warn(`⚠️ Wallet not found for userId ${customerUserId} — refund must be processed manually`)
+            }
+          } catch (walletErr: any) {
+            console.error(`🚨 Wallet credit failed for booking ${params.id}:`, walletErr)
+            // Non-fatal — booking is cancelled, but refund needs manual action
+          }
+        } else {
+          console.warn(`⚠️ No paymentIntentId on booking ${params.id} — refund must be processed manually`)
+        }
       }
     }
 
@@ -307,8 +338,9 @@ export async function POST(
         percentage: refundPercentage,
         amount: refundAmount,
         stripeRefundId,
+        walletCreditIssued,
         // Tell AI if refund failed so it can advise the caller
-        requiresManualAction: refundAmount > 0 && booking.isPaid && !stripeRefundId,
+        requiresManualAction: refundAmount > 0 && booking.isPaid && !stripeRefundId && !walletCreditIssued,
         error: stripeRefundError,
       },
     })
