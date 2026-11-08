@@ -195,12 +195,18 @@ export async function POST(
         // Query WalletTransaction directly inside the same tx.
         const txRows = await tx.walletTransaction.findMany({
           where: { walletId: wallet.id, status: 'CONFIRMED' },
-          select: { type: true, amount: true },
+          select: { type: true, amount: true, expiresAt: true },
         });
 
+        const now = new Date();
         const ledgerBalance = txRows.reduce((acc, t) => {
           const v = Number(t.amount);
-          return t.type === 'CREDIT' ? acc + v : acc - v;
+          if (t.type === 'CREDIT') {
+            // Exclude expired credits — admin must not deduct from expired balance
+            if ((t as any).expiresAt && new Date((t as any).expiresAt) < now) return acc;
+            return acc + v;
+          }
+          return acc - v;
         }, 0);
 
         // ── Step 4: Balance check (safe — wallet row is locked) ───────────────
