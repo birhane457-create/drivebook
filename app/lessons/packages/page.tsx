@@ -91,7 +91,7 @@ const walletSteps = [
   {
     icon: Clock,
     title: "Valid 12 months",
-    desc: "Your wallet credit is valid for 12 months from last account activity. No rush.",
+    desc: "Your wallet credit is valid for 12 months from payment date. No rush.",
     color: "from-violet-500 to-purple-600",
     shadow: "shadow-violet-500/25",
   },
@@ -127,7 +127,7 @@ const savingsTable = [
 const faqs = [
   {
     q: "Do packages expire?",
-    a: "Your wallet credit is valid for 12 months from last account activity. This gives you plenty of time to schedule lessons at your own pace.",
+    a: "Your wallet credit is valid for 12 months from payment date. This gives you plenty of time to schedule lessons at your own pace.",
   },
   {
     q: "Can I use my package with a different instructor?",
@@ -164,7 +164,7 @@ export default function LessonPackagesPage() {
             <span className="text-cyan-300">Save Up to 12%</span>
           </h1>
           <p className="text-lg md:text-xl text-emerald-100/90 mb-8 max-w-2xl mx-auto">
-            Pre-purchase wallet credit at a discount — valid for 12 months from last activity. Book
+            Pre-purchase wallet credit at a discount — valid for 12 months from payment date. Book
             lessons whenever you&apos;re ready with any instructor on the platform.
           </p>
 

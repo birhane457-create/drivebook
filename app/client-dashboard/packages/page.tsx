@@ -154,7 +154,7 @@ export default function ClientPackagesPage() {
               ${walletBalance.toFixed(2)}
             </p>
             <p className="text-xs text-muted-foreground/60 mt-1">
-              Credit valid for 12 months from last account activity
+              Credit valid for 12 months from payment date
             </p>
           </div>
 
@@ -437,7 +437,7 @@ export default function ClientPackagesPage() {
             </li>
             <li className="flex gap-3">
               <span className="text-primary font-bold">•</span>
-              <span>Credit is valid for 12 months from last account activity</span>
+              <span>Credit is valid for 12 months from payment date</span>
             </li>
             <li className="flex gap-3">
               <span className="text-primary font-bold">•</span>

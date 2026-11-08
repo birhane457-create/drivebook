@@ -350,6 +350,25 @@ export async function POST(
       console.error('Admin deduction receipt email failed:', e);
     }
 
+    // FinancialLedger — record admin wallet deduction (non-critical)
+    if (responseBody && !responseBody.replay) {
+      try {
+        const { recordAdminWalletAdjustment } = await import('@/lib/services/ledger-operations');
+        await recordAdminWalletAdjustment({
+          adjustmentId: (responseBody as any).transactionId,
+          userId,
+          amount,
+          isCredit: false,
+          reason: reason || 'Manual deduction by admin',
+          adminId: session!.user!.id,
+        });
+      } catch (ledgerErr: any) {
+        if (!ledgerErr?.message?.includes('idempotency')) {
+          console.error('[FinancialLedger] deduct-credit recordAdminWalletAdjustment failed (non-critical):', ledgerErr?.message);
+        }
+      }
+    }
+
     return NextResponse.json(responseBody);
   } catch (error) {
     console.error('Deduct credit error:', error);

@@ -26,12 +26,16 @@ import {
  * Calculate wallet balance from WalletTransaction ledger records.
  * This is the ONLY authoritative way to read balance.
  * The stored ClientWallet.balance field is a cache — do not trust it directly.
+ *
+ * Excludes CREDIT transactions where expiresAt < now (expired credits are not spendable).
+ * Legacy credits with expiresAt = null are treated as non-expiring for backward compatibility.
  */
 export async function getWalletBalance(userId: string): Promise<{
   totalPaid: number
   totalSpent: number
   balance: number
 }> {
+  const now = new Date()
   const wallet = await prisma.clientWallet.findUnique({
     where: { userId },
     include: {
@@ -46,7 +50,10 @@ export async function getWalletBalance(userId: string): Promise<{
   }
 
   // Use Decimal for exact aggregation
-  const credits = wallet.transactions.filter((t) => t.type === 'CREDIT')
+  // Exclude expired CREDIT transactions at spend time (per product rule)
+  const credits = wallet.transactions.filter(
+    (t) => t.type === 'CREDIT' && (!(t as any).expiresAt || new Date((t as any).expiresAt) >= now)
+  )
   const debits = wallet.transactions.filter((t) => t.type === 'DEBIT')
 
   const totalPaidDecimal = sumAmounts(credits.map((t: any) => t.amount))
@@ -102,7 +109,11 @@ export async function reconcileWalletBalance(userId: string): Promise<{
   }
 
   // Calculate ledger balance using Decimal for exact precision
-  const credits = wallet.transactions.filter((t) => t.type === 'CREDIT')
+  // Exclude expired CREDIT transactions — consistent with getWalletBalance()
+  const now = new Date()
+  const credits = wallet.transactions.filter(
+    (t) => t.type === 'CREDIT' && (!(t as any).expiresAt || new Date((t as any).expiresAt) >= now)
+  )
   const debits = wallet.transactions.filter((t) => t.type === 'DEBIT')
 
   const totalPaidDecimal = sumAmounts(credits.map((t: any) => t.amount))

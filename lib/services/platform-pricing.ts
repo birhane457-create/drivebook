@@ -28,6 +28,7 @@ export interface PricingSettings {
   noShowPenaltyAmount: number;
   walletTopUpMin: number;
   walletTopUpMax: number;
+  walletCreditValidityMonths: number;
   gstEnabled: boolean;
   gstRate: number;
   withholdingTaxRate: number;
@@ -52,6 +53,7 @@ const DEFAULTS: PricingSettings = {
   noShowPenaltyAmount: 0,
   walletTopUpMin: 10,
   walletTopUpMax: 500,
+  walletCreditValidityMonths: 12,
   gstEnabled: true,
   gstRate: 10,
   withholdingTaxRate: 47,
@@ -85,6 +87,7 @@ export async function getPlatformPricing(): Promise<PricingSettings> {
       noShowPenaltyAmount: Number(record.noShowPenaltyAmount),
       walletTopUpMin: Number(record.walletTopUpMin),
       walletTopUpMax: Number(record.walletTopUpMax),
+      walletCreditValidityMonths: (record as any).walletCreditValidityMonths ?? 12,
       gstEnabled: record.gstEnabled,
       gstRate: Number(record.gstRate),
       withholdingTaxRate: Number(record.withholdingTaxRate),
@@ -123,3 +126,20 @@ export async function getPlatformFeeRate(): Promise<number> {
   const pricing = await getPlatformPricing();
   return pricing.platformFeePercentage;
 }
+
+/**
+ * Get wallet credit validity period in calendar months.
+ * Default: 12 months from successful payment confirmation (per product rule).
+ * Configurable via PlatformSettings.walletCreditValidityMonths.
+ */
+export async function getWalletCreditValidityMonths(): Promise<number> {
+  const pricing = await getPlatformPricing();
+  return pricing.walletCreditValidityMonths;
+}
+
+/**
+ * Synchronous constant for client-side React components that cannot call the DB.
+ * Matches the DB default. Update this when the admin UI wires up the setting.
+ * All customer-facing copy should reference this rather than hardcoding "12 months".
+ */
+export const WALLET_CREDIT_VALIDITY_MONTHS = 12;

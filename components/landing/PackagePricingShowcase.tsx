@@ -63,7 +63,7 @@ export default function PackagePricingShowcase() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>
-              <span className="text-gray-700">Hours never expire</span>
+              <span className="text-gray-700">Credit valid for 12 months from payment date</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>
@@ -100,7 +100,7 @@ export default function PackagePricingShowcase() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>
-              <span className="text-gray-700">Hours never expire</span>
+              <span className="text-gray-700">Credit valid for 12 months from payment date</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>
@@ -137,7 +137,7 @@ export default function PackagePricingShowcase() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>
-              <span className="text-gray-700">Hours never expire</span>
+              <span className="text-gray-700">Credit valid for 12 months from payment date</span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-green-500 text-xl">✓</span>

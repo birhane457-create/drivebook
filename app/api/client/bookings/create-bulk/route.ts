@@ -108,7 +108,10 @@ export async function POST(request: NextRequest) {
     });
     if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
-    const totalCredits = wallet.transactions.filter(t => t.type.toUpperCase() === 'CREDIT').reduce((s: any, t: any) => s + t.amount, 0);
+    const now = new Date();
+    const totalCredits = wallet.transactions
+      .filter(t => t.type.toUpperCase() === 'CREDIT' && (!(t as any).expiresAt || new Date((t as any).expiresAt) >= now))
+      .reduce((s: any, t: any) => s + t.amount, 0);
     const totalDebits = wallet.transactions.filter(t => t.type.toUpperCase() === 'DEBIT').reduce((s: any, t: any) => s + Math.abs(t.amount), 0);
     const actualBalance = totalCredits - totalDebits;
 
@@ -197,6 +200,27 @@ export async function POST(request: NextRequest) {
     }, {
       timeout: 15000,
     });
+
+    // Post-transaction: FinancialLedger entries per booking (non-critical)
+    for (const c of result.created) {
+      try {
+        const { recordBookingPayment } = await import('@/lib/services/ledger-operations');
+        const ledgerFee = parseFloat((c.commission.totalAmount - c.commission.providerPayout).toFixed(2));
+        await recordBookingPayment({
+          bookingId: c.booking.id,
+          userId: user.id,
+          providerId: c.booking.providerId,
+          totalAmount: c.commission.totalAmount,
+          platformFee: ledgerFee,
+          providerPayout: c.commission.providerPayout,
+          createdBy: user.id,
+        });
+      } catch (e: any) {
+        if (!e?.message?.includes('idempotency')) {
+          console.error('[FinancialLedger] create-bulk recordBookingPayment failed:', e?.message);
+        }
+      }
+    }
 
     // â”€â”€ Post-transaction: transaction records + notifications + receipts â”€â”€â”€â”€â”€â”€â”€
     for (const c of result.created) {

@@ -213,7 +213,8 @@ export default async function DashboardPage() {
       const fallback = await (prisma as any).provider.findFirst({
         where: { userId: session!.user!.id },
         select: { id: true },
-      }).catch(() => null)
+      }).catch((e: any) => { console.error('[dashboard] fallback error:', e?.message); return null })
+      console.log('[dashboard] fallback result:', fallback)
       if (!fallback) redirect('/login')
       resolvedProviderId = fallback!.id
     }
@@ -224,12 +225,14 @@ export default async function DashboardPage() {
   ) {
     redirect('/admin')
   } else {
+    console.log('[dashboard] unexpected role, redirecting login:', session!.user!.role)
     redirect('/login')
   }
 
+  console.log('[dashboard] resolvedProviderId:', resolvedProviderId)
+
   const now = new Date()
 
-  // Core query — provider profile required to render any of this page
   const instructor = await (prisma as any).provider.findUnique({
     where: { id: resolvedProviderId },
     include: {
@@ -246,7 +249,11 @@ export default async function DashboardPage() {
 
   // Resolve full provider profile (merges driving extension fields)
   const { getProviderProfile } = await import('@/lib/core/getProviderProfile')
-  const instructorWithExtensions = await getProviderProfile(instructor as any)
+  const instructorWithExtensions = await getProviderProfile(instructor as any).catch((e: any) => {
+    console.error('[dashboard] getProviderProfile error:', e?.message)
+    return instructor
+  })
+  console.log('[dashboard] instructorWithExtensions ok:', !!instructorWithExtensions)
 
   // Terminology
   const businessId = `biz_${resolvedProviderId}`

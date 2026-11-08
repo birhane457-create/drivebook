@@ -124,7 +124,7 @@ export default function TermsPage() {
               <p className="mb-2">15. When a Learner pays for a booking, a credit is issued to that Learner's DriveBook Wallet for the value of the booking. These credits:</p>
               <ul className="list-none pl-6 space-y-1 mb-4">
                 <li>15.1. are non-transferable and may not be used by any other person;</li>
-                <li>15.2. expire after 12 months of account inactivity. For the purposes of this clause, "inactivity" means no booking has been made and no wallet transaction has occurred within the preceding 12 months; and</li>
+                <li>15.2. expire 12 months after the date of the successful payment that created them; and</li>
                 <li>15.3. may be refunded to the original payment method upon request, subject to the Refund Policy below.</li>
               </ul>
 
@@ -172,7 +172,7 @@ export default function TermsPage() {
 
               <h3 id="wallet" className="font-semibold text-gray-900 mb-2 scroll-mt-8">DriveBook Wallet</h3>
               <p className="mb-2">20. The DriveBook Wallet is a prepaid credit system. It is not a bank account and is not covered by the Financial Claims Scheme.</p>
-              <p className="mb-2">21. Wallet credits expire after 12 months of account inactivity. DriveBook will notify you by email 30 days and 7 days before expiry.</p>
+              <p className="mb-2">21. Wallet credits expire 12 months after the date of the successful payment that created them. DriveBook will notify you by email 30 days and 7 days before expiry.</p>
               <p className="mb-4">22. Upon account closure, unused wallet balance will be refunded to the original payment method (minimum $10.00).</p>
 
               <h3 id="warranty" className="font-semibold text-gray-900 mb-2 scroll-mt-8">Warranty</h3>

@@ -113,8 +113,18 @@ function slotConflictWhere(
 
 /** Get wallet balance from WalletTransaction aggregate (single source of truth) */
 async function getWalletBalanceTx(tx: Prisma.TransactionClient, walletId: string): Promise<number> {
+  const now = new Date()
   const [credits, debits] = await Promise.all([
-    tx.walletTransaction.aggregate({ where: { walletId, status: 'CONFIRMED', type: 'CREDIT' }, _sum: { amount: true } }),
+    // Exclude expired CREDIT transactions — null expiresAt = legacy non-expiring credit
+    tx.walletTransaction.aggregate({
+      where: {
+        walletId,
+        status: 'CONFIRMED',
+        type: 'CREDIT',
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      },
+      _sum: { amount: true },
+    }),
     tx.walletTransaction.aggregate({ where: { walletId, status: 'CONFIRMED', type: 'DEBIT'  }, _sum: { amount: true } }),
   ])
   return Number(credits._sum.amount ?? 0) - Number(debits._sum.amount ?? 0)
@@ -1131,6 +1141,27 @@ export async function approveCancellation(
       overrideAmount: overrideAmount || null,
       adminNote: adminNote || null,
     })
+
+    // FinancialLedger — record full refund double-entry (non-critical)
+    if (booking.customer?.userId && refundAmount > 0) {
+      try {
+        await recordFullRefund({
+          refundId: `approve-cancel-${bookingId}`,
+          bookingId,
+          userId: booking.customer.userId,
+          providerId: booking.providerId,
+          totalAmount: refundAmount,
+          platformFee: booking.platformFee ?? 0,
+          providerPayout: booking.providerPayout ?? 0,
+          reason: adminNote || 'Admin-approved cancellation refund',
+          createdBy: adminId,
+        })
+      } catch (ledgerErr: any) {
+        if (!ledgerErr?.message?.includes('idempotency')) {
+          console.error('[FinancialLedger] approveCancellation recordFullRefund failed (non-critical):', ledgerErr?.message)
+        }
+      }
+    }
     
     // PKG-4: Send approval email to customer (after transaction commits)
     try {

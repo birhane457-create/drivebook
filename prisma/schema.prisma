@@ -399,7 +399,12 @@ model WalletTransaction {
   updatedAt   DateTime     @updatedAt
   metadata    Json?
   bookingId   String?
+  // Per-purchase expiry: set at payment confirmation for CREDIT transactions.
+  // Null = no expiry (DEBIT, PLATFORM_SUBSIDY, pre-policy legacy CREDITs).
+  expiresAt   DateTime?
   wallet      ClientWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, expiresAt])
 }
 
 // NOTE: WalletTransaction has a unique index on metadata->>'stripePaymentIntentId'
@@ -586,6 +591,7 @@ model PlatformSettings {
   noShowPenaltyAmount         Decimal  @default(0) @db.Decimal(10, 2)
   walletTopUpMin              Decimal  @default(10) @db.Decimal(10, 2)
   walletTopUpMax              Decimal  @default(500) @db.Decimal(10, 2)
+  walletCreditValidityMonths  Int      @default(12)
   gstEnabled                  Boolean  @default(true)
   gstRate                     Decimal  @default(10) @db.Decimal(5, 2)
   withholdingTaxRate          Decimal  @default(47) @db.Decimal(5, 2)

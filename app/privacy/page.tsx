@@ -257,7 +257,7 @@ export default function PrivacyPage() {
               <li>
                 We take reasonable steps to delete or de-identify personal information within a reasonable period following account closure. In most cases, this will occur within 90 days, subject to legal, security, fraud prevention, dispute resolution, and backup retention requirements.
               </li>
-              <li>Wallet credits expire after 365 days of account inactivity (see our <Link href="/terms" className="text-purple-600 hover:underline">Terms of Service</Link>).</li>
+              <li>Wallet credits expire 12 months after the date of the successful payment that created them (see our <Link href="/terms" className="text-purple-600 hover:underline">Terms of Service</Link>).</li>
             </ul>
           </section>
 
