@@ -192,8 +192,10 @@ export async function PATCH(
         if (wallet) {
           if (priceDifference > 0) {
             // Duration increased — deduct the difference
+            const now = new Date()
             const creditAgg = await tx.walletTransaction.aggregate({
-              where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT' },
+              where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT',
+                OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
               _sum: { amount: true },
             })
             const debitAgg = await tx.walletTransaction.aggregate({

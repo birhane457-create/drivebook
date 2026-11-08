@@ -440,8 +440,10 @@ export async function POST(req: NextRequest) {
         const wallet = await tx.clientWallet.findUnique({ where: { userId: client.userId! } })
         if (!wallet) throw new Error('Wallet not found')
 
+        const now = new Date()
         const balanceAgg = await tx.walletTransaction.aggregate({
-          where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT' },
+          where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT',
+            OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
           _sum: { amount: true },
         })
         const debitAgg = await tx.walletTransaction.aggregate({
@@ -742,9 +744,11 @@ export async function POST(req: NextRequest) {
     try {
       // Compute authoritative wallet balance from ledger (not stale balance field)
       const clientWallet = await prisma.clientWallet.findUnique({ where: { userId: client.userId! } })
+      const displayNow = new Date()
       const [creditAgg, debitAgg] = await Promise.all([
         prisma.walletTransaction.aggregate({
-          where: { walletId: clientWallet!.id, status: 'CONFIRMED', type: 'CREDIT' },
+          where: { walletId: clientWallet!.id, status: 'CONFIRMED', type: 'CREDIT',
+            OR: [{ expiresAt: null }, { expiresAt: { gte: displayNow } }] },
           _sum: { amount: true },
         }),
         prisma.walletTransaction.aggregate({
