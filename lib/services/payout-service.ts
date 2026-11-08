@@ -126,7 +126,7 @@ export async function buildPayout(
 
   const where: Record<string, unknown> = {
     providerId,
-    status: 'SETTLED',
+    status: { in: ['SETTLED', 'COMPLETED'] },
     type: 'BOOKING_PAYMENT',
     booking: {
       status: { in: ['CONFIRMED', 'COMPLETED'] },

@@ -84,7 +84,9 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Idempotency guard — terminal states ──────────────────────────────────
-    const TERMINAL = ['REFUNDED', 'CANCELLED', 'COMPLETED'];
+    // COMPLETED is NOT terminal — it means the lesson is done but not yet
+    // approved for payout. Only REFUNDED and CANCELLED are truly terminal.
+    const TERMINAL = ['REFUNDED', 'CANCELLED'];
     if (txn.status === 'SETTLED' && action === 'approve_for_payout') {
       return NextResponse.json(
         { error: 'Transaction already approved for payout', status: txn.status },
