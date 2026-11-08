@@ -380,6 +380,34 @@ This requires a **credit-lot model**:
 - A daily cron marks expired credit lots and removes their remaining value from the spendable balance
 - The application enforces expiry at spend time by checking each credit lot's `expiryDate` — not depending on the cron running at the exact expiry moment
 
+### 3.3 Phased implementation decision (2026-11-06)
+
+**Product owner decision:** Apply the credit-lot model to packages only for now. Plan the rest for future work.
+
+**Phase 1 — Package expiry (current):**
+- Package credits already have `expiresAt` set at purchase time ✅
+- Package credits are filtered from balance when expired ✅
+- Package spending is blocked via `packageExpiryDate` checks on scheduling routes ✅
+- The aggregate formula limitation (old debits from an expired lot subtracted from new credits) is a **known gap** — documented, not blocking, does not affect anyone for 12+ months after first new purchase
+
+**Phase 2 — Full FIFO credit-lot allocation (future):**
+- Each purchase creates an independent credit lot
+- Debits are allocated to the oldest eligible lot at spend time (recorded, not reconstructed)
+- A debit can only consume a lot that was unexpired when the debit occurred
+- Refunds restore the original lot's credit (not a fresh 12-month credit)
+- New purchases don't extend or reset existing lots
+- Package face value is the spendable amount; promotion tracked separately
+- `WalletLotAllocation` table links debits to credit lots atomically
+- Concurrent bookings can't consume the same credit (atomic allocation)
+
+**Why packages first:**
+- Packages involve large amounts ($600-$700+) and platform-funded discounts
+- Package expiry is the highest-value financial risk
+- Plain top-ups are smaller and less frequent (people top up when balance is low)
+- The FIFO model is complex — better to validate on the high-value case first
+
+**Accepted interim limitation:** the aggregate balance formula (all valid credits - all debits) can misstate the spendable balance when a partially-spent lot expires and the user buys new credit. This only occurs 12+ months after the first new purchase with expiry, and is documented as a known gap.
+
 ### 3.3 Legal, regulatory, and accounting questions
 
 These require professional assessment before the architecture is finalised:
@@ -440,7 +468,7 @@ Before WLA-005 can be closed:
 | 4 | Top-ups and ownership | **Verified; conclusion corrected** | P0-01 is a user-facing integration mismatch, not a dormant check |
 | 5 | Ledger and reconciliation | **Accounting Q1 complete; Q2–Q4 pending** | All 9 wallet-affecting paths inspected. 7 of 9 missing FinancialLedger transfers. 2 conditionally covered. Accounting Q1: wallet_debit = platform_revenue + instructor_payable — equality enforced by built-in assertion; non-atomic (ledger write can fail silently); booking.platformFee ≠ ledgerFee (surcharge vs commission). |
 | 6 | Account closure | **Partially verified** | No self-service deletion; cascade is latent risk; Terms clause 22 unimplemented |
-| 7 | Architecture decision | **Pending** | Credit-lot model proposed; legal assessment required |
+| 7 | Architecture decision | **Phase 1 applied; Phase 2 planned** | Package expiry implemented (expiresAt + filtering). Full FIFO credit-lot allocation documented as Phase 2 future work. Legal assessment required. |
 
 **Next work:** Step 5 Accounting Questions 2–4 — package/promo credit consistency, cancellation refund reversal correctness, `WalletTransaction`-to-`FinancialLedger` reconciliation using stable identifiers.
 
