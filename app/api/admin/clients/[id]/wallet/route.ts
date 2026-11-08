@@ -95,8 +95,12 @@ export async function GET(
     }
 
     // Use ledger-derived balance (authoritative) — reconcileWalletBalance already corrected stored field
+    // Exclude expired CREDIT transactions — display must match what is actually spendable
     const transactions = (user.wallet?.transactions ?? []).filter((t) => t.status === 'CONFIRMED')
-    const totalPaid    = transactions.filter((t) => t.type === 'CREDIT').reduce((s: any, t: any) => s + t.amount, 0)
+    const now = new Date()
+    const totalPaid    = transactions.filter((t) =>
+      t.type === 'CREDIT' && (!(t as any).expiresAt || new Date((t as any).expiresAt) >= now)
+    ).reduce((s: any, t: any) => s + t.amount, 0)
     const totalSpent   = transactions.filter((t) => t.type === 'DEBIT').reduce((s: any, t: any) => s + t.amount, 0)
     const balance      = totalPaid - totalSpent
 
