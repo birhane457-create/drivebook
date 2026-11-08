@@ -231,7 +231,11 @@ export async function POST(req: NextRequest) {
           include: { transactions: { where: { status: 'CONFIRMED' } } },
         });
         if (wallet) {
-          const credits = wallet.transactions.filter(t => t.type === 'CREDIT').reduce((s, t) => s + Number(t.amount), 0);
+          const now = new Date()
+          const credits = wallet.transactions.filter(t =>
+            t.type === 'CREDIT' &&
+            (!(t as any).expiresAt || new Date((t as any).expiresAt) >= now)
+          ).reduce((s, t) => s + Number(t.amount), 0);
           const debits  = wallet.transactions.filter(t => t.type === 'DEBIT').reduce((s, t) => s + Number(t.amount), 0);
           if (credits - debits >= price) {
             bookingStatus = 'CONFIRMED';

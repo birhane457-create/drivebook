@@ -43,9 +43,11 @@ export async function GET(
         select: { id: true },
       });
       if (wallet) {
+        const now = new Date()
         const [credits, debits] = await Promise.all([
           prisma.walletTransaction.aggregate({
-            where: { walletId: wallet.id, type: 'CREDIT', status: 'CONFIRMED' },
+            where: { walletId: wallet.id, type: 'CREDIT', status: 'CONFIRMED',
+              OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
             _sum: { amount: true },
           }),
           prisma.walletTransaction.aggregate({

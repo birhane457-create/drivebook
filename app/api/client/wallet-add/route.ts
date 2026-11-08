@@ -232,6 +232,16 @@ export async function POST(req: NextRequest) {
           amount: amount,
           status: 'CONFIRMED',
           description: `Added ${amount.toFixed(2)} credits via ${paymentIntentId ? 'Stripe' : 'manual'}`,
+          // expiresAt: set from the confirmed PaymentIntent creation time + validity months
+          // This path is a client-pull confirmation — use current time as the payment date
+          // since the PaymentIntent already succeeded before reaching here.
+          expiresAt: await (async () => {
+            const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing')
+            const months = await getWalletCreditValidityMonths()
+            const d = new Date()
+            d.setMonth(d.getMonth() + months)
+            return d
+          })(),
           metadata: {
             stripePaymentIntentId: paymentIntentId,
             type: 'wallet_topup',

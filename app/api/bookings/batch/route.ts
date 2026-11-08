@@ -646,8 +646,16 @@ async function createConfirmedBooking(ctx: {
       const txns = await tx.walletTransaction.findMany({
         where: { walletId: wallet.id, status: 'CONFIRMED' },
       })
+      const now = new Date()
       const txBalance = txns.reduce(
-        (sum, t) => (t.type === 'CREDIT' ? sum + Number(t.amount) : sum - Number(t.amount)),
+        (sum, t) => {
+          if (t.type === 'CREDIT') {
+            // Exclude expired credits
+            if ((t as any).expiresAt && new Date((t as any).expiresAt) < now) return sum
+            return sum + Number(t.amount)
+          }
+          return sum - Number(t.amount)
+        },
         0
       )
       if (txBalance < lessonPrice) throw new Error('INSUFFICIENT_BALANCE')
