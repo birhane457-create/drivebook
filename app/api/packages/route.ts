@@ -141,7 +141,7 @@ export async function GET(req: NextRequest) {
         description: 'Platform fee covers payment processing and booking services',
       },
       notes: [
-        'All packages expire 365 days from purchase',
+        'All packages expire 12 months from payment date',
         'Unused hours cannot be refunded after expiry',
         'Credits can be used to schedule lessons anytime',
       ],

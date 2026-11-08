@@ -388,6 +388,30 @@ export async function POST(request: Request) {
       { operationName: 'confirm-package-booking' }
     );
 
+    // FinancialLedger — record booking payment (non-critical, before response)
+    try {
+      const { recordBookingPayment } = await import('@/lib/services/ledger-operations');
+      const bk = updatedBooking as any;
+      const bPrice = Number(bk.price ?? 0);
+      const bPayout = Number(bk.providerPayout ?? 0);
+      const ledgerFee = parseFloat((bPrice - bPayout).toFixed(2));
+      if (bPrice > 0 && bk.customer?.userId) {
+        await recordBookingPayment({
+          bookingId: updatedBooking.id,
+          userId: bk.customer.userId,
+          providerId: bk.providerId,
+          totalAmount: bPrice,
+          platformFee: ledgerFee,
+          providerPayout: bPayout,
+          createdBy: 'CLIENT',
+        });
+      }
+    } catch (ledgerErr: any) {
+      if (!ledgerErr?.message?.includes('idempotency')) {
+        console.error('[FinancialLedger] confirm-package-booking recordBookingPayment failed (non-critical):', ledgerErr?.message);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       bookingId: updatedBooking.id,

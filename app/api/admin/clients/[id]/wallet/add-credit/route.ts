@@ -307,6 +307,25 @@ export async function POST(
       console.error('Admin credit receipt email failed:', e);
     }
 
+    // FinancialLedger — record admin wallet credit (non-critical)
+    if (responseBody && !responseBody.replay) {
+      try {
+        const { recordAdminWalletAdjustment } = await import('@/lib/services/ledger-operations');
+        await recordAdminWalletAdjustment({
+          adjustmentId: (responseBody as any).transactionId,
+          userId,
+          amount,
+          isCredit: true,
+          reason: reason || 'Manual credit added by admin',
+          adminId: session!.user!.id,
+        });
+      } catch (ledgerErr: any) {
+        if (!ledgerErr?.message?.includes('idempotency')) {
+          console.error('[FinancialLedger] add-credit recordAdminWalletAdjustment failed (non-critical):', ledgerErr?.message);
+        }
+      }
+    }
+
     return NextResponse.json(responseBody);
   } catch (error) {
     console.error('Add credit error:', error);
