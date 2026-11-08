@@ -51,7 +51,7 @@ export async function GET(
             id: true,
             balance: true,
             transactions: {
-              select: { id: true, amount: true, type: true, description: true, createdAt: true, status: true },
+              select: { id: true, amount: true, type: true, description: true, createdAt: true, status: true, expiresAt: true },
               orderBy: { createdAt: 'desc' },
               take: 50,
             },
@@ -94,15 +94,13 @@ export async function GET(
       }
     }
 
-    // Use ledger-derived balance (authoritative) — reconcileWalletBalance already corrected stored field
-    // Exclude expired CREDIT transactions — display must match what is actually spendable
+    // Balance from reconcileWalletBalance() — expiry-aware, full transaction history, authoritative.
+    // The 50-transaction subset above is for display only; do not calculate balance from it.
+    const balance    = reconciliation.ledgerBalance
+    // For display context only (not used for spending decisions)
     const transactions = (user.wallet?.transactions ?? []).filter((t) => t.status === 'CONFIRMED')
-    const now = new Date()
-    const totalPaid    = transactions.filter((t) =>
-      t.type === 'CREDIT' && (!(t as any).expiresAt || new Date((t as any).expiresAt) >= now)
-    ).reduce((s: any, t: any) => s + t.amount, 0)
-    const totalSpent   = transactions.filter((t) => t.type === 'DEBIT').reduce((s: any, t: any) => s + t.amount, 0)
-    const balance      = totalPaid - totalSpent
+    const totalSpent = transactions.filter((t: any) => t.type === 'DEBIT').reduce((s: any, t: any) => s + Number(t.amount), 0)
+    const totalPaid  = balance + totalSpent  // implied from full-ledger balance + all debits in display window
 
     return NextResponse.json({
       customerId: client?.id ?? params.id,
