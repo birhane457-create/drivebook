@@ -47,10 +47,11 @@ export async function GET(req: NextRequest) {
     }
 
     // NF-05: Compute balance via aggregate — avoids loading every transaction ever created.
-    // getWalletBalance() from wallet-helpers would be ideal but requires a refetch;
-    // aggregate is cheaper and equivalent for a single endpoint.
+    // Excludes expired CREDIT transactions (expiresAt < now) consistent with getWalletBalanceTx.
+    const now = new Date()
     const creditAgg = await prisma.walletTransaction.aggregate({
-      where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT' },
+      where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT',
+        OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
       _sum: { amount: true },
     });
     const debitAgg = await prisma.walletTransaction.aggregate({

@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
@@ -948,14 +948,19 @@ async function handleWalletPaymentSuccess(
           throw new Error(`Wallet payment amount mismatch: expected ${expectedCents} cents, received ${receivedCents} cents`);
         }
     
-        // Ã¢Å“â€¦ Confirm all PENDING wallet transactions
+        // Confirm all PENDING wallet transactions, setting expiresAt on CREDIT transactions
+        const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing');
+        const topUpValidityMonths = await getWalletCreditValidityMonths();
+        const paymentConfirmedAt = new Date(paymentIntent.created * 1000);
         for (const transaction of transactions) {
+          const expiresAt = transaction.type === 'CREDIT'
+            ? new Date(new Date(paymentConfirmedAt).setMonth(paymentConfirmedAt.getMonth() + topUpValidityMonths))
+            : null;
           await tx.walletTransaction.update({
             where: { id: transaction.id },
-            data: { status: 'CONFIRMED' }
+            data: { status: 'CONFIRMED', ...(expiresAt ? { expiresAt } : {}) }
           });
-    
-          logger.info(`Ã¢Å“â€¦ Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount})`);
+          logger.info(`Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount}${expiresAt ? ` expires ${expiresAt.toISOString()}` : ''})`);;
         }
     
         // Get wallet details for logging

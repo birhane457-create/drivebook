@@ -74,8 +74,10 @@ export async function GET(req: NextRequest) {
 
     // Calculate from wallet transactions
     const transactions = wallet.transactions || [];
+    const now = new Date()
     const totalPaid = transactions
-      .filter((t: any) => t.type === 'CREDIT' && t.status === 'CONFIRMED')
+      .filter((t: any) => t.type === 'CREDIT' && t.status === 'CONFIRMED' &&
+        (!(t as any).expiresAt || new Date((t as any).expiresAt) >= now))
       .reduce((sum: number, t: any) => sum + t.amount, 0);
     
     const totalSpent = transactions
