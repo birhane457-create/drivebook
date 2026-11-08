@@ -362,8 +362,14 @@ export async function rescheduleBooking(
         const wallet = await tx.clientWallet.findUnique({ where: { userId: booking.customer.userId } })
         if (wallet) {
           if (priceDiff > 0) {
+            const now = new Date()
             const [cr, db] = await Promise.all([
-              tx.walletTransaction.aggregate({ where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT' }, _sum: { amount: true } }),
+              // Exclude expired credits — consistent with getWalletBalanceTx
+              tx.walletTransaction.aggregate({
+                where: { walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT',
+                  OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
+                _sum: { amount: true },
+              }),
               tx.walletTransaction.aggregate({ where: { walletId: wallet.id, status: 'CONFIRMED', type: 'DEBIT'  }, _sum: { amount: true } }),
             ])
             const txBalance = Number(cr._sum.amount ?? 0) - Number(db._sum.amount ?? 0)
