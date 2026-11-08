@@ -265,8 +265,10 @@ export async function POST(request: Request) {
         }
 
         // ── 6. Authoritative dollar-balance check (aggregated inside tx) ──────
+        const now = new Date()
         const creditAgg = await tx.walletTransaction.aggregate({
-          where: { walletId: userWallet.id, status: 'CONFIRMED', type: 'CREDIT' },
+          where: { walletId: userWallet.id, status: 'CONFIRMED', type: 'CREDIT',
+            OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
           _sum: { amount: true },
         });
         const debitAgg = await tx.walletTransaction.aggregate({
