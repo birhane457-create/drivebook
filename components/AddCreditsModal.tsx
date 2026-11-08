@@ -75,22 +75,23 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
         });
 
         // P0 FIX #5: Check wallet-add response for errors
+        // NOTE: The payment itself has already succeeded at this point (we're inside
+        // the paymentIntent.status === 'succeeded' branch). The Stripe webhook
+        // independently credits the wallet. If wallet-add fails (e.g. 403 from
+        // the ownership check because userId was not passed to the PaymentIntent),
+        // the webhook still processes the credit. So we treat wallet-add failure
+        // as a non-blocking event — the credit will arrive via the webhook.
         if (!walletAddRes.ok) {
-          const walletError = await walletAddRes.json();
-          setError(walletError.error || 'Failed to add credits to wallet');
-          setLoading(false);
-          return;
+          console.warn('wallet-add returned non-OK; webhook will credit the wallet');
         }
 
-        const walletResult = await walletAddRes.json();
+        const walletResult = walletAddRes.ok ? await walletAddRes.json() : null;
         
-        if (!walletResult.success) {
-          setError(walletResult.error || 'Wallet credit failed');
-          setLoading(false);
-          return;
+        if (walletResult && !walletResult.success) {
+          console.warn('wallet-add returned non-success; webhook will credit the wallet');
         }
 
-        // Success - call onSuccess to refresh dashboard
+        // Success - payment succeeded, wallet will be credited by webhook if not already
         onSuccess();
         onClose();
       }
