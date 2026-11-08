@@ -94,13 +94,14 @@ export async function GET(
       }
     }
 
-    // Balance from reconcileWalletBalance() — expiry-aware, full transaction history, authoritative.
-    // The 50-transaction subset above is for display only; do not calculate balance from it.
-    const balance    = reconciliation.ledgerBalance
-    // For display context only (not used for spending decisions)
+    // Balance and financial summary from getWalletBalance() — expiry-aware, full transaction history.
+    // The 50-transaction subset above is for display only; do not calculate any financial figure from it.
+    const { getWalletBalance } = await import('@/lib/services/wallet-helpers')
+    const fullBalance = await getWalletBalance(userId)
+    const balance    = fullBalance.balance
+    const totalPaid  = fullBalance.totalPaid
+    const totalSpent = fullBalance.totalSpent
     const transactions = (user.wallet?.transactions ?? []).filter((t) => t.status === 'CONFIRMED')
-    const totalSpent = transactions.filter((t: any) => t.type === 'DEBIT').reduce((s: any, t: any) => s + Number(t.amount), 0)
-    const totalPaid  = balance + totalSpent  // implied from full-ledger balance + all debits in display window
 
     return NextResponse.json({
       customerId: client?.id ?? params.id,
