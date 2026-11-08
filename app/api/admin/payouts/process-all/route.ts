@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     // Find all instructors with eligible transactions
     const eligible = await prisma.transaction.findMany({
       where: {
-        status: 'SETTLED',
+        status: { in: ['SETTLED', 'COMPLETED'] },
         type: 'BOOKING_PAYMENT',
         booking: {
           status: { in: ['CONFIRMED', 'COMPLETED'] },

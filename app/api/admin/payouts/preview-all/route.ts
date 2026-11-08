@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     const pendingTransactions = await prisma.transaction.findMany({
       where: {
-        status: 'SETTLED',
+        status: { in: ['SETTLED', 'COMPLETED'] },
         type: 'BOOKING_PAYMENT',
         id: excludeIds.length ? { notIn: excludeIds } : undefined,
         booking: {
