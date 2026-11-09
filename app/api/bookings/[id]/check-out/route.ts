@@ -180,18 +180,30 @@ export async function POST(
       });
 
       if (existingTransaction) {
-        // Only mark COMPLETED if payment was confirmed — guard against a PENDING_PAYMENT
-        // booking that slipped through check-in before the payment gate was added.
+        // Only mark COMPLETED if payment was confirmed AND the transaction is in a
+        // promotable state. FAILED and REFUNDED transactions must never become
+        // payout-eligible merely because the booking's isPaid flag is true.
         if (!updated.isPaid) {
           console.error(`[check-out] RECONCILIATION REQUIRED: booking ${bookingId} has an existing transaction but isPaid=false. Transaction left in current state; payout eligibility blocked.`);
           // Leave the transaction in its current status — do NOT advance to COMPLETED.
           // The payout builder requires checkOutTime lte bufferCutoff AND a COMPLETED
           // transaction, so this booking will never reach payout without manual admin review.
         } else {
-          await (tx as any).transaction.update({
-            where: { id: existingTransaction.id },
-            data: { status: 'COMPLETED', processedAt: new Date() },
-          });
+          // Statuses that must never be promoted to COMPLETED — they represent
+          // terminal financial states (refunded or already failed).
+          const NON_PROMOTABLE_STATUSES = ['FAILED', 'REFUNDED', 'REFUND_ISSUED', 'REFUND_SYNCED', 'DISPUTE_LOST'];
+          if (NON_PROMOTABLE_STATUSES.includes(existingTransaction.status)) {
+            console.error(
+              `[check-out] RECONCILIATION REQUIRED: booking ${bookingId} has a ${existingTransaction.status} transaction ` +
+              `(id ${existingTransaction.id}). Cannot promote to COMPLETED. Manual admin review required.`
+            );
+            // Leave in current status — payout builder will never see it as eligible.
+          } else {
+            await (tx as any).transaction.update({
+              where: { id: existingTransaction.id },
+              data: { status: 'COMPLETED', processedAt: new Date() },
+            });
+          }
         }
       } else {
         // No transaction row at all. Only create one if payment is confirmed.
