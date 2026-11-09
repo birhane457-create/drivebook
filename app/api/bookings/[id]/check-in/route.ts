@@ -105,16 +105,41 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    // ── Payment gate ──────────────────────────────────────────────────────────
-    // Block check-in for bookings that have not been paid. PENDING_PAYMENT means
-    // the student's wallet was short at booking time and no payment has been
-    // confirmed since. Allowing check-in on an unpaid booking would allow check-out
-    // to create a BOOKING_PAYMENT transaction with no corresponding wallet debit,
-    // which would then become payout-eligible after the dispute buffer.
-    if (booking.status === 'PENDING_PAYMENT' || !booking.isPaid) {
+    // ── Booking state gate ────────────────────────────────────────────────────
+    // Only CONFIRMED bookings may be checked into. PENDING_PAYMENT means unpaid;
+    // CANCELLED/COMPLETED/EXPIRED are terminal states that must never transition
+    // back into an active lesson flow via check-in.
+    //
+    // CONFIRMED is the only permitted state. A future RESCHEDULED status would
+    // need to be added here explicitly when introduced.
+    //
+    // The isPaid guard is a belt-and-suspenders check: a CONFIRMED booking should
+    // always have isPaid=true after the wallet-deduct or Stripe payment flow, but
+    // we verify it explicitly to prevent a CONFIRMED+isPaid=false booking (e.g.
+    // created via admin override in confirmBooking()) from generating a payout.
+    const CHECKIN_PERMITTED_STATUSES = ['CONFIRMED'] as const;
+    if (!CHECKIN_PERMITTED_STATUSES.includes(booking.status)) {
+      const statusMessages: Record<string, string> = {
+        PENDING_PAYMENT: 'Cannot check in — this booking has not been paid. The student must top up their wallet and confirm payment before the lesson can begin.',
+        CANCELLED:       'Cannot check in — this booking has been cancelled.',
+        COMPLETED:       'Cannot check in — this booking has already been completed.',
+        EXPIRED:         'Cannot check in — this booking has expired. Please contact support.',
+        PENDING:         'Cannot check in — this booking is awaiting confirmation.',
+      };
       return NextResponse.json(
         {
-          error: 'Cannot check in — this booking has not been paid. The student must top up their wallet and confirm payment before the lesson can begin.',
+          error: statusMessages[booking.status] ?? `Cannot check in — booking is in an invalid state (${booking.status}).`,
+          bookingStatus: booking.status,
+          paymentRequired: booking.status === 'PENDING_PAYMENT',
+        },
+        { status: 402 }
+      );
+    }
+    // Belt-and-suspenders: CONFIRMED should always be paid, but guard explicitly.
+    if (!booking.isPaid) {
+      return NextResponse.json(
+        {
+          error: 'Cannot check in — payment has not been confirmed for this booking. Please contact support.',
           paymentRequired: true,
         },
         { status: 402 }
