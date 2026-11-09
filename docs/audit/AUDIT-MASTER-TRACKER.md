@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.60 (WLA-005 through 4d5a19d9: payout consistency + payment gate at check-in/check-out — cancellation fix, expiry messaging, wallet credit expiry, ledger gaps)
-**Last Updated:** 2026-11-09
+**Version:** 6.61 (WLA-005 through 246ac13c: booking state allowlist + non-promotable tx guard — cancellation fix, expiry messaging, wallet credit expiry, ledger gaps)
+**Last Updated:** 2026-11-09 (session 2)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
