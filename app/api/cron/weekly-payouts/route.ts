@@ -67,7 +67,8 @@ export async function GET(req: NextRequest) {
         status: { in: ['SETTLED', 'COMPLETED'] },
         type: 'BOOKING_PAYMENT',
         booking: {
-          status: { in: ['CONFIRMED', 'COMPLETED'] },
+          status: 'COMPLETED',
+          checkOutTime: { not: null },
           endTime: { lte: bufferCutoff },
           deletedAt: null,
         },

@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
         type: 'BOOKING_PAYMENT',
         id: excludeIds.length ? { notIn: excludeIds } : undefined,
         booking: {
-          status: { in: ['CONFIRMED', 'COMPLETED'] },
+          status: 'COMPLETED',
+          checkOutTime: { not: null },
           endTime: { lte: bufferCutoff },
           deletedAt: null,
           source: { not: 'offline' }, // offline/cash bookings are instructor-handled

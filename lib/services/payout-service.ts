@@ -57,9 +57,9 @@ async function getPayoutBufferHours(): Promise<number> {
     const settings = await prisma.platformSettings.findFirst({
       select: { lateCancellationWindowHours: true },
     });
-    return Number(settings?.lateCancellationWindowHours ?? 24);
+    return Number(settings?.lateCancellationWindowHours ?? 24) * 2; // × 2 for dispute buffer — matches cron
   } catch {
-    return 24; // safe fallback
+    return 48; // safe fallback (24 × 2)
   }
 }
 
@@ -129,7 +129,8 @@ export async function buildPayout(
     status: { in: ['SETTLED', 'COMPLETED'] },
     type: 'BOOKING_PAYMENT',
     booking: {
-      status: { in: ['CONFIRMED', 'COMPLETED'] },
+      status: 'COMPLETED',
+      checkOutTime: { not: null },
       endTime: { lte: bufferCutoff },
       deletedAt: null,
     },
