@@ -68,9 +68,9 @@ export async function GET(req: NextRequest) {
         type: 'BOOKING_PAYMENT',
         booking: {
           status: 'COMPLETED',
-          checkOutTime: { not: null },
-          endTime: { lte: bufferCutoff },
+          checkOutTime: { not: null, lte: bufferCutoff }, // buffer measured from actual check-out, not scheduled end
           deletedAt: null,
+          source: { not: 'offline' }, // offline/cash bookings are instructor-handled — no platform payout
         },
       },
       select: { providerId: true },

@@ -52,7 +52,7 @@ const PAYOUT_BUFFER_HOURS = 24; // Used for bank/manual payout eligibility check
 // Reads dispute buffer from PlatformSettings (defaults to 24h if not configured).
 // The cron uses lateCancellationWindowHours � 2 (typically 48h); this same
 // DB-backed value is now used here so manual and automated payouts stay consistent.
-async function getPayoutBufferHours(): Promise<number> {
+export async function getPayoutBufferHours(): Promise<number> {
   try {
     const settings = await prisma.platformSettings.findFirst({
       select: { lateCancellationWindowHours: true },
@@ -130,9 +130,9 @@ export async function buildPayout(
     type: 'BOOKING_PAYMENT',
     booking: {
       status: 'COMPLETED',
-      checkOutTime: { not: null },
-      endTime: { lte: bufferCutoff },
+      checkOutTime: { not: null, lte: bufferCutoff },
       deletedAt: null,
+      source: { not: 'offline' }, // offline/cash bookings are instructor-handled — no platform payout
     },
   };
   if (transactionIds?.length) where.id = { in: transactionIds };
