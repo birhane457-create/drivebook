@@ -180,39 +180,84 @@ export async function POST(
       });
 
       if (existingTransaction) {
-        await (tx as any).transaction.update({
-          where: { id: existingTransaction.id },
-          data: { status: 'COMPLETED', processedAt: new Date() }
-        });
+        // Only mark COMPLETED if payment was confirmed — guard against a PENDING_PAYMENT
+        // booking that slipped through check-in before the payment gate was added.
+        if (!updated.isPaid) {
+          console.error(`[check-out] RECONCILIATION REQUIRED: booking ${bookingId} has an existing transaction but isPaid=false. Transaction left in current state; payout eligibility blocked.`);
+          // Leave the transaction in its current status — do NOT advance to COMPLETED.
+          // The payout builder requires checkOutTime lte bufferCutoff AND a COMPLETED
+          // transaction, so this booking will never reach payout without manual admin review.
+        } else {
+          await (tx as any).transaction.update({
+            where: { id: existingTransaction.id },
+            data: { status: 'COMPLETED', processedAt: new Date() },
+          });
+        }
       } else {
-        console.warn(`[check-out] Transaction missing for booking ${bookingId}, creating now`);
-        
-        const { PaymentService } = await import('@/lib/services/payment');
-        const paymentService = new PaymentService();
-        
-        const calculation = await paymentService.calculateCommission(
-          booking.providerId,
-          booking.customerId,
-          booking.price
-        );
+        // No transaction row at all. Only create one if payment is confirmed.
+        if (!updated.isPaid) {
+          // Booking was never paid (PENDING_PAYMENT that bypassed check-in gate, or
+          // an admin-confirmed override). Do NOT invent a payable record.
+          // Flag for reconciliation — admin must resolve before any payout can occur.
+          console.error(`[check-out] RECONCILIATION REQUIRED: booking ${bookingId} completed with no payment evidence (isPaid=false, no transaction row). Creating a FAILED reconciliation record.`);
 
-        await (tx as any).transaction.create({
-          data: {
-            bookingId,
-            providerId: booking.providerId,
-            type: 'BOOKING_PAYMENT',
-            amount: calculation.totalAmount,
-            platformFee: calculation.platformFee,
-            providerPayout: calculation.providerPayout,
-            commissionRate: calculation.commissionRate,
-            status: 'COMPLETED', // Immediately completed since booking is done
-            processedAt: new Date(),
-            description: `Booking payment - ${calculation.isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
-            metadata: {
-              isFirstBooking: calculation.isFirstBooking,
+          const { PaymentService } = await import('@/lib/services/payment');
+          const paymentService = new PaymentService();
+          const calculation = await paymentService.calculateCommission(
+            booking.providerId,
+            booking.customerId,
+            booking.price
+          );
+
+          await (tx as any).transaction.create({
+            data: {
+              bookingId,
+              providerId: booking.providerId,
+              type: 'BOOKING_PAYMENT',
+              amount: calculation.totalAmount,
+              platformFee: calculation.platformFee,
+              providerPayout: calculation.providerPayout,
+              commissionRate: calculation.commissionRate,
+              status: 'FAILED', // NOT payable — payment evidence missing
+              processedAt: new Date(),
+              description: `Booking completed without confirmed payment — reconciliation required`,
+              metadata: {
+                reconciliationRequired: true,
+                isFirstBooking: calculation.isFirstBooking,
+                reason: 'isPaid=false at checkout; no prior payment transaction found',
+              },
             },
-          }
-        });
+          });
+        } else {
+          // Payment confirmed but transaction row is missing — create it now.
+          console.warn(`[check-out] Transaction missing for paid booking ${bookingId}, creating now`);
+
+          const { PaymentService } = await import('@/lib/services/payment');
+          const paymentService = new PaymentService();
+          const calculation = await paymentService.calculateCommission(
+            booking.providerId,
+            booking.customerId,
+            booking.price
+          );
+
+          await (tx as any).transaction.create({
+            data: {
+              bookingId,
+              providerId: booking.providerId,
+              type: 'BOOKING_PAYMENT',
+              amount: calculation.totalAmount,
+              platformFee: calculation.platformFee,
+              providerPayout: calculation.providerPayout,
+              commissionRate: calculation.commissionRate,
+              status: 'COMPLETED',
+              processedAt: new Date(),
+              description: `Booking payment - ${calculation.isFirstBooking ? 'First booking with client' : 'Repeat booking'}`,
+              metadata: {
+                isFirstBooking: calculation.isFirstBooking,
+              },
+            },
+          });
+        }
       }
 
       return updated;
