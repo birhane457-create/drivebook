@@ -105,6 +105,23 @@ export async function POST(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // ── Payment gate ──────────────────────────────────────────────────────────
+    // Block check-in for bookings that have not been paid. PENDING_PAYMENT means
+    // the student's wallet was short at booking time and no payment has been
+    // confirmed since. Allowing check-in on an unpaid booking would allow check-out
+    // to create a BOOKING_PAYMENT transaction with no corresponding wallet debit,
+    // which would then become payout-eligible after the dispute buffer.
+    if (booking.status === 'PENDING_PAYMENT' || !booking.isPaid) {
+      return NextResponse.json(
+        {
+          error: 'Cannot check in — this booking has not been paid. The student must top up their wallet and confirm payment before the lesson can begin.',
+          paymentRequired: true,
+        },
+        { status: 402 }
+      );
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // Determine who is checking in
     const checkInBy = isInstructor ? 'provider' : 'customer';
 

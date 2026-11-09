@@ -1,4 +1,4 @@
-/**
+﻿/**
  * lib/services/booking-service.ts
  *
  * The single source of truth for all booking lifecycle transitions.
@@ -741,6 +741,12 @@ export async function confirmBooking(
                 description: `Booking confirmed â€” payment`,
                 status: 'CONFIRMED',
               },
+            })
+            // Mark isPaid now that wallet deduction succeeded — without this the booking
+            // remains isPaid=false after confirm, causing the check-in gate to block it.
+            await tx.booking.update({
+              where: { id: bookingId },
+              data: { isPaid: true, paidAt: new Date() },
             })
           }
           // If insufficient funds, confirm anyway (admin/instructor override) â€” isPaid remains false
