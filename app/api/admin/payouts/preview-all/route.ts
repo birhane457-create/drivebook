@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getPayoutBufferHours } from '@/lib/services/payout-service';
 
 
 import { requirePermission } from '@/lib/auth/requireRole';
@@ -20,7 +21,9 @@ export async function GET(req: NextRequest) {
 
     // Get all settled BOOKING_PAYMENT transactions not yet covered by a payout,
     // grouped by instructor. Mirror the eligibility criteria in process-all.
-    const bufferCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    // Dispute buffer — read from PlatformSettings (lateCancellationWindowHours × 2), default 48h.
+    const bufferHours = await getPayoutBufferHours();
+    const bufferCutoff = new Date(Date.now() - bufferHours * 60 * 60 * 1000);
 
     const coveredTxIds = await prisma.payoutTransaction.findMany({
       where: { payout: { status: { in: ['PAID', 'PROCESSING', 'PENDING_TRANSFER', 'SENT', 'ON_HOLD'] } } },
@@ -35,8 +38,7 @@ export async function GET(req: NextRequest) {
         id: excludeIds.length ? { notIn: excludeIds } : undefined,
         booking: {
           status: 'COMPLETED',
-          checkOutTime: { not: null },
-          endTime: { lte: bufferCutoff },
+          checkOutTime: { not: null, lte: bufferCutoff }, // buffer measured from actual check-out, not scheduled end
           deletedAt: null,
           source: { not: 'offline' }, // offline/cash bookings are instructor-handled
         },

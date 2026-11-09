@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { executeInstructorPayout } from '@/lib/services/payout-service';
+import { executeInstructorPayout, getPayoutBufferHours } from '@/lib/services/payout-service';
 
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
@@ -14,8 +14,10 @@ export async function POST(req: NextRequest) {
     const deny = await requirePermission(session, PERM.FINANCE_PAYOUTS_PROCESS);
     if (deny) return deny;
 
-    // 48-hour dispute buffer — lessons must be at least 2 days old before becoming payout-eligible
-    const bufferCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    // Dispute buffer — read from PlatformSettings (lateCancellationWindowHours × 2), default 48h.
+    // Lessons must have checked out at least this long ago before becoming payout-eligible.
+    const bufferHours = await getPayoutBufferHours();
+    const bufferCutoff = new Date(Date.now() - bufferHours * 60 * 60 * 1000);
 
     // Find all instructors with eligible transactions
     const eligible = await prisma.transaction.findMany({
@@ -24,8 +26,7 @@ export async function POST(req: NextRequest) {
         type: 'BOOKING_PAYMENT',
         booking: {
           status: 'COMPLETED',
-          checkOutTime: { not: null },
-          endTime: { lte: bufferCutoff },
+          checkOutTime: { not: null, lte: bufferCutoff }, // buffer measured from actual check-out, not scheduled end
           deletedAt: null,
           source: { not: 'offline' }, // offline/cash bookings are instructor-handled — no platform payout
         },
