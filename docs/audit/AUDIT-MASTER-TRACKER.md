@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.65 (Phase 1 reconciliation: schema discrepancy found, R1 applied, R3 awaiting approval — cancellation fix, expiry messaging, wallet credit expiry, ledger gaps)
-**Last Updated:** 2026-11-10 (v6.65)
+**Version:** 6.66 (Phase 1 final reconciliation: script v2, full ledger, prisma status, R3+backfill proposals — cancellation fix, expiry messaging, wallet credit expiry, ledger gaps)
+**Last Updated:** 2026-11-10 (v6.66)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -862,10 +862,15 @@ Reviewer has not independently rerun these test suites. Behavioral HTTP testing 
 |---|---|
 | Affected registration window (3cad6cbd → 8a78f122, 2026-11-10 05:50–10:05 UTC) | ✅ Confirmed clear — zero providers in window |
 | Migration applied and schema verified (V1-V5 all pass) | Complete |
-| Reconciliation investigation | Complete — 1 discrepancy found (updatedAt default), R1 correction applied to committed SQL |
-| R1: Committed migration SQL corrected (updatedAt DEFAULT CURRENT_TIMESTAMP added) | Complete — new checksum: 18b190a1e578ae0e7e33af0900599e1d3b28a9b7e7ded763e99e5cf9dbdfce8b |
+| Reconciliation investigation v2 (non-zero exit on discrepancy) | Complete — script v2 written and run; 1 discrepancy (checksum), 3 warnings |
+| R1: Committed migration SQL corrected | Complete at 342414f5 — new checksum: 18b190a1e578ae0e7e33af0900599e1d3b28a9b7e7ded763e99e5cf9dbdfce8b |
+| prisma migrate status recorded | Complete — exit non-zero; 40 unrecorded migrations; 1 failed migration (20260116000000) pre-existing |
+| Guarded R3 procedure (8 guards) | Prepared — scripts/r3-checksum-update.cjs — awaiting approval |
+| Targeted backfill procedure (8 guards, exact 5 IDs) | Prepared — scripts/industry-backfill-marketplace.cjs — awaiting separate approval |
 | Audit script full output in PHASE1-PROVIDER-INDUSTRY-AUDIT-REPORT.md | Complete |
-| R3: _prisma_migrations checksum corrected (all-zero -> correct SHA-256) | Awaiting explicit approval |
+| R3: _prisma_migrations checksum corrected | Awaiting explicit approval |
+| Industry backfill (5 MARKETPLACE test accounts) | Awaiting separate explicit approval |
+| Broader migration ledger (failed 20260116 + 40 unrecorded) | Out of scope for Phase 1 — separate decision required |
 | Backfill SQL reviewed | ✅ Reviewed — MARKETPLACE→driving and SAAS+DrivingProfile→driving are safe after migration; SAAS without DrivingProfile requires manual review |
 | Full null-industry classification | ❌ Pending — DB access blocked from audit environment |
 | Driving SaaS identification (SAAS + DrivingProviderProfile) | ❌ Pending |
