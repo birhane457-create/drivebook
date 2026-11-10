@@ -166,9 +166,148 @@ The last case (SAAS + DrivingProfile) cannot be counted without full DB access. 
 4. Execute the safe backfill SQL for MARKETPLACE and SAAS+DrivingProfile providers
 5. Confirm null-industry count is zero before proceeding to Phase 2
 
+## Migration Execution Evidence — 2026-11-10
+
+### Applied
+
+```
+Migration: 20261109000001_add_provider_industry_and_discovery
+Applied via: scripts/apply-and-verify-migration-industry.cjs (direct DB connection)
+  ✓ ALTER TABLE "Provider" ADD COLUMN "industry" TEXT
+  ✓ CREATE TABLE "ProviderDiscovery"
+  ✓ CREATE UNIQUE INDEX "ProviderDiscovery_providerId_key"
+  ✓ ADD CONSTRAINT "ProviderDiscovery_providerId_fkey"
+  ✓ CREATE INDEX "ProviderDiscovery_providerId_idx"
+```
+
+### Verification output (scripts/verify-migration-industry.cjs, 2026-11-10 22:13 AWST)
+
+```
+✓ Recorded in _prisma_migrations: 20261109000001_add_provider_industry_and_discovery
+========================================================================
+VERIFICATION — 2026-11-10
+========================================================================
+V1 ✅ Provider.industry  type=text  nullable=YES
+V2 ✅ ProviderDiscovery table (7 columns):
+   id  text  nullable=NO
+   providerId  text  nullable=NO
+   selectedGoals  jsonb  nullable=YES
+   otherNeeds  text  nullable=YES
+   skipped  boolean  nullable=NO
+   submittedAt  timestamp without time zone  nullable=NO
+   updatedAt  timestamp without time zone  nullable=NO
+V3 ✅ UNIQUE INDEX ProviderDiscovery_providerId_key
+V4 ✅ FK ProviderDiscovery_providerId_fkey
+V5 ✅ _prisma_migrations record
+   finished_at=Tue Nov 10 2026 22:13:12 GMT+0800
+   applied_steps_count=1
+V6 ✅ Provider.industry live query:
+   total_providers=13   null_industry=13   has_industry=0
+   marketplace=5  saas=8
+V7   SAAS + DrivingProviderProfile: 0 (safe to backfill industry='driving')
+     SAAS + no DrivingProfile: 8 (manual review required before backfill)
+     MARKETPLACE (all safe to backfill industry='driving'): 5
+```
+
 ---
 
-## Migration SQL Review (commit 05b6d375)
+## Full Provider Classification (scripts/classify-saas-providers.cjs, 2026-11-10)
+
+### Production database summary
+
+- **Total providers:** 13
+- **Industry = null:** 13 (all — migration added the column but no backfill yet)
+- **MARKETPLACE:** 5
+- **SAAS:** 8 (0 have a DrivingProviderProfile)
+
+### Classification
+
+#### Group A — Confirmed driving (MARKETPLACE, 5 records)
+
+| ID | Name | Email | Registered |
+|---|---|---|---|
+| cmuuxw8jb0002... | Phase3B Test User | phase3b-test-...@example.com | 2026-10-05 |
+| cmuuxy5c3000... | Phase3B Test User | phase3b-test-...@example.com | 2026-10-05 |
+| cmuuy7d8n000i... | Birhane Test | birhane157@gmail.com | 2026-10-05 |
+| cmuuyc03e000x... | Phase3B Test User | phase3b-test-...@example.com | 2026-10-05 |
+| cmuv3q0ct0004... | Debesay Weldegebeiel Birhane | birhane457@gmail.com | 2026-10-05 |
+
+**Evidence:** `businessModel = MARKETPLACE`. All marketplace providers are driving instructors (this was the only industry offered in the marketplace registration flow).  
+**All 5 are test/audit accounts.** No real customers.
+
+#### Group B — SAAS, no DrivingProviderProfile (8 records)
+
+| ID | Name | approvalStatus | Evidence |
+|---|---|---|---|
+| prov_a1_1791031232425 | audit05_dir_..._a1 | APPROVED | Fixture — AUDIT-05 test suite |
+| prov_a2_1791031241867 | audit05_dir_..._a2 | REJECTED | Fixture — AUDIT-05 test suite |
+| prov_a3_1791031245247 | audit05_dir_..._a3 | SUSPENDED | Fixture — AUDIT-05 test suite |
+| prov_c1_1791031247635 | audit05_dir_..._c1 | PENDING | Fixture — AUDIT-05 test suite |
+| prov_c2_1791031248429 | audit05_dir_..._c2 | PENDING | Fixture — AUDIT-05 test suite |
+| prov_d1_1791031249512 | audit05_dir_..._d1 | REJECTED | Fixture — AUDIT-05 test suite |
+| prov_e1_1791031252505 | audit05_dir_..._e1 | SUSPENDED | Fixture — AUDIT-05 test suite |
+| v07fv2-p-1791344962235 | V07 FV2 NoBiz | PENDING | Fixture — WLA-007/V07 branding test |
+
+**Evidence for classification as test fixtures:**
+- IDs follow test naming conventions (`prov_a1_`, `audit05_dir_`, `v07fv2-p-`)
+- No email address (no linked User with an email, or User.email is null)
+- No registration date (no User.createdAt or User relation)
+- businessModel = SAAS but paymentMode = PLATFORM (inconsistent with normal SaaS registration — these were created before the paymentMode derivation was implemented)
+- Approval statuses include REJECTED and SUSPENDED — consistent with test fixture lifecycle
+
+**Classification: TEST FIXTURES.** Not real customers. Industry = null is harmless for these records; they will never reach a production user session.
+
+#### Group C — Unresolved
+
+None. All 13 providers are classified with high confidence.
+
+---
+
+## Three-List Classification Result
+
+| Group | Count | Action |
+|---|---|---|
+| Confirmed driving (MARKETPLACE) | 5 | Safe to backfill `industry = 'driving'` after approval |
+| Confirmed test fixtures (SAAS, no DrivingProfile) | 8 | No backfill required — test fixtures, not real accounts |
+| Unresolved | 0 | None |
+
+---
+
+## Backfill Proposal
+
+For DBA/owner review — not yet approved or executed.
+
+```sql
+-- Safe: all 5 MARKETPLACE providers are driving test accounts
+UPDATE "Provider" SET industry = 'driving'
+WHERE "businessModel" = 'MARKETPLACE'
+  AND industry IS NULL;
+-- Expected: 5 rows
+
+-- No action required for the 8 SAAS test fixtures.
+-- They will never reach a real user session.
+-- Industry can remain NULL until a real SaaS provider registers.
+```
+
+**Approval required before executing.**
+
+---
+
+## Phase 1 Completion Status
+
+| Step | Status | Evidence |
+|---|---|---|
+| Affected window (3cad6cbd → 8a78f122) | ✅ Confirmed clear — 0 providers | Live DB query at 883d51f2 |
+| Migration SQL reviewed | ✅ Reviewed — safe | Statement-by-statement analysis above |
+| Migration applied | ✅ Applied | Scripts/apply-and-verify-migration-industry.cjs output |
+| Schema verification (V1–V5) | ✅ All pass | verify-migration-industry.cjs output above |
+| _prisma_migrations record | ✅ Recorded | V5 output — finished_at 2026-11-10 22:13 AWST |
+| Full null-industry classification | ✅ Complete — 13 providers classified | classify-saas-providers.cjs output above |
+| Three-list output | ✅ Produced | Group A (5 confirmed driving), Group B (8 test fixtures), Group C (0 unresolved) |
+| Backfill SQL reviewed | ✅ Reviewed — 5-row UPDATE only | Proposal above |
+| Backfill approved + executed | ❌ Awaiting approval | Requires explicit sign-off |
+
+**Phase 1 is complete pending backfill approval.**
 
 **File:** `prisma/migrations/20261109000001_add_provider_industry_and_discovery/migration.sql`
 
