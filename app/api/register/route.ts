@@ -132,6 +132,10 @@ export async function POST(req: NextRequest) {
           phone: data.phone,
           businessModel,
           paymentMode,
+          // Persist the industry/businessType so the session can read it directly
+          // instead of inferring it from businessModel (which breaks for
+          // driving+SAAS where businessModel=SAAS but industry=driving).
+          industry: data.businessType,
           accountType: 'INDIVIDUAL',
           hourlyRate: data.hourlyRate ?? 65,
           baseAddress: data.baseAddress ?? '',

@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import {
   Calendar, Users, TrendingUp, Car, Settings,
   AlertTriangle, Phone, Clock, Wallet, Star, Package,
-  CreditCard, Plus, DollarSign,
+  CreditCard, Plus, DollarSign, Sparkles,
 } from 'lucide-react'
 import Link from 'next/link'
 import { EarningsThisWeekCard } from '@/components/instructor/EarningsThisWeekCard'
@@ -242,6 +242,7 @@ export default async function DashboardPage() {
         orderBy: { startTime: 'asc' },
         include: { customer: true },
       },
+      discovery: true,
     },
   }).catch(() => null)
 
@@ -515,6 +516,27 @@ export default async function DashboardPage() {
           : null,
         businessType,
       }} />
+
+      {/* ── Provider discovery — optional onboarding step ──────────────── */}
+      {!(instructor as any).discovery && (
+        <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+            <Sparkles className="h-4 w-4 text-violet-500" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-violet-600">Explore DriveBook capabilities</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Discover how DriveBook can help your business and tell us what you need.
+            </p>
+          </div>
+          <Link
+            href="/dashboard/discovery"
+            className="shrink-0 bg-violet-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-violet-700 transition-colors"
+          >
+            Explore
+          </Link>
+        </div>
+      )}
 
       {/* ── AI Receptionist banner ───────────────────────────────────────── */}
       {isDriving && ['PRO', 'STUDIO', 'PREMIUM'].includes(

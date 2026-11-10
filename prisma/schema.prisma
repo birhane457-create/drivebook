@@ -174,9 +174,36 @@ model Provider {
   voiceLineRecord           TwilioPhoneNumber? @relation("AssignedToProvider")
   quotes                    Quote[]
   // WLA-012: optional relation to Business
+  // Industry / business type — persisted at registration so the session can
+  // read it directly instead of inferring from businessModel. Values: 'driving',
+  // 'plumber', 'electrician', 'beauty', 'tax', 'other'. This is separate from
+  // businessModel (MARKETPLACE/SAAS) and paymentMode (PLATFORM/DIRECT).
+  industry                  String?
   business                  Business?          @relation(fields: [businessId], references: [id])
+  // Provider discovery answers (optional onboarding step)
+  discovery                 ProviderDiscovery?
 
   @@index([state, suburb])
+}
+
+/// Provider discovery answers — collected after registration as an optional
+/// onboarding step. Stores which capabilities interest the provider and any
+/// free-text "other needs". Separate from entitlements and permissions.
+model ProviderDiscovery {
+  id              String   @id @default(cuid())
+  providerId      String   @unique
+  // JSON array of selected capability keys: e.g. ["reports", "website", "ai", "booking", "crm", "automation"]
+  selectedGoals   Json?
+  // Optional free-text response for "anything else you'd like DriveBook to help with"
+  otherNeeds      String?
+  // Whether the provider skipped discovery (to allow completing later)
+  skipped         Boolean  @default(false)
+  submittedAt     DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  provider        Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@index([providerId])
 }
 
 model TwilioPhoneNumber {
