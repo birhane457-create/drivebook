@@ -8,6 +8,13 @@ import crypto from 'crypto'
 import { checkRateLimitStrict, getRateLimitIdentifier, authRateLimit } from '@/lib/ratelimit'
 import { normalizeEmail } from '@/lib/auth-email'
 import { loadTemplateConfig, createBusinessFromTemplate } from '@/lib/presets/loader'
+import {
+  MARKETPLACE_TERMS_VERSION,
+  PRIVACY_POLICY_VERSION,
+  SAAS_TERMS_VERSION,
+  SAAS_TERMS_PUBLISHED,
+  type OrganisationType,
+} from '@/lib/config/registration-constants'
 
 
 export const dynamic = 'force-dynamic';
@@ -115,35 +122,55 @@ export async function POST(req: NextRequest) {
       businessModel === 'SAAS' ? 'DIRECT' : 'PLATFORM'
 
     // Derive organisationType — server-side enforced.
-    // DRIVING_SCHOOL is designed but not yet enabled; the UI shows it as coming soon.
-    // Setting DRIVING_SCHOOL does NOT set accountType=BUSINESS or enable multi-provider.
-    // Non-driving providers are always INDIVIDUAL_INSTRUCTOR regardless of request.
-    const resolvedOrganisationType: 'INDIVIDUAL_INSTRUCTOR' | 'DRIVING_SCHOOL' =
-      isDriving && data.organisationType === 'DRIVING_SCHOOL'
-        ? 'DRIVING_SCHOOL'    // designed, not yet enabled — the API accepts it for future use
-        : 'INDIVIDUAL_INSTRUCTOR'
+    // DRIVING_SCHOOL is designed but not yet enabled.
+    // Reject DRIVING_SCHOOL at the API level until the school registration flow,
+    // school-specific data collection, and activation controls are implemented.
+    // Non-driving providers are always SOLE_TRADER (not INDIVIDUAL_INSTRUCTOR —
+    // that value is specific to driving instructors).
+    if (isDriving && data.organisationType === 'DRIVING_SCHOOL') {
+      return NextResponse.json(
+        {
+          error: 'Driving school registration is not yet available. Please register as an independent instructor and contact support when the driving school feature becomes available.',
+          code: 'DRIVING_SCHOOL_NOT_AVAILABLE',
+        },
+        { status: 400 }
+      )
+    }
+    const resolvedOrganisationType: OrganisationType =
+      isDriving ? 'INDIVIDUAL_INSTRUCTOR' : 'SOLE_TRADER'
 
     // Derive commercial agreement type and status — server-side, never from browser.
-    // Type is determined by businessModel.
-    // Marketplace Terms (MARKETPLACE_TERMS): required for all marketplace providers;
-    //   recorded as ACCEPTED when termsAccepted=true (uses existing terms flow).
-    // SaaS Terms (SAAS_TERMS): remain PENDING until the SaaS Terms document is
-    //   published. No acceptance is recorded until then.
-    const MARKETPLACE_TERMS_VERSION = '1.0'  // current version of Marketplace Terms
-    const SAAS_TERMS_VERSION        = null    // SaaS Terms not yet published
+    //
+    // MARKETPLACE providers accept the Instructor Terms (published, v2.0).
+    //   commercialAgreementType    = 'MARKETPLACE_TERMS'
+    //   commercialAgreementVersion = MARKETPLACE_TERMS_VERSION (from constants)
+    //   commercialAgreementStatus  = 'ACCEPTED' when termsAccepted = true
+    //
+    // SAAS providers: SaaS Terms are not yet published.
+    //   commercialAgreementType    = 'SAAS_TERMS'
+    //   commercialAgreementVersion = null  (not the string 'PENDING' — null means absent)
+    //   commercialAgreementStatus  = 'PENDING'
+    //   commercialAgreementAcceptedAt = null
     const commercialAgreementType    = businessModel === 'MARKETPLACE' ? 'MARKETPLACE_TERMS' : 'SAAS_TERMS'
-    const commercialAgreementVersion = businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION : 'PENDING'
     const commercialAgreementStatus  =
       businessModel === 'MARKETPLACE' && data.termsAccepted ? 'ACCEPTED' : 'PENDING'
+    const commercialAgreementVersion: string | null =
+      businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION
+      : SAAS_TERMS_PUBLISHED ? SAAS_TERMS_VERSION  // when SaaS Terms are published
+      : null                                          // null = SaaS Terms not yet published
     const commercialAgreementAcceptedAt =
       commercialAgreementStatus === 'ACCEPTED' ? new Date() : null
 
-    // Privacy policy — server-side version; timestamp from now.
-    // The browser sends privacyAccepted: true; the API records the current version.
+    // Privacy policy — server-side version from constants; timestamp from now.
+    // The browser sends privacyAccepted: true; the API records the current published version.
     // privacyAccepted is validated as z.literal(true) — registration fails if false/omitted.
-    const PRIVACY_POLICY_VERSION = '1.0'
     const privacyPolicyVersion    = PRIVACY_POLICY_VERSION
     const privacyPolicyAcceptedAt = new Date()
+
+    // User.termsVersion — records the Instructor Terms version the provider accepted.
+    // Server-controlled; not from the browser. Only set for MARKETPLACE providers
+    // who accepted the terms (data.termsAccepted = true).
+    const instructorTermsVersion = businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION : undefined
 
     // Create user, provider, and business in a transaction (15s timeout for Business template creation)
     const result = await prisma.$transaction(async (tx) => {
@@ -158,7 +185,9 @@ export async function POST(req: NextRequest) {
           verificationTokenExpiry,
           ...(data.termsAccepted && {
             termsAcceptedAt: new Date(),
-            termsVersion: data.termsVersion || '1.0',
+            // Server-controlled version — not from the browser.
+            // Only set for MARKETPLACE providers who accepted the Instructor Terms.
+            termsVersion: instructorTermsVersion,
             ageDeclaration: data.ageDeclaration ?? false,
           }),
         },
