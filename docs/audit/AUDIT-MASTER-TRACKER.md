@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.64 (Phase 1 IN PROGRESS — migration pending execution; classification pending — cancellation fix, expiry messaging, wallet credit expiry, ledger gaps)
-**Last Updated:** 2026-11-10 (v6.64)
+**Version:** 6.65 (Phase 1 reconciliation: schema discrepancy found, R1 applied, R3 awaiting approval — cancellation fix, expiry messaging, wallet credit expiry, ledger gaps)
+**Last Updated:** 2026-11-10 (v6.65)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -861,8 +861,11 @@ Reviewer has not independently rerun these test suites. Behavioral HTTP testing 
 | Work item | Status |
 |---|---|
 | Affected registration window (3cad6cbd → 8a78f122, 2026-11-10 05:50–10:05 UTC) | ✅ Confirmed clear — zero providers in window |
-| Migration execution + verification (industry column, ProviderDiscovery table, _prisma_migrations) | ❌ Not yet executed — awaiting controlled deployment |
-| Audit script full output recorded as evidence | ❌ Pending migration execution |
+| Migration applied and schema verified (V1-V5 all pass) | Complete |
+| Reconciliation investigation | Complete — 1 discrepancy found (updatedAt default), R1 correction applied to committed SQL |
+| R1: Committed migration SQL corrected (updatedAt DEFAULT CURRENT_TIMESTAMP added) | Complete — new checksum: 18b190a1e578ae0e7e33af0900599e1d3b28a9b7e7ded763e99e5cf9dbdfce8b |
+| Audit script full output in PHASE1-PROVIDER-INDUSTRY-AUDIT-REPORT.md | Complete |
+| R3: _prisma_migrations checksum corrected (all-zero -> correct SHA-256) | Awaiting explicit approval |
 | Backfill SQL reviewed | ✅ Reviewed — MARKETPLACE→driving and SAAS+DrivingProfile→driving are safe after migration; SAAS without DrivingProfile requires manual review |
 | Full null-industry classification | ❌ Pending — DB access blocked from audit environment |
 | Driving SaaS identification (SAAS + DrivingProviderProfile) | ❌ Pending |

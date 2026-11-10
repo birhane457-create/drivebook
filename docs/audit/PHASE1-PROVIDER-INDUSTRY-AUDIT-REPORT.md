@@ -357,3 +357,102 @@ The independent reviewer noted Vercel failure at `05b6d375`. The cause was not e
 - The new schema changes may have introduced a type mismatch visible at build time (the Prisma client was regenerated with the new `industry` and `ProviderDiscovery` fields, but the production DB doesn't have them yet)
 
 The Vercel failure should be investigated by checking the Vercel deployment log for `05b6d375` and comparing against the last known successful build.
+
+---
+
+## Migration Reconciliation Investigation (2026-11-10)
+
+**Script:** `scripts/migration-reconciliation.cjs`
+**Status:** Read-only. No production changes made.
+
+### Checksum comparison
+
+| | Value |
+|---|---|
+| Committed migration file SHA-256 | `66191ad4b51dac17bbcafdd0b0f53a21b65f7e5b59b351744a44e382321fb1bc` |
+| Stored in `_prisma_migrations.checksum` | `00000000000000000000000000000000` (all-zero — manually inserted placeholder) |
+| Match | **NO** |
+
+The all-zero checksum was inserted by `verify-migration-industry.cjs` using a hardcoded placeholder string. The correct value is the SHA-256 of the committed migration file. When `prisma migrate deploy` or `prisma migrate status` runs against production, it will report this migration as "modified after being applied."
+
+### Full schema comparison
+
+| Object | Committed SQL | Production | Assessment |
+|---|---|---|---|
+| `Provider.industry` TEXT nullable | no default | no default | Match |
+| `ProviderDiscovery.id` TEXT NOT NULL | no default | no default | Match |
+| `ProviderDiscovery.providerId` TEXT NOT NULL | no default | no default | Match |
+| `ProviderDiscovery.selectedGoals` JSONB nullable | no default | no default | Match |
+| `ProviderDiscovery.otherNeeds` TEXT nullable | no default | no default | Match |
+| `ProviderDiscovery.skipped` BOOLEAN NOT NULL | DEFAULT false | DEFAULT false | Match |
+| `ProviderDiscovery.submittedAt` TIMESTAMP(3) NOT NULL | DEFAULT CURRENT_TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Match |
+| `ProviderDiscovery.updatedAt` TIMESTAMP(3) NOT NULL | **no default** | **DEFAULT CURRENT_TIMESTAMP** | DISCREPANCY |
+| PRIMARY KEY on `id` | present | present | Match |
+| UNIQUE INDEX `ProviderDiscovery_providerId_key` | present | present | Match |
+| FK `ProviderDiscovery_providerId_fkey` ON DELETE CASCADE ON UPDATE CASCADE | present | ON DELETE CASCADE ON UPDATE CASCADE | Match |
+| INDEX `ProviderDiscovery_providerId_idx` | present | present | Match |
+
+One discrepancy: `updatedAt` column default.
+
+### updatedAt discrepancy root cause
+
+The execution script `apply-and-verify-migration-industry.cjs` added `DEFAULT CURRENT_TIMESTAMP` to the `updatedAt` column when constructing the CREATE TABLE statement. The committed migration SQL `migration.sql` does not specify a default for `updatedAt`.
+
+Production column_default for `updatedAt`: `CURRENT_TIMESTAMP`
+Committed SQL for `updatedAt`: no default clause
+
+Production risk: none. The DEFAULT is strictly safer. The ORM (`@updatedAt`) always provides the value at runtime.
+
+### Migration history assessment
+
+The `_prisma_migrations` table contains 3 records (of approximately 42 migration directories in the repo):
+
+1. `20261109000001_add_provider_industry_and_discovery` — checksum all-zero, manually inserted, finished_at 2026-11-10
+2. `20261007222011_brand_v11_provider_customslug_unique` — real checksum, applied 2026-10-07
+3. `20260116000000_sub_06_a_unique_constraints` — real checksum, finished_at null
+
+The remaining ~39 migrations were applied directly via SQL without `prisma migrate deploy`. This is the established pattern for this project. The all-zero checksum is an additional inconsistency within an already non-standard migration history.
+
+### Proposed reconciliation procedure (awaiting approval before any execution)
+
+**R1 — Update committed migration SQL** (code change, no production action needed):
+Add `DEFAULT CURRENT_TIMESTAMP` to `updatedAt` in the committed migration file to match what was actually applied to production.
+
+```
+-- Current committed line:
+"updatedAt" TIMESTAMP(3) NOT NULL,
+
+-- Corrected line:
+"updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+```
+
+**R2 — Recompute checksum after R1:**
+After R1, the SHA-256 of the migration file changes from:
+- Before R1: `66191ad4b51dac17bbcafdd0b0f53a21b65f7e5b59b351744a44e382321fb1bc`
+- After R1: `18b190a1e578ae0e7e33af0900599e1d3b28a9b7e7ded763e99e5cf9dbdfce8b`
+
+**R3 — Update _prisma_migrations checksum** (production data change — requires explicit approval):
+```sql
+UPDATE "_prisma_migrations"
+SET checksum = '18b190a1e578ae0e7e33af0900599e1d3b28a9b7e7ded763e99e5cf9dbdfce8b'
+WHERE migration_name = '20261109000001_add_provider_industry_and_discovery';
+```
+Expected: 1 row updated.
+
+**R1 does not require approval** — it corrects a source artifact to match reality.
+**R3 requires explicit approval before execution** — it modifies a production table.
+
+No other production schema changes are needed. The production schema is correct and functional.
+
+### Phase 1 revised completion criteria
+
+| Step | Status |
+|---|---|
+| Affected window confirmed clear | Complete |
+| Migration applied and schema verified | Complete |
+| Full provider classification | Complete |
+| Backfill SQL reviewed | Complete |
+| Reconciliation investigation | Complete (this section) |
+| R1: Committed migration SQL corrected | Pending — no approval needed |
+| R3: _prisma_migrations checksum corrected | Pending — requires approval |
+| Industry backfill | Not approved |

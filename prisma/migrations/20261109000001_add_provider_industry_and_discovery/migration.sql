@@ -21,7 +21,7 @@ CREATE TABLE "ProviderDiscovery" (
     "otherNeeds" TEXT,
     "skipped" BOOLEAN NOT NULL DEFAULT false,
     "submittedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "ProviderDiscovery_pkey" PRIMARY KEY ("id")
 );
