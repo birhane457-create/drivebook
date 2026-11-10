@@ -25,6 +25,17 @@ const registerSchema = z.object({
   // Non-driving business types are always SAAS (the API enforces this).
   // Omitted for driving defaults to MARKETPLACE (backward compatible).
   businessModel: z.enum(['MARKETPLACE', 'SAAS']).optional(),
+  // Organisation type — driving instructors only.
+  // INDIVIDUAL_INSTRUCTOR: single provider (default).
+  // DRIVING_SCHOOL: not yet activated — the UI shows it as coming soon.
+  // Non-driving providers are always INDIVIDUAL_INSTRUCTOR (the API enforces this).
+  organisationType: z.enum(['INDIVIDUAL_INSTRUCTOR', 'DRIVING_SCHOOL']).optional(),
+  // Privacy consent — required for registration.
+  // privacyAccepted must be true; the browser is not trusted to determine the version.
+  // The API uses a server-side constant for the current privacy policy version.
+  privacyAccepted: z.literal(true, {
+    errorMap: () => ({ message: 'Privacy policy acceptance is required.' }),
+  }),
   // Signup-time fields are now optional — providers complete these in the dashboard
   baseAddress: z.string().optional().default(''),
   hourlyRate: z.number().optional().default(65),
@@ -103,6 +114,37 @@ export async function POST(req: NextRequest) {
     const paymentMode: 'PLATFORM' | 'DIRECT' =
       businessModel === 'SAAS' ? 'DIRECT' : 'PLATFORM'
 
+    // Derive organisationType — server-side enforced.
+    // DRIVING_SCHOOL is designed but not yet enabled; the UI shows it as coming soon.
+    // Setting DRIVING_SCHOOL does NOT set accountType=BUSINESS or enable multi-provider.
+    // Non-driving providers are always INDIVIDUAL_INSTRUCTOR regardless of request.
+    const resolvedOrganisationType: 'INDIVIDUAL_INSTRUCTOR' | 'DRIVING_SCHOOL' =
+      isDriving && data.organisationType === 'DRIVING_SCHOOL'
+        ? 'DRIVING_SCHOOL'    // designed, not yet enabled — the API accepts it for future use
+        : 'INDIVIDUAL_INSTRUCTOR'
+
+    // Derive commercial agreement type and status — server-side, never from browser.
+    // Type is determined by businessModel.
+    // Marketplace Terms (MARKETPLACE_TERMS): required for all marketplace providers;
+    //   recorded as ACCEPTED when termsAccepted=true (uses existing terms flow).
+    // SaaS Terms (SAAS_TERMS): remain PENDING until the SaaS Terms document is
+    //   published. No acceptance is recorded until then.
+    const MARKETPLACE_TERMS_VERSION = '1.0'  // current version of Marketplace Terms
+    const SAAS_TERMS_VERSION        = null    // SaaS Terms not yet published
+    const commercialAgreementType    = businessModel === 'MARKETPLACE' ? 'MARKETPLACE_TERMS' : 'SAAS_TERMS'
+    const commercialAgreementVersion = businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION : 'PENDING'
+    const commercialAgreementStatus  =
+      businessModel === 'MARKETPLACE' && data.termsAccepted ? 'ACCEPTED' : 'PENDING'
+    const commercialAgreementAcceptedAt =
+      commercialAgreementStatus === 'ACCEPTED' ? new Date() : null
+
+    // Privacy policy — server-side version; timestamp from now.
+    // The browser sends privacyAccepted: true; the API records the current version.
+    // privacyAccepted is validated as z.literal(true) — registration fails if false/omitted.
+    const PRIVACY_POLICY_VERSION = '1.0'
+    const privacyPolicyVersion    = PRIVACY_POLICY_VERSION
+    const privacyPolicyAcceptedAt = new Date()
+
     // Create user, provider, and business in a transaction (15s timeout for Business template creation)
     const result = await prisma.$transaction(async (tx) => {
       // 1. Create User
@@ -136,7 +178,19 @@ export async function POST(req: NextRequest) {
           // instead of inferring it from businessModel (which breaks for
           // driving+SAAS where businessModel=SAAS but industry=driving).
           industry: data.businessType,
+          // Organisation type — separate from accountType, never activates multi-provider
+          organisationType: resolvedOrganisationType,
+          // accountType is always INDIVIDUAL — accountType=BUSINESS requires a
+          // separate, explicit activation flow that is not yet implemented.
           accountType: 'INDIVIDUAL',
+          // Commercial agreement — derived server-side from businessModel
+          commercialAgreementType,
+          commercialAgreementStatus,
+          commercialAgreementVersion,
+          ...(commercialAgreementAcceptedAt && { commercialAgreementAcceptedAt }),
+          // Privacy consent — recorded at registration
+          privacyPolicyVersion,
+          privacyPolicyAcceptedAt,
           hourlyRate: data.hourlyRate ?? 65,
           baseAddress: data.baseAddress ?? '',
           serviceRadiusKm: data.serviceRadiusKm ?? 20,
@@ -376,6 +430,9 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         providerId: provider.id,
         businessType: data.businessType,
+        organisationType: resolvedOrganisationType,
+        commercialAgreementType,
+        commercialAgreementStatus,
         status: 'pending_approval',
         redirectTo: '/login'
       },
