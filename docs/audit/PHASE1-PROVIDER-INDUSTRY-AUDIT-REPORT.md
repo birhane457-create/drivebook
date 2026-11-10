@@ -168,7 +168,50 @@ The last case (SAAS + DrivingProfile) cannot be counted without full DB access. 
 
 ---
 
-## Vercel Failure (separate finding)
+## Migration SQL Review (commit 05b6d375)
+
+**File:** `prisma/migrations/20261109000001_add_provider_industry_and_discovery/migration.sql`
+
+### Statement-by-statement analysis
+
+| # | Statement | Safety assessment |
+|---|---|---|
+| 1 | `ALTER TABLE "Provider" ADD COLUMN "industry" TEXT` | **Safe.** Nullable, no default. Existing rows receive NULL. No data affected. |
+| 2 | `CREATE TABLE "ProviderDiscovery" (...)` | **Safe.** New table, no existing data affected. `updatedAt TIMESTAMP(3) NOT NULL` has no DEFAULT, but Prisma's `@updatedAt` provides the value via the ORM — INSERT via raw SQL would need to supply it. |
+| 3 | `CREATE UNIQUE INDEX "ProviderDiscovery_providerId_key"` | **Safe.** New index on new table. No lock contention on Provider. |
+| 4 | `ALTER TABLE "ProviderDiscovery" ADD CONSTRAINT ... FOREIGN KEY ... ON DELETE CASCADE` | **Safe.** References existing Provider table. FK added to empty table, no scan needed. |
+| 5 | `CREATE INDEX "ProviderDiscovery_providerId_idx"` | **Redundant** (unique index above serves dual purpose) but harmless. |
+
+### Cross-checks
+
+- Migration timestamp `20261109` follows the existing naming convention.
+- No existing columns are modified, dropped or renamed.
+- No existing constraints are changed.
+- No data is inserted or updated.
+- All new objects are additive.
+
+### Minor gap
+
+`updatedAt TIMESTAMP(3) NOT NULL` without `DEFAULT CURRENT_TIMESTAMP` means a raw `INSERT INTO "ProviderDiscovery"` without an explicit `updatedAt` value would fail at the database level. The ORM (Prisma `@updatedAt`) always provides this value at runtime, so this is not a production risk. Future raw-SQL audit tooling should supply the value explicitly.
+
+### Conclusion
+
+The migration is **safe to apply** to production. It makes no changes to existing data, removes no columns, and does not alter existing tables beyond adding one nullable column. It should be applied through the standard deployment procedure before any application code that references `Provider.industry` or `ProviderDiscovery` is deployed.
+
+---
+
+## Production Schema State
+
+The DB query confirmed `Provider.industry` does not exist in production. The `_prisma_migrations` table (tracking applied migrations) was not inspected in this session. Before applying the migration, the DBA should verify:
+
+```sql
+SELECT migration_name, finished_at, applied_steps_count
+FROM "_prisma_migrations"
+ORDER BY finished_at DESC
+LIMIT 20;
+```
+
+This confirms the last applied migration and whether any partial applications exist.
 
 The independent reviewer noted Vercel failure at `05b6d375`. The cause was not established. Hypotheses:
 - Pre-existing TS errors (1,435 errors pre-dating this work) may cause the build to fail if Vercel treats them as fatal
