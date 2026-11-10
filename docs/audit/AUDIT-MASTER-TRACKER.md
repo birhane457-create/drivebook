@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.63 (Phase 1 provider industry audit partial; migration reviewed; tracker updated — cancellation fix, expiry messaging, wallet credit expiry, ledger gaps)
-**Last Updated:** 2026-11-10
+**Version:** 6.64 (Phase 1 IN PROGRESS — migration pending execution; classification pending — cancellation fix, expiry messaging, wallet credit expiry, ledger gaps)
+**Last Updated:** 2026-11-10 (v6.64)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -853,14 +853,17 @@ Reviewer has not independently rerun these test suites. Behavioral HTTP testing 
 
 ## Section 10 — Phase 1: Provider Industry Classification Audit
 
-**Status:** PARTIAL — affected-window risk checked; full production classification pending  
+**Status:** IN PROGRESS
+**Completion criteria:** All 6 steps in PHASE1-PROVIDER-INDUSTRY-AUDIT-REPORT.md must have evidence, including explicit approval before any backfill. Approval to review SQL is not approval to execute it.  
 **Script:** `scripts/audit-industry-classification.mjs`  
 **Report:** `docs/audit/PHASE1-PROVIDER-INDUSTRY-AUDIT-REPORT.md`
 
 | Work item | Status |
 |---|---|
-| Affected registration window (3cad6cbd → 8a78f122, 2026-11-10 05:50–10:05 UTC) | ✅ Checked — zero providers |
-| Production migration (industry column + ProviderDiscovery table) | ❌ Not applied — reviewed and safe, pending controlled deployment |
+| Affected registration window (3cad6cbd → 8a78f122, 2026-11-10 05:50–10:05 UTC) | ✅ Confirmed clear — zero providers in window |
+| Migration execution + verification (industry column, ProviderDiscovery table, _prisma_migrations) | ❌ Not yet executed — awaiting controlled deployment |
+| Audit script full output recorded as evidence | ❌ Pending migration execution |
+| Backfill SQL reviewed | ✅ Reviewed — MARKETPLACE→driving and SAAS+DrivingProfile→driving are safe after migration; SAAS without DrivingProfile requires manual review |
 | Full null-industry classification | ❌ Pending — DB access blocked from audit environment |
 | Driving SaaS identification (SAAS + DrivingProviderProfile) | ❌ Pending |
 | Non-driving SaaS identification | ❌ Pending |
