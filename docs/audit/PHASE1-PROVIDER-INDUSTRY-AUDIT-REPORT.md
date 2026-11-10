@@ -456,3 +456,172 @@ No other production schema changes are needed. The production schema is correct 
 | R1: Committed migration SQL corrected | Pending — no approval needed |
 | R3: _prisma_migrations checksum corrected | Pending — requires approval |
 | Industry backfill | Not approved |
+
+---
+
+## Final Reconciliation Investigation (2026-11-10, commit 342414f5)
+
+**Script:** `scripts/migration-reconciliation.cjs` v2  
+**Script exit code:** 1 (1 discrepancy — checksum mismatch; 3 warnings — SAAS fixtures, failed ledger record, unrecorded migrations)  
+**No production changes made.**
+
+### Section 1 — Committed migration file
+
+| Field | Value |
+|---|---|
+| File | `prisma/migrations/20261109000001_add_provider_industry_and_discovery/migration.sql` |
+| Size | 1626 bytes (after R1 correction) |
+| SHA-256 | `18b190a1e578ae0e7e33af0900599e1d3b28a9b7e7ded763e99e5cf9dbdfce8b` |
+
+### Section 2 — _prisma_migrations record
+
+| Field | Value |
+|---|---|
+| id | `04ab6344-3e07-4de3-8892-3727f444700b` |
+| checksum (stored) | `00000000000000000000000000000000` |
+| checksum (expected) | `18b190a1e578ae0e7e33af0900599e1d3b28a9b7e7ded763e99e5cf9dbdfce8b` |
+| checksums match | **NO** (this is the single discrepancy R3 will correct) |
+| finished_at | `2026-11-10T22:13:12 AWST` (not null) |
+| rolled_back_at | null |
+| applied_steps_count | 1 |
+| logs | null |
+
+### Section 3 — Provider.industry column
+
+All checks pass:
+- `data_type = text` ✅
+- `is_nullable = YES` ✅
+- `column_default = none` ✅ (matches committed SQL — no default)
+
+### Section 4 — ProviderDiscovery columns (all 7)
+
+All checks pass after R1 correction. `updatedAt` now expected to have `DEFAULT CURRENT_TIMESTAMP` — matches production:
+- `id` text NOT NULL, no default ✅
+- `providerId` text NOT NULL, no default ✅
+- `selectedGoals` jsonb nullable, no default ✅
+- `otherNeeds` text nullable, no default ✅
+- `skipped` boolean NOT NULL DEFAULT false ✅
+- `submittedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ✅
+- `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ✅
+
+### Section 5 — Indexes
+
+All 3 expected indexes present and correct:
+- `ProviderDiscovery_pkey` UNIQUE on `id` ✅
+- `ProviderDiscovery_providerId_key` UNIQUE on `providerId` ✅
+- `ProviderDiscovery_providerId_idx` non-unique on `providerId` ✅
+
+### Section 6 — FK constraint
+
+`ProviderDiscovery_providerId_fkey`:
+- Column `providerId` → `Provider.id` ✅
+- `ON UPDATE CASCADE` ✅
+- `ON DELETE CASCADE` ✅
+
+### Section 7 — Full _prisma_migrations ledger (3 records)
+
+| migration_name | state | steps | finished_at | rolled_back_at | checksum |
+|---|---|---|---|---|---|
+| `20260116000000_sub_06_a_unique_constraints` | FAILED (logs present) | 0 | null | null | real SHA-256 |
+| `20261007222011_brand_v11_provider_customslug_unique` | APPLIED_NO_STEPS | 0 | 2026-10-07 | null | real SHA-256 |
+| `20261109000001_add_provider_industry_and_discovery` | APPLIED | 1 | 2026-11-10 | null | **ALL-ZERO** |
+
+#### Failed migration: `20260116000000_sub_06_a_unique_constraints`
+
+This migration has `finished_at = null`, `rolled_back_at = null`, `applied_steps_count = 0`, and logs showing:
+```
+Database error code: 42P07
+ERROR: relation "Provider_stripeCustomerId_key" already exists
+```
+The constraint already existed in the database (applied manually before Prisma recorded the migration). The migration failed because it tried to create a constraint that was already present. The database state is functionally correct — the constraint exists. The `_prisma_migrations` record shows a failed attempt, not a missing constraint.
+
+**This is a pre-existing condition unrelated to the Phase 1 migration work.**  
+**It does not affect the production schema's correctness.**  
+It does mean `prisma migrate deploy` is blocked by this failed record. Any future use of `prisma migrate deploy` would require resolving this with `prisma migrate resolve --applied 20260116000000_sub_06_a_unique_constraints` after verifying the constraint exists in production. This is out of scope for Phase 1.
+
+### Section 8 — Migration directories vs ledger
+
+| Count | Description |
+|---|---|
+| 43 | Migration directories on disk with migration.sql |
+| 3 | Records in `_prisma_migrations` |
+| 40 | Directories not recorded (applied outside prisma migrate deploy) |
+
+The 40 unrecorded migrations were all applied ad-hoc — this is the established pattern for this project.
+
+### prisma migrate status (read-only diagnostic, 2026-11-10)
+
+**Exit code: non-zero**  
+**Output summary:**
+- 43 migrations found in prisma/migrations
+- 40 listed as "not yet applied" (the unrecorded ad-hoc migrations)
+- 1 failed migration (`20260116000000`) blocking `prisma migrate deploy`
+- `20261109000001` (ours) NOT listed as unapplied — Prisma sees it as applied but would flag it as checksum-modified if checked further
+
+`prisma migrate deploy` cannot be used to apply future migrations until the failed `20260116000000` record is resolved and the 40 unrecorded migrations are either resolved or recorded. This is a broader ledger issue outside Phase 1 scope.
+
+---
+
+## R3 — Guarded Procedure (not yet executed)
+
+**Script:** `scripts/r3-checksum-update.cjs`  
+**Status: awaiting explicit approval**
+
+The script contains 8 guards that must all pass before the UPDATE executes:
+- G1: exactly 1 matching record
+- G2: existing checksum is the known all-zero placeholder (prevents overwriting a valid checksum)
+- G3: finished_at is not null (applied migration)
+- G4: rolled_back_at is null
+- G5: applied_steps_count >= 1
+- G6: new checksum is a valid non-zero SHA-256
+- G7: exactly 1 row updated
+- G8: post-update checksum matches expected value
+
+**R3 limitations:**
+- R3 corrects only the checksum for `20261109000001`. It does not:
+  - Resolve the failed `20260116000000` migration record
+  - Register the 40 unrecorded migrations
+  - Fix `20261007222011` which has `applied_steps_count = 0`
+  - Repair the broader migration ledger
+- After R3, `prisma migrate status` will still exit non-zero due to the failed `20260116000000` record and 40 unrecorded migrations
+- R3 does not unblock `prisma migrate deploy`
+
+---
+
+## Industry Backfill — Targeted Procedure (not yet executed)
+
+**Script:** `scripts/industry-backfill-marketplace.cjs`  
+**Status: awaiting separate explicit approval**
+
+Uses the exact 5 provider IDs from the classification evidence (Section: Full Provider Classification). Does not use a broad `businessModel = 'MARKETPLACE'` condition.
+
+**Target IDs:**
+1. `cmuuxw8jb0002zxy882y5vn4l` — Phase3B Test User
+2. `cmuuxy5c300021wy5toyluih7` — Phase3B Test User
+3. `cmuuy7d8n000i1wy5cx85ergg` — Birhane Test (birhane157@gmail.com)
+4. `cmuuyc03e000x1wy5cnlqyjdw` — Phase3B Test User
+5. `cmuv3q0ct0004pf9m2zsy1k2t` — Debesay Weldegebeiel Birhane (birhane457@gmail.com)
+
+The 8 SAAS fixture records are explicitly excluded and verified unchanged by guard G8.
+
+---
+
+## Phase 1 — Revised Completion Criteria
+
+| Step | Status | Evidence |
+|---|---|---|
+| Affected window (3cad6cbd → 8a78f122) confirmed clear | Complete | Live DB query, 0 providers |
+| Migration SQL reviewed | Complete | Statement-by-statement analysis above |
+| Migration applied | Complete | apply-and-verify-migration-industry.cjs |
+| Schema verified (V1–V6 all pass in reconciliation v2) | Complete | migration-reconciliation.cjs v2 output |
+| _prisma_migrations record present | Complete | V5 — finished_at 2026-11-10 |
+| R1 — committed SQL corrected (updatedAt default) | Complete | 342414f5 |
+| Full provider classification | Complete | 5 MARKETPLACE, 8 SAAS fixtures, 0 unresolved |
+| Reconciliation script v2 (non-zero exit on discrepancy) | Complete | 1 discrepancy: checksum |
+| prisma migrate status output recorded | Complete | Exit: non-zero; 40 unrecorded, 1 failed |
+| Guarded R3 procedure prepared | Complete | scripts/r3-checksum-update.cjs |
+| Targeted backfill procedure prepared | Complete | scripts/industry-backfill-marketplace.cjs |
+| R3 — _prisma_migrations checksum corrected | **Awaiting approval** | Approval required |
+| Industry backfill — 5 MARKETPLACE providers | **Awaiting separate approval** | Approval required |
+| Broader migration ledger (failed + 40 unrecorded) | Out of scope for Phase 1 | Separate decision required |
+| Phase 2 implementation | **Not yet authorised** | Blocked pending Phase 1 completion |
