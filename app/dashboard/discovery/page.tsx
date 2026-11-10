@@ -84,8 +84,6 @@ const CAPABILITIES: Capability[] = [
   },
 ];
 
-const GOAL_KEYS = CAPABILITIES.map(c => c.key);
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DiscoveryPage() {
@@ -176,7 +174,11 @@ export default function DiscoveryPage() {
         setTimeout(() => router.push('/dashboard'), 1000);
       } else {
         const data = await response.json().catch(() => ({}));
-        setSaveError(data.error || data.message || 'Failed to save. Please try again.');
+        // Zod refine errors come as an array; flatten to a readable message
+        const errors = Array.isArray(data.error)
+          ? data.error.map((e: any) => e.message || String(e)).join(' ')
+          : (data.error || data.message || 'Failed to save. Please try again.');
+        setSaveError(errors);
       }
     } catch {
       setSaveError('Network error — please check your connection and try again.');
