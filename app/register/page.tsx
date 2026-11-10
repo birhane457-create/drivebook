@@ -99,8 +99,13 @@ export default function RegisterPage() {
     e.preventDefault()
     setError('')
 
-    if (!termsAccepted || !privacyAccepted) {
-      setError('Please accept both the Terms and Privacy Policy to continue.')
+    // Privacy is always required. Terms are only required for marketplace providers.
+    if (!privacyAccepted) {
+      setError('Please accept the Privacy Policy to continue.')
+      return
+    }
+    if (isDriving && selectedModel === 'MARKETPLACE' && !termsAccepted) {
+      setError('Please accept the Instructor Terms & Conditions to continue.')
       return
     }
 
@@ -348,25 +353,40 @@ export default function RegisterPage() {
 
             {/* Legal checkboxes */}
             <div className="space-y-3 pt-2 border-t border-gray-200">
-              <label className="flex items-start gap-3 cursor-pointer group">
-                <div className="mt-0.5 shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={termsAccepted}
-                    onChange={e => setTermsAccepted(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 bg-white accent-violet-600 cursor-pointer"
-                  />
-                </div>
-                <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors leading-relaxed">
-                  I agree to the{' '}
-                  <Link href="/terms" target="_blank" rel="noopener noreferrer"
-                    className="text-violet-600 hover:text-violet-700 font-medium underline underline-offset-2">
-                    Terms &amp; Conditions
-                  </Link>{' '}
-                  and confirm I am an independent contractor.
-                </span>
-              </label>
+              {/* Commercial agreement checkbox — Marketplace driving instructors only.
+                  SaaS providers do not see this: SaaS Terms are not yet published.
+                  Non-driving (SAAS) providers also have no terms to accept. */}
+              {isDriving && selectedModel === 'MARKETPLACE' && (
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <div className="mt-0.5 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={termsAccepted}
+                      onChange={e => setTermsAccepted(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 bg-white accent-violet-600 cursor-pointer"
+                    />
+                  </div>
+                  <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors leading-relaxed">
+                    I agree to the{' '}
+                    <Link href="/instructor-terms" target="_blank" rel="noopener noreferrer"
+                      className="text-violet-600 hover:text-violet-700 font-medium underline underline-offset-2">
+                      Instructor Terms &amp; Conditions
+                    </Link>{' '}
+                    and confirm I am an independent contractor.
+                  </span>
+                </label>
+              )}
 
+              {/* SaaS notice — no terms to accept yet */}
+              {(isDriving && selectedModel === 'SAAS') || !isDriving ? (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <p className="text-xs text-amber-800">
+                    <strong>Service agreement:</strong> DriveBook SaaS Terms are being finalised. You will be notified when they are published and asked to accept them before commercial services are activated. Your account and all non-commercial features are available immediately after registration.
+                  </p>
+                </div>
+              ) : null}
+
+              {/* Privacy policy — always required, all providers */}
               <label className="flex items-start gap-3 cursor-pointer group">
                 <div className="mt-0.5 shrink-0">
                   <input
@@ -388,7 +408,7 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={loading || !termsAccepted || !privacyAccepted || (isDriving && !selectedModel)}
+              disabled={loading || !privacyAccepted || (isDriving && !selectedModel) || (isDriving && selectedModel === 'MARKETPLACE' && !termsAccepted)}
               className={[
                 'w-full py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2',
                 'bg-gradient-to-r from-violet-600 to-purple-600 text-white',

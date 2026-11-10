@@ -180,11 +180,12 @@ model Provider {
   // businessModel (MARKETPLACE/SAAS) and paymentMode (PLATFORM/DIRECT).
   industry                  String?
   // Organisation type — separate from accountType and businessModel.
-  // INDIVIDUAL_INSTRUCTOR: single provider operating independently (default).
-  // DRIVING_SCHOOL: organisation with multiple instructors (designed, not yet enabled).
-  // Setting organisationType = DRIVING_SCHOOL does NOT set accountType = BUSINESS.
-  // Multi-provider permissions are gated separately.
-  organisationType          String     @default("INDIVIDUAL_INSTRUCTOR")
+  // INDIVIDUAL_INSTRUCTOR: driving instructor operating independently.
+  // DRIVING_SCHOOL: school with multiple instructors (designed, not yet enabled).
+  // SOLE_TRADER: non-driving sole trader (default for plumber/electrician/beauty/tax).
+  // BUSINESS: multi-provider organisation (reserved; not assigned at registration).
+  // Does NOT activate accountType=BUSINESS or multi-provider permissions.
+  organisationType          String     @default("SOLE_TRADER")
   // Commercial agreement — type and status derived server-side from businessModel.
   // Type: MARKETPLACE_TERMS | SAAS_TERMS
   // Status: PENDING (terms not yet published/accepted) | ACCEPTED

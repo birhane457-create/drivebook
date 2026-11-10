@@ -9,6 +9,7 @@ import {
   Check, ChevronRight, X, Loader2, Sparkles
 } from 'lucide-react';
 import DashboardPageLayout from '@/components/ui/page-layout';
+import { getAiCapabilityProfile } from '@/lib/config/registration-constants';
 
 // ── Capability definitions ───────────────────────────────────────────────────
 //
@@ -102,11 +103,13 @@ export default function DiscoveryPage() {
   const paymentModel = (session?.user as any)?.paymentModel as string | undefined;
   const businessType = (session?.user as any)?.businessType as string | undefined;
   const isSaas = paymentModel === 'saas';
-  // Trades where the AI can initiate a quote request but cannot book directly.
-  // This matches the actual template configuration (aiCanBook: false, aiCanQuote: true).
-  const isQuoteOnlyTrade = businessType === 'plumber' || businessType === 'electrician';
 
-  // Build the capability list with business-type-specific descriptions
+  // Look up the AI capability profile from the actual service template configuration.
+  // This avoids hardcoding per-businessType logic here and stays aligned with the
+  // actual aiCanBook/aiCanQuote values in the preset configs.
+  const aiProfile = getAiCapabilityProfile(businessType);
+
+  // Build the capability list with business-type-specific and payment-model-specific descriptions
   const capabilities = CAPABILITIES.map(cap => {
     if (cap.key === 'booking') {
       return {
@@ -120,17 +123,29 @@ export default function DiscoveryPage() {
       };
     }
     if (cap.key === 'ai') {
-      // AI description depends on what the provider's template actually supports.
-      // Plumbing and electrical: AI can collect job details and initiate a quote
-      //   request for provider review, but cannot book directly (aiCanBook: false).
-      // All other types: AI can book appointments (aiCanBook: true).
-      const aiDescription = isQuoteOnlyTrade
-        ? 'An AI receptionist can answer incoming calls, collect job details and customer information, communicate a configured call-out charge, and create a quote request for your review. The AI collects enquiry information — it does not produce a final job price. You receive the details and assess the work before quoting.'
-        : 'An AI receptionist can answer incoming calls, check availability using your booking calendar, assist with new bookings, and send booking confirmations and relevant messages. This reduces missed calls and manual handling of booking enquiries.';
-      return {
-        ...cap,
-        description: aiDescription,
-      };
+      // Generate AI description from the actual capability profile.
+      let aiDescription: string;
+      if (!aiProfile.aiCanBook && aiProfile.aiCanQuote) {
+        // Quote-only trades (plumber, electrician):
+        // AI collects enquiry details and creates a quote request for provider review.
+        // No fixed charge configuration exists in templates — do not advertise one.
+        aiDescription =
+          'An AI receptionist can answer incoming calls, collect job details and customer information, and create a quote request for your review. ' +
+          'You receive the full enquiry details and decide whether to proceed and at what price. ' +
+          'The AI does not produce a final price or quotation — that remains your responsibility.';
+      } else if (aiProfile.aiCanBook && aiProfile.aiCanQuote && aiProfile.mixed) {
+        // Mixed trades (tax): some services are bookable; others require a quote first.
+        aiDescription =
+          'An AI receptionist can answer incoming calls and book supported appointments such as consultations and standard tax returns. ' +
+          'For more complex work such as business tax returns, the AI collects details and creates an enquiry for your review before any booking is confirmed. ' +
+          'Booking confirmations and relevant messages are sent automatically.';
+      } else {
+        // Booking-capable trades (driving, beauty):
+        aiDescription =
+          'An AI receptionist can answer incoming calls, check availability using your booking calendar, assist with new bookings, and send booking confirmations and relevant messages. ' +
+          'This reduces missed calls and manual handling of booking enquiries.';
+      }
+      return { ...cap, description: aiDescription };
     }
     return cap;
   });
