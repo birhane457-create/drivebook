@@ -8,17 +8,32 @@ export const dynamic = 'force-dynamic';
 
 // ── Validation ───────────────────────────────────────────────────────────────
 
+const VALID_GOAL_KEYS = ['reports', 'website', 'ai', 'booking', 'crm', 'automation'] as const;
+type GoalKey = typeof VALID_GOAL_KEYS[number];
+
 const discoverySchema = z.object({
   // Array of selected capability keys — must be from the known set
-  selectedGoals: z.array(
-    z.enum(['reports', 'website', 'ai', 'booking', 'crm', 'automation'])
-  ).optional().default([]),
+  selectedGoals: z.array(z.enum(VALID_GOAL_KEYS)).optional().default([]),
   // Optional free-text "other needs" — nullable so the page can send null
-  // when the field is empty (Zod .optional() accepts undefined, not null)
   otherNeeds: z.string().max(2000).nullable().optional(),
   // Whether the provider is skipping discovery (can complete later)
   skipped: z.boolean().optional().default(false),
-});
+}).refine(
+  data => {
+    // When not skipping, at least one goal must be selected or otherNeeds must be non-empty.
+    // This prevents empty discovery records that would hide the invitation permanently.
+    if (!data.skipped) {
+      const hasGoals = (data.selectedGoals?.length ?? 0) > 0;
+      const hasOtherNeeds = !!data.otherNeeds?.trim();
+      return hasGoals || hasOtherNeeds;
+    }
+    return true;
+  },
+  {
+    message: 'Please select at least one capability or describe your needs before saving.',
+    path: ['selectedGoals'],
+  }
+);
 
 // ── GET: Retrieve existing discovery answers ────────────────────────────────
 
