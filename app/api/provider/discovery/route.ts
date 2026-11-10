@@ -13,8 +13,9 @@ const discoverySchema = z.object({
   selectedGoals: z.array(
     z.enum(['reports', 'website', 'ai', 'booking', 'crm', 'automation'])
   ).optional().default([]),
-  // Optional free-text "other needs"
-  otherNeeds: z.string().max(2000).optional(),
+  // Optional free-text "other needs" — nullable so the page can send null
+  // when the field is empty (Zod .optional() accepts undefined, not null)
+  otherNeeds: z.string().max(2000).nullable().optional(),
   // Whether the provider is skipping discovery (can complete later)
   skipped: z.boolean().optional().default(false),
 });

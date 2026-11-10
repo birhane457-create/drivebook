@@ -518,7 +518,7 @@ export default async function DashboardPage() {
       }} />
 
       {/* ── Provider discovery — optional onboarding step ──────────────── */}
-      {!(instructor as any).discovery && (
+      {(!(instructor as any).discovery || (instructor as any).discovery?.skipped === true) && (
         <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 flex items-start gap-3">
           <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
             <Sparkles className="h-4 w-4 text-violet-500" />
