@@ -72,11 +72,15 @@ export const authOptions: NextAuthOptions = {
         let paymentModel: 'marketplace' | 'saas' | undefined
 
         if (user.provider) {
-          // businessModel is set at registration from the business type
+          // businessModel is set at registration from the business model selection
           paymentModel = (user.provider?.businessModel as string)?.toLowerCase() === 'marketplace'
             ? 'marketplace'
             : 'saas'
-          businessType = paymentModel === 'marketplace' ? 'driving' : 'other'
+          // Read industry directly from the Provider record instead of inferring
+          // from businessModel. A driving instructor who selects SAAS has
+          // businessModel=SAAS but industry=driving — the old inference would
+          // incorrectly set businessType='other', hiding driving-specific features.
+          businessType = (user.provider as any)?.industry ?? 'driving'
         } else if (user.providerId) {
           // Legacy: user has providerId but provider not yet loaded
           businessType = 'driving'
