@@ -314,20 +314,20 @@ export default function EarningsPage() {
           </Link>
         </div>
 
-        {/* PREMIUM — direct payments coming soon */}
+        {/* DIRECT payment mode — unavailable notice */}
         {isPremium && (
-          <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 flex items-start gap-3">
-            <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0 mt-0.5">
-              <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
+              <svg className="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-violet-300">Direct payments — coming soon</p>
+              <p className="text-sm font-semibold text-amber-600">Direct payments — not yet available</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                As a Premium provider, you&apos;ll soon be able to connect your own Stripe account.
-                Clients pay you directly — 0% commission, you keep 100% of every booking.
-                Your $199/mo subscription is your only DriveBook cost.
+                Your account is configured for direct payments. This feature is not yet operational.
+                You can use all non-payment features (calendar, CRM, scheduling, documents, branding).
+                Online payment booking will be available once direct payments are enabled.
               </p>
             </div>
           </div>
