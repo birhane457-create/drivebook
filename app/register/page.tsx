@@ -76,6 +76,12 @@ export default function RegisterPage() {
   // Other trades are always SaaS (the API enforces this server-side).
   const [selectedModel, setSelectedModel] = useState<'MARKETPLACE' | 'SAAS' | null>(null)
 
+  // Organisation type — only for driving instructors.
+  // INDIVIDUAL_INSTRUCTOR is the default and the only currently enabled option.
+  // DRIVING_SCHOOL is designed but disabled (shown as coming soon).
+  // Non-driving providers are always INDIVIDUAL_INSTRUCTOR.
+  const [selectedOrgType, setSelectedOrgType] = useState<'INDIVIDUAL_INSTRUCTOR'>('INDIVIDUAL_INSTRUCTOR')
+
   // Get business type from URL params, default to driving
   const businessType = searchParams.get('businessType') || 'driving'
   const config = businessTypeConfig[businessType] || businessTypeConfig.driving
@@ -115,6 +121,11 @@ export default function RegisterPage() {
           // omitted values to MARKETPLACE. For non-driving, the API forces SAAS
           // regardless of what is sent here.
           ...(isDriving && selectedModel ? { businessModel: selectedModel } : {}),
+          // organisationType — only sent for driving instructors.
+          // Non-driving providers are always INDIVIDUAL_INSTRUCTOR (server-enforced).
+          ...(isDriving ? { organisationType: selectedOrgType } : {}),
+          // Privacy policy acceptance — required. The API validates this as literal true.
+          privacyAccepted: true as const,
           termsAccepted: true,
           termsVersion:  '1.0',
         }),
@@ -226,6 +237,52 @@ export default function RegisterPage() {
                     </div>
                   </div>
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Organisation type — driving instructors only */}
+          {isDriving && (
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3">What is your organisation type?</h2>
+              <div className="space-y-3">
+                {/* Individual instructor — available */}
+                <div
+                  className="w-full text-left p-4 rounded-xl border-2 border-violet-500 bg-violet-50 cursor-default"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 border-violet-500 bg-violet-500 flex items-center justify-center">
+                      <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-900">Independent instructor</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        One provider operating independently under your own name or business name.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Driving school — coming soon */}
+                <div
+                  className="w-full text-left p-4 rounded-xl border-2 border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
+                  aria-disabled="true"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 border-gray-300" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-700">Driving school</p>
+                        <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-medium">Coming soon</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Organisation with multiple instructors operating under a school identity. Not yet available.
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

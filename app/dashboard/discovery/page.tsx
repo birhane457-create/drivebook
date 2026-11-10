@@ -100,9 +100,13 @@ export default function DiscoveryPage() {
 
   const providerId = session?.user?.providerId;
   const paymentModel = (session?.user as any)?.paymentModel as string | undefined;
+  const businessType = (session?.user as any)?.businessType as string | undefined;
   const isSaas = paymentModel === 'saas';
+  // Trades where the AI can initiate a quote request but cannot book directly.
+  // This matches the actual template configuration (aiCanBook: false, aiCanQuote: true).
+  const isQuoteOnlyTrade = businessType === 'plumber' || businessType === 'electrician';
 
-  // Build the capability list with business-model-specific booking description
+  // Build the capability list with business-type-specific descriptions
   const capabilities = CAPABILITIES.map(cap => {
     if (cap.key === 'booking') {
       return {
@@ -113,6 +117,19 @@ export default function DiscoveryPage() {
             ? ' Direct online checkout is not yet available for SaaS providers. You can log offline bookings while online payments are being activated.'
             : ' DriveBook manages payments and pays you weekly.'),
         availabilityLabel: isSaas ? 'Partial — payments not yet available' : 'Available',
+      };
+    }
+    if (cap.key === 'ai') {
+      // AI description depends on what the provider's template actually supports.
+      // Plumbing and electrical: AI can collect job details and initiate a quote
+      //   request for provider review, but cannot book directly (aiCanBook: false).
+      // All other types: AI can book appointments (aiCanBook: true).
+      const aiDescription = isQuoteOnlyTrade
+        ? 'An AI receptionist can answer incoming calls, collect job details and customer information, communicate a configured call-out charge, and create a quote request for your review. The AI collects enquiry information — it does not produce a final job price. You receive the details and assess the work before quoting.'
+        : 'An AI receptionist can answer incoming calls, check availability using your booking calendar, assist with new bookings, and send booking confirmations and relevant messages. This reduces missed calls and manual handling of booking enquiries.';
+      return {
+        ...cap,
+        description: aiDescription,
       };
     }
     return cap;

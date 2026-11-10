@@ -179,6 +179,25 @@ model Provider {
   // 'plumber', 'electrician', 'beauty', 'tax', 'other'. This is separate from
   // businessModel (MARKETPLACE/SAAS) and paymentMode (PLATFORM/DIRECT).
   industry                  String?
+  // Organisation type — separate from accountType and businessModel.
+  // INDIVIDUAL_INSTRUCTOR: single provider operating independently (default).
+  // DRIVING_SCHOOL: organisation with multiple instructors (designed, not yet enabled).
+  // Setting organisationType = DRIVING_SCHOOL does NOT set accountType = BUSINESS.
+  // Multi-provider permissions are gated separately.
+  organisationType          String     @default("INDIVIDUAL_INSTRUCTOR")
+  // Commercial agreement — type and status derived server-side from businessModel.
+  // Type: MARKETPLACE_TERMS | SAAS_TERMS
+  // Status: PENDING (terms not yet published/accepted) | ACCEPTED
+  // SaaS Terms remain PENDING until the SaaS Terms document is published.
+  // Marketplace Terms use the existing termsAcceptedAt / termsVersion on User.
+  commercialAgreementType    String?
+  commercialAgreementStatus  String     @default("PENDING")
+  commercialAgreementVersion String?
+  commercialAgreementAcceptedAt DateTime?
+  // Privacy consent — separate from commercial agreement.
+  // Recorded at registration; version and timestamp preserved independently.
+  privacyPolicyVersion       String?
+  privacyPolicyAcceptedAt    DateTime?
   business                  Business?          @relation(fields: [businessId], references: [id])
   // Provider discovery answers (optional onboarding step)
   discovery                 ProviderDiscovery?
