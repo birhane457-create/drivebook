@@ -76,11 +76,19 @@ export const authOptions: NextAuthOptions = {
           paymentModel = (user.provider?.businessModel as string)?.toLowerCase() === 'marketplace'
             ? 'marketplace'
             : 'saas'
-          // Read industry directly from the Provider record instead of inferring
-          // from businessModel. A driving instructor who selects SAAS has
-          // businessModel=SAAS but industry=driving — the old inference would
-          // incorrectly set businessType='other', hiding driving-specific features.
-          businessType = (user.provider as any)?.industry ?? 'driving'
+          // Read industry directly from the Provider record when available.
+          // For existing providers registered before the industry field was
+          // added (industry is null), fall back to inferring from businessModel
+          // to avoid incorrectly classifying non-driving providers as driving.
+          // A driving instructor who selected SAAS has industry=driving (set
+          // at registration by the new code), so the fallback is only reached
+          // for pre-existing providers.
+          if ((user.provider as any)?.industry) {
+            businessType = (user.provider as any).industry
+          } else {
+            // Legacy fallback: marketplace = driving, saas = other
+            businessType = paymentModel === 'marketplace' ? 'driving' : 'other'
+          }
         } else if (user.providerId) {
           // Legacy: user has providerId but provider not yet loaded
           businessType = 'driving'

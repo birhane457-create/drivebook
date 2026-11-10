@@ -203,10 +203,18 @@ describe('Registration business-model selection', () => {
   // REG-12: Correct business-model information reaches the provider dashboard
   it('REG-12 | auth.ts reads industry from Provider record, not inferred from businessModel', () => {
     const src = readRouteSource('lib/auth.ts')
-    // The auth callback should read the industry field directly
+    // The auth callback should read the industry field directly when available
     expect(src).toContain('industry')
-    // It should NOT infer businessType from paymentModel
-    expect(src).not.toContain("businessType = paymentModel === 'marketplace' ? 'driving' : 'other'")
+    // It should have a conditional check for the industry field
+    expect(src).toContain("?.industry")
+    // The old unconditional inference (driving/other based solely on paymentModel)
+    // should now be inside a conditional fallback for null industry,
+    // not the primary path
+    expect(src).toContain("paymentModel === 'marketplace' ? 'driving' : 'other'")
+    // The industry check must come BEFORE the fallback
+    const industryCheckIdx = src.indexOf("?.industry")
+    const fallbackIdx = src.indexOf("paymentModel === 'marketplace' ? 'driving' : 'other'")
+    expect(industryCheckIdx).toBeLessThan(fallbackIdx)
   })
 
 // ── Discovery tests ────────────────────────────────────────────────────────
@@ -306,5 +314,106 @@ describe('Provider discovery', () => {
     // It should NOT claim direct checkout is operational
     expect(src).not.toContain('direct checkout is available')
     expect(src).not.toContain('direct payments are available')
+  })
+})
+
+
+// ── Correction batch tests ──────────────────────────────────────────────────
+
+describe('Registration + discovery correction batch', () => {
+
+  // FIX-1: Discovery API accepts null otherNeeds (nullable, not just optional)
+  it('FIX-1 | discovery API schema accepts null for otherNeeds', () => {
+    const src = readRouteSource('app/api/provider/discovery/route.ts')
+    // The schema must use .nullable() — .optional() alone rejects null
+    expect(src).toContain('.nullable()')
+  })
+
+  // FIX-1b: Discovery page omits otherNeeds when empty (doesn't send null)
+  it('FIX-1b | discovery page omits otherNeeds when empty', () => {
+    const src = readRouteSource('app/dashboard/discovery/page.tsx')
+    // The page should conditionally add otherNeeds to the body
+    expect(src).toContain("if (!skipped && otherNeeds.trim())")
+    expect(src).toContain("body.otherNeeds")
+  })
+
+  // FIX-1c: Discovery page shows save error to user
+  it('FIX-1c | discovery page displays save error to user', () => {
+    const src = readRouteSource('app/dashboard/discovery/page.tsx')
+    expect(src).toContain('saveError')
+    expect(src).toContain('setSaveError')
+  })
+
+  // FIX-2: Migration file exists
+  it('FIX-2 | migration file exists for industry + ProviderDiscovery', () => {
+    const migPath = path.join(DRIVEBOOK_ROOT, 'prisma', 'migrations', '20261109000001_add_provider_industry_and_discovery', 'migration.sql')
+    expect(fs.existsSync(migPath)).toBe(true)
+    const sql = fs.readFileSync(migPath, 'utf-8')
+    expect(sql).toContain('"industry"')
+    expect(sql).toContain('ProviderDiscovery')
+    expect(sql).toContain('providerId')
+  })
+
+  // FIX-3: Dashboard shows discovery invitation when skipped === true
+  it('FIX-3 | dashboard shows discovery when skipped === true', () => {
+    const src = readRouteSource('app/dashboard/page.tsx')
+    // Must check both no discovery AND skipped === true
+    expect(src).toContain('discovery?.skipped === true')
+  })
+
+  // FIX-4: Auth fallback for null industry doesn't default to 'driving'
+  it('FIX-4 | auth fallback uses businessModel for null industry, not driving default', () => {
+    const src = readRouteSource('lib/auth.ts')
+    // Must not have a simple ?? 'driving' fallback
+    expect(src).not.toContain("?? 'driving'")
+    // Must have a conditional fallback based on paymentModel
+    expect(src).toContain("paymentModel === 'marketplace' ? 'driving' : 'other'")
+  })
+
+  // FIX-5: Discovery page uses isSaas for business-model-specific wording
+  it('FIX-5 | discovery page generates booking description based on isSaas', () => {
+    const src = readRouteSource('app/dashboard/discovery/page.tsx')
+    // The booking capability description must be dynamic, referencing isSaas
+    expect(src).toContain('isSaas')
+    expect(src).toContain('Direct online checkout is not yet available for SaaS')
+    expect(src).toContain('DriveBook manages payments and pays you weekly')
+  })
+
+  // FIX-5b: Discovery page does not show marketplace wording to SaaS providers
+  it('FIX-5b | SaaS providers see SaaS-specific booking description, not marketplace', () => {
+    const src = readRouteSource('app/dashboard/discovery/page.tsx')
+    // The static CAPABILITIES array must NOT contain marketplace-specific text
+    // in the booking capability description (it's dynamic now)
+    const bookingIdx = src.indexOf("key: 'booking'")
+    const nextKeyIdx = src.indexOf("key: 'crm'")
+    const bookingBlock = src.substring(bookingIdx, nextKeyIdx)
+    // The static description should be empty (set dynamically in component)
+    expect(bookingBlock).toContain("description: ''")
+    // Should not contain marketplace-specific text in the static definition
+    expect(bookingBlock).not.toContain('DriveBook manages payments')
+  })
+
+  // FIX-6: Business-type page has two-step flow
+  it('FIX-6 | business-type page has two-step flow (main + other-industry)', () => {
+    const src = readRouteSource('app/register/business-type/page.tsx')
+    expect(src).toContain("type Step = 'main' | 'other-industry'")
+    expect(src).toContain('Driving instruction')
+    expect(src).toContain('Other trades and services')
+    // Should NOT show all 5 cards directly on the main step
+    expect(src).toContain('OTHER_INDUSTRIES')
+    expect(src).toContain('handleDrivingSelect')
+    expect(src).toContain('handleOtherSelect')
+  })
+
+  // DISC-11: Marketplace-specific wording is not shown to SaaS providers
+  it('DISC-11 | marketplace-specific booking wording is conditional on isSaas', () => {
+    const src = readRouteSource('app/dashboard/discovery/page.tsx')
+    // The dynamic booking description must check isSaas
+    expect(src).toContain("isSaas")
+    // SaaS text and marketplace text are both present (in the dynamic generator)
+    expect(src).toContain('not yet available for SaaS')
+    expect(src).toContain('DriveBook manages payments')
+    // But the static booking capability description should be empty
+    // (set dynamically in component, not in the module-level array)
   })
 })

@@ -58,10 +58,11 @@ const CAPABILITIES: Capability[] = [
     key: 'booking',
     title: 'Online booking and scheduling',
     icon: Calendar,
-    description:
-      'Customers can access your public booking page, view available services and times, and submit booking requests. You manage your availability and bookings through the dashboard. Marketplace providers receive DriveBook-managed payments. SaaS providers using direct payments: online checkout is not yet available.',
+    // Description and availabilityLabel are set dynamically in the component
+    // based on the provider's payment model (marketplace vs SaaS)
+    description: '',
     availability: 'available',
-    availabilityLabel: 'Available',
+    availabilityLabel: '',
   },
   {
     key: 'crm',
@@ -96,11 +97,28 @@ export default function DiscoveryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [existingDiscovery, setExistingDiscovery] = useState<any>(null);
 
   const providerId = session?.user?.providerId;
   const paymentModel = (session?.user as any)?.paymentModel as string | undefined;
   const isSaas = paymentModel === 'saas';
+
+  // Build the capability list with business-model-specific booking description
+  const capabilities = CAPABILITIES.map(cap => {
+    if (cap.key === 'booking') {
+      return {
+        ...cap,
+        description:
+          'Customers can access your public booking page, view available services and times, and submit booking requests. You manage your availability and bookings through the dashboard.' +
+          (isSaas
+            ? ' Direct online checkout is not yet available for SaaS providers. You can log offline bookings while online payments are being activated.'
+            : ' DriveBook manages payments and pays you weekly.'),
+        availabilityLabel: isSaas ? 'Partial — payments not yet available' : 'Available',
+      };
+    }
+    return cap;
+  });
 
   // Load existing discovery answers
   useEffect(() => {
@@ -133,24 +151,35 @@ export default function DiscoveryPage() {
 
   const handleSave = async (skipped: boolean = false) => {
     setSaving(true);
+    setSaveError('');
     try {
+      // Build the request body — omit otherNeeds entirely when empty so Zod
+      // .optional() handles it correctly (null is not accepted by .optional()
+      // unless .nullable() is also set, which it now is — but omitting is cleaner)
+      const body: Record<string, any> = {
+        selectedGoals: skipped ? [] : Array.from(selectedGoals),
+        skipped,
+      };
+      if (!skipped && otherNeeds.trim()) {
+        body.otherNeeds = otherNeeds.trim();
+      }
+
       const response = await fetch('/api/provider/discovery', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          selectedGoals: skipped ? [] : Array.from(selectedGoals),
-          otherNeeds: skipped ? null : (otherNeeds.trim() || null),
-          skipped,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (response.ok) {
         setSaved(true);
         // Redirect to dashboard after a brief delay
         setTimeout(() => router.push('/dashboard'), 1000);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setSaveError(data.error || data.message || 'Failed to save. Please try again.');
       }
     } catch {
-      console.error('Failed to save discovery answers');
+      setSaveError('Network error — please check your connection and try again.');
     } finally {
       setSaving(false);
     }
@@ -223,7 +252,7 @@ export default function DiscoveryPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {CAPABILITIES.map(cap => {
+              {capabilities.map(cap => {
                 const Icon = cap.icon;
                 return (
                   <div key={cap.key} className="rounded-xl border border-border bg-background p-4">
@@ -268,7 +297,7 @@ export default function DiscoveryPage() {
           </p>
 
           <div className="space-y-3 mb-6">
-            {CAPABILITIES.map(cap => {
+            {capabilities.map(cap => {
               const Icon = cap.icon;
               const isSelected = selectedGoals.has(cap.key);
               return (
@@ -315,6 +344,12 @@ export default function DiscoveryPage() {
             />
             <p className="mt-1 text-xs text-gray-500">Optional</p>
           </div>
+
+          {saveError && (
+            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-xl">
+              {saveError}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center justify-between gap-4 pt-2 border-t border-gray-200">
