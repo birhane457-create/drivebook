@@ -71,11 +71,16 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [privacyAccepted, setPrivacyAccepted] = useState(false)
-  
+
+  // Business model selection — only for driving instructors.
+  // Other trades are always SaaS (the API enforces this server-side).
+  const [selectedModel, setSelectedModel] = useState<'MARKETPLACE' | 'SAAS' | null>(null)
+
   // Get business type from URL params, default to driving
   const businessType = searchParams.get('businessType') || 'driving'
   const config = businessTypeConfig[businessType] || businessTypeConfig.driving
   const Icon = config.icon
+  const isDriving = businessType === 'driving'
 
   // Redirect to business type selection if no type specified
   useEffect(() => {
@@ -106,6 +111,10 @@ export default function RegisterPage() {
           password:      formData.get('password'),
           phone:         formData.get('phone'),
           businessType:  businessType,
+          // Only send businessModel for driving instructors; the API defaults
+          // omitted values to MARKETPLACE. For non-driving, the API forces SAAS
+          // regardless of what is sent here.
+          ...(isDriving && selectedModel ? { businessModel: selectedModel } : {}),
           termsAccepted: true,
           termsVersion:  '1.0',
         }),
@@ -153,6 +162,73 @@ export default function RegisterPage() {
 
         {/* Card */}
         <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border shadow-2xl shadow-violet-900/20 p-6 sm:p-8">
+
+          {/* Business model selection — driving instructors only */}
+          {isDriving && (
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3">How would you like to use DriveBook?</h2>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedModel('MARKETPLACE')}
+                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                    selectedModel === 'MARKETPLACE'
+                      ? 'border-violet-500 bg-violet-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 ${
+                      selectedModel === 'MARKETPLACE' ? 'border-violet-500 bg-violet-500' : 'border-gray-300'
+                    }`}>
+                      {selectedModel === 'MARKETPLACE' && (
+                        <svg className="w-3 h-3 text-white mx-auto mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-900">DriveBook Marketplace</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Students discover and book driving lessons through DriveBook. DriveBook manages payments and pays you weekly.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedModel('SAAS')}
+                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                    selectedModel === 'SAAS'
+                      ? 'border-violet-500 bg-violet-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 ${
+                      selectedModel === 'SAAS' ? 'border-violet-500 bg-violet-500' : 'border-gray-300'
+                    }`}>
+                      {selectedModel === 'SAAS' && (
+                        <svg className="w-3 h-3 text-white mx-auto mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-900">DriveBook SaaS</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        You bring your own students. Use DriveBook for booking, scheduling, and business management.
+                      </p>
+                      <p className="text-xs text-amber-600 mt-1.5 font-medium">
+                        Direct payments are not yet available. You can use all non-payment features now.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* What happens next */}
           <div className="mb-6 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 space-y-1.5">
@@ -255,7 +331,7 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={loading || !termsAccepted || !privacyAccepted}
+              disabled={loading || !termsAccepted || !privacyAccepted || (isDriving && !selectedModel)}
               className={[
                 'w-full py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2',
                 'bg-gradient-to-r from-violet-600 to-purple-600 text-white',

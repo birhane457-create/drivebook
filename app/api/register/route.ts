@@ -21,6 +21,10 @@ const registerSchema = z.object({
     .refine(p => /^\+?\d{9,15}$/.test(p), 'Invalid phone number'),
   // Business type — determines which template to use
   businessType: z.enum(['driving', 'plumber', 'electrician', 'beauty', 'tax']).optional().default('driving'),
+  // Business model — driving instructors can choose MARKETPLACE or SAAS.
+  // Non-driving business types are always SAAS (the API enforces this).
+  // Omitted for driving defaults to MARKETPLACE (backward compatible).
+  businessModel: z.enum(['MARKETPLACE', 'SAAS']).optional(),
   // Signup-time fields are now optional — providers complete these in the dashboard
   baseAddress: z.string().optional().default(''),
   hourlyRate: z.number().optional().default(65),
@@ -81,11 +85,23 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Derive businessModel and paymentMode from business type (architecture rule)
-    // Driving = MARKETPLACE (platform operates discovery + payments)
-    // Everything else = SAAS (provider brings own clients, pays subscription)
-    const businessModel = data.businessType === 'driving' ? 'MARKETPLACE' : 'SAAS'
-    const paymentMode   = data.businessType === 'driving' ? 'PLATFORM'    : 'DIRECT'
+    // Derive businessModel and paymentMode with server-side validation.
+    //
+    // Rules (first release):
+    //   driving + MARKETPLACE → MARKETPLACE + PLATFORM  (default if businessModel omitted)
+    //   driving + SAAS        → SAAS + DIRECT
+    //   non-driving           → SAAS + DIRECT           (SAAS forced regardless of request)
+    //
+    // paymentMode is derived from businessModel, not independently chosen.
+    // The fields remain separate in the schema so future releases can allow
+    // SaaS providers to choose DriveBook-managed payments without redesign.
+    const isDriving = data.businessType === 'driving'
+    const businessModel: 'MARKETPLACE' | 'SAAS' =
+      isDriving && data.businessModel === 'SAAS' ? 'SAAS'
+      : isDriving ? 'MARKETPLACE'   // driving + omitted/invalid → MARKETPLACE (backward compatible)
+      : 'SAAS'                       // non-driving → always SAAS (marketplace not offered)
+    const paymentMode: 'PLATFORM' | 'DIRECT' =
+      businessModel === 'SAAS' ? 'DIRECT' : 'PLATFORM'
 
     // Create user, provider, and business in a transaction (15s timeout for Business template creation)
     const result = await prisma.$transaction(async (tx) => {
