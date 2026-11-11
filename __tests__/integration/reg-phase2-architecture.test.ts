@@ -1025,3 +1025,95 @@ describe('IVF — Discovery remains optional and does not change entitlements', 
     expect(d).not.toHaveProperty('discoveryStatus')
   })
 })
+
+// ── SaaS Terms publication lifecycle — UI completeness ───────────────────────
+//
+// These tests verify that the registration page is wired to respond to the
+// SAAS_TERMS_PUBLISHED constant, that the /saas-terms page exists, and that
+// the route Zod schema accepts saasTermsAccepted.
+
+describe('SaaS Terms publication lifecycle — UI and route completeness', () => {
+
+  it('SAAS-UI-1 | Register page imports SAAS_TERMS_PUBLISHED from registration-constants', () => {
+    const page = src('app/register/page.tsx')
+    expect(page).toContain("import { SAAS_TERMS_PUBLISHED, SAAS_TERMS_URL }")
+    expect(page).toContain("from '@/lib/config/registration-constants'")
+  })
+
+  it('SAAS-UI-2 | Register page renders conditional SaaS Terms checkbox when published', () => {
+    const page = src('app/register/page.tsx')
+    // The published branch shows an acceptance checkbox
+    expect(page).toContain('saasTermsAccepted')
+    expect(page).toContain('setSaasTermsAccepted')
+    // Checkbox uses SAAS_TERMS_URL for the link href
+    expect(page).toContain('SAAS_TERMS_URL')
+    // The DriveBook SaaS Terms label text must appear
+    expect(page).toContain('DriveBook SaaS Terms')
+  })
+
+  it('SAAS-UI-3 | Register page submit button is disabled when SaaS Terms published and not accepted', () => {
+    const page = src('app/register/page.tsx')
+    // The disabled condition includes the saasTermsAccepted gate
+    expect(page).toContain('SAAS_TERMS_PUBLISHED')
+    expect(page).toContain('!saasTermsAccepted')
+  })
+
+  it('SAAS-UI-4 | Register page sends saasTermsAccepted in request body on SaaS path when published', () => {
+    const page = src('app/register/page.tsx')
+    expect(page).toContain('saasTermsAccepted: true as const')
+  })
+
+  it('SAAS-UI-5 | Register page still shows unpublished notice when SAAS_TERMS_PUBLISHED is false', () => {
+    const page = src('app/register/page.tsx')
+    // The unpublished branch must still contain the existing notice text
+    expect(page).toContain('SaaS Terms are being finalised')
+  })
+
+  it('SAAS-UI-6 | /saas-terms page exists and contains required content', () => {
+    const page = src('app/saas-terms/page.tsx')
+    expect(page).toContain('DriveBook SaaS Terms')
+    // Status banner warning the terms are not yet in effect
+    expect(page).toContain('Not yet in effect')
+    // Covers parties, subscription, provider responsibilities, privacy, governing law
+    expect(page).toContain('Parties')
+    expect(page).toContain('Subscription')
+    expect(page).toContain('Provider responsibilities')
+    expect(page).toContain('Privacy')
+    expect(page).toContain('Governing law')
+  })
+
+  it('SAAS-UI-7 | /saas-terms page metadata is set', () => {
+    const page = src('app/saas-terms/page.tsx')
+    expect(page).toContain('export const metadata')
+    expect(page).toContain('SaaS Terms')
+  })
+
+  it('SAAS-UI-8 | SAAS_TERMS_URL in constants points to /saas-terms', () => {
+    const constants = src('lib/config/registration-constants.ts')
+    expect(constants).toContain("SAAS_TERMS_URL")
+    expect(constants).toContain("'/saas-terms'")
+  })
+
+  it('SAAS-UI-9 | Registration API Zod schema accepts saasTermsAccepted', () => {
+    const route = src('app/api/register/route.ts')
+    expect(route).toContain('saasTermsAccepted')
+    expect(route).toContain('z.boolean().optional()')
+  })
+
+  it('SAAS-UI-10 | Derivation enforces saasTermsAccepted when published — confirmed via published injection', () => {
+    // This matches IVF-SP1 but is here as a lifecycle-completeness assertion
+    expect(() => deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'SAAS',
+      _testSaasPublished: { published: true, version: '1.0' },
+      // saasTermsAccepted deliberately omitted
+    })).toThrow('You must accept the DriveBook SaaS Terms')
+
+    // With acceptance it succeeds
+    const d = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'SAAS',
+      saasTermsAccepted: true,
+      _testSaasPublished: { published: true, version: '1.0' },
+    })
+    expect(d.commercialAgreementStatus).toBe('ACCEPTED')
+  })
+})
