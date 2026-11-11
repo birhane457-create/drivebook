@@ -609,6 +609,58 @@ describe('Migration classification — organisationType strategy', () => {
   })
 })
 
+// ── Dev helper script — drift guard ──────────────────────────────────────────
+//
+// apply-phase2-migration.cjs is a dev-only convenience script.
+// Its SQL MUST stay in sync with the authoritative Prisma migration.
+// These tests prevent silent drift between the two files.
+
+describe('Dev helper script — apply-phase2-migration.cjs sync with migration.sql', () => {
+
+  it('DRIFT-1 | apply script organisationType column is nullable TEXT (no NOT NULL)', () => {
+    const helper = src('scripts/apply-phase2-migration.cjs')
+    // Must be plain nullable TEXT — no NOT NULL constraint
+    expect(helper).toContain('"organisationType"             TEXT,')
+    expect(helper).not.toContain('"organisationType"             TEXT NOT NULL')
+  })
+
+  it('DRIFT-2 | apply script has no SOLE_TRADER default for organisationType', () => {
+    const helper = src('scripts/apply-phase2-migration.cjs')
+    // No DEFAULT clause for organisationType
+    expect(helper).not.toContain("DEFAULT 'SOLE_TRADER'")
+  })
+
+  it('DRIFT-3 | apply script SQL columns match migration.sql columns', () => {
+    const helper = src('scripts/apply-phase2-migration.cjs')
+    const mig    = src('prisma/migrations/20261110000001_add_organisation_type_and_agreement_fields/migration.sql')
+    // Both must add all 7 columns
+    const columns = [
+      '"organisationType"',
+      '"commercialAgreementType"',
+      '"commercialAgreementStatus"',
+      '"commercialAgreementVersion"',
+      '"commercialAgreementAcceptedAt"',
+      '"privacyPolicyVersion"',
+      '"privacyPolicyAcceptedAt"',
+    ]
+    for (const col of columns) {
+      expect(helper).toContain(col)
+      expect(mig).toContain(col)
+    }
+  })
+
+  it('DRIFT-4 | apply script is documented as dev-only and not for production', () => {
+    const helper = src('scripts/apply-phase2-migration.cjs')
+    expect(helper).toContain('DEV-ONLY')
+    expect(helper).toContain('NOT for production')
+  })
+
+  it('DRIFT-5 | apply script references migration.sql as the authoritative source', () => {
+    const helper = src('scripts/apply-phase2-migration.cjs')
+    expect(helper).toContain('migration.sql')
+  })
+})
+
 // ── Backward compatibility ────────────────────────────────────────────────────
 
 describe('Backward compatibility', () => {
