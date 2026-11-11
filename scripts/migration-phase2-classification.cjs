@@ -112,7 +112,15 @@ async function main() {
     p._classification = classification;
     p._confidence     = confidence;
     p._reasons        = reasons;
-    groups[classification].push(p);
+
+    // Route to the correct group explicitly so the grouping is auditable
+    if (classification === 'INDIVIDUAL_INSTRUCTOR') {
+      groups.INDIVIDUAL_INSTRUCTOR.push(p);
+    } else if (classification === 'SOLE_TRADER') {
+      groups.SOLE_TRADER.push(p);
+    } else {
+      groups.REVIEW.push(p);  // REVIEW: requires manual investigation
+    }
   }
 
   console.log(`\nTotal providers: ${providers.length}`);
@@ -179,7 +187,7 @@ IMMEDIATELY AFTER MIGRATION (columns added, all values are DEFAULT/NULL):
   Risk: LOW.
 
 AFTER PROVIDERS HAVE REGISTERED WITH THE NEW CODE (agreement and consent data populated):
-  Dropping the columns DESTROYS real legal consent records:
+  Dropping the columns destroys real legal consent records:
     - commercialAgreementStatus / Version / AcceptedAt: legal agreement acceptance evidence
     - privacyPolicyVersion / AcceptedAt: privacy consent timestamps
     - organisationType: account classification

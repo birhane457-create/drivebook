@@ -53,7 +53,10 @@ const registerSchema = z.object({
   // SaaS acceptance — required when SaaS Terms are published (SAAS_TERMS_PUBLISHED=true).
   // Not sent while SaaS Terms are unpublished.
   saasTermsAccepted: z.boolean().optional(),
-  ageDeclaration: z.boolean().optional(),
+  // ageDeclaration is intentionally NOT accepted in provider registration.
+  // It is a LEARNER/CLIENT declaration ("I am 16+ with a valid permit")
+  // used in the public booking form (app/api/public/bookings/route.ts).
+  // It has no meaning in the provider registration context.
   // termsVersion is intentionally NOT accepted from the browser.
   // The server derives the version from constants in lib/registration/derive-registration-fields.ts.
 })
@@ -160,7 +163,9 @@ export async function POST(req: NextRequest) {
             // Server-controlled version — not from the browser.
             // Only set for MARKETPLACE providers who accepted the Instructor Terms.
             termsVersion: userTermsVersion ?? undefined,
-            ageDeclaration: data.ageDeclaration ?? false,
+            // ageDeclaration is NOT written during provider registration.
+            // It is a LEARNER/CLIENT declaration (learner's permit eligibility)
+            // and has no meaning in the provider registration context.
           }),
         },
       })
