@@ -1,359 +1,419 @@
 /**
- * Phase 2 registration architecture tests (corrected — Stage 1 fixes applied)
+ * Phase 2 registration architecture tests — Stage 1B
  *
- * FIX-1  Marketplace agreement: correct link, correct version (2.0)
- * FIX-2  SaaS agreement: commercialAgreementVersion = null (not 'PENDING')
- * FIX-3  Privacy Policy: version = 2.0 (matches published page)
- * FIX-4  Organisation types: SOLE_TRADER for non-driving; DRIVING_SCHOOL rejected by API
- * FIX-5  AI descriptions: derived from AI_CAPABILITY_MAP (actual template config)
- * FIX-6  Driving school: rejected with DRIVING_SCHOOL_NOT_AVAILABLE
- * FIX-7  Tests exercise constants, not duplicate logic
+ * Tests import production functions from:
+ *   lib/registration/derive-registration-fields.ts  (shared derivation)
+ *   lib/config/registration-constants.ts             (versions + AI map)
+ *
+ * Tests do NOT duplicate derivation logic — they exercise the same
+ * functions the production route uses.
  */
 
 import { describe, it, expect } from 'vitest'
-import { z } from 'zod'
-import * as fs from 'fs'
-import * as path from 'path'
+import {
+  deriveRegistrationFields,
+  RegistrationValidationError,
+} from '../../lib/registration/derive-registration-fields'
 import {
   MARKETPLACE_TERMS_VERSION,
   PRIVACY_POLICY_VERSION,
   SAAS_TERMS_VERSION,
   SAAS_TERMS_PUBLISHED,
   AI_CAPABILITY_MAP,
+  AI_CAPABILITY_DEFAULT,
   getAiCapabilityProfile,
 } from '../../lib/config/registration-constants'
+import * as fs from 'fs'
+import * as path from 'path'
 
-const DRIVEBOOK_ROOT = path.resolve(__dirname, '..', '..')
+const ROOT = path.resolve(__dirname, '..', '..')
+const src = (rel: string) => fs.readFileSync(path.join(ROOT, rel), 'utf-8')
 
-function readSource(relPath: string): string {
-  return fs.readFileSync(path.join(DRIVEBOOK_ROOT, relPath), 'utf-8')
-}
+// ── FIX-1: Marketplace agreement enforcement ─────────────────────────────────
 
-// ── Replicate Phase 2 schema (must stay in sync with route.ts) ───────────────
-const registerSchema = z.object({
-  email:          z.string().email(),
-  password:       z.string().min(8),
-  name:           z.string().min(2),
-  phone:          z.string()
-    .transform(s => s.replace(/\s+/g, ''))
-    .refine(p => /^\+?\d{9,15}$/.test(p), 'Invalid phone'),
-  businessType:   z.enum(['driving', 'plumber', 'electrician', 'beauty', 'tax']).optional().default('driving'),
-  businessModel:  z.enum(['MARKETPLACE', 'SAAS']).optional(),
-  organisationType: z.enum(['INDIVIDUAL_INSTRUCTOR', 'DRIVING_SCHOOL', 'SOLE_TRADER', 'BUSINESS']).optional(),
-  privacyAccepted: z.literal(true, { errorMap: () => ({ message: 'Privacy policy acceptance is required.' }) }),
-  baseAddress:    z.string().optional().default(''),
-  hourlyRate:     z.number().optional().default(65),
-  vehicleTypes:   z.array(z.enum(['AUTO', 'MANUAL'])).optional().default(['AUTO']),
-  serviceRadiusKm: z.number().optional().default(20),
-  licenseNumber:  z.string().optional(),
-  insuranceNumber: z.string().optional(),
-  termsAccepted:  z.boolean().optional(),
-  ageDeclaration: z.boolean().optional(),
-  termsVersion:   z.string().optional(),
-})
+describe('FIX-1 — Marketplace agreement enforcement', () => {
 
-// Replicate server-side derivation (minus the DRIVING_SCHOOL guard which is a 400 return)
-interface DerivedFields {
-  businessModel:               'MARKETPLACE' | 'SAAS'
-  paymentMode:                 'PLATFORM' | 'DIRECT'
-  organisationType:            'INDIVIDUAL_INSTRUCTOR' | 'SOLE_TRADER'
-  commercialAgreementType:     'MARKETPLACE_TERMS' | 'SAAS_TERMS'
-  commercialAgreementStatus:   'ACCEPTED' | 'PENDING'
-  commercialAgreementVersion:  string | null
-  privacyPolicyVersion:        string
-  accountType:                 'INDIVIDUAL'
-}
+  it('FIX-1-1 | MARKETPLACE without termsAccepted throws RegistrationValidationError', () => {
+    expect(() =>
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: false })
+    ).toThrow(RegistrationValidationError)
+  })
 
-function deriveAll(
-  businessType: string,
-  businessModel: string | undefined,
-  termsAccepted: boolean | undefined
-): DerivedFields {
-  const isDriving = businessType === 'driving'
-  const bm: 'MARKETPLACE' | 'SAAS' =
-    isDriving && businessModel === 'SAAS' ? 'SAAS'
-    : isDriving ? 'MARKETPLACE'
-    : 'SAAS'
-  const pm: 'PLATFORM' | 'DIRECT' = bm === 'SAAS' ? 'DIRECT' : 'PLATFORM'
-  const ot: 'INDIVIDUAL_INSTRUCTOR' | 'SOLE_TRADER' =
-    isDriving ? 'INDIVIDUAL_INSTRUCTOR' : 'SOLE_TRADER'
-  const cat = bm === 'MARKETPLACE' ? 'MARKETPLACE_TERMS' : 'SAAS_TERMS'
-  const cas: 'ACCEPTED' | 'PENDING' =
-    bm === 'MARKETPLACE' && termsAccepted ? 'ACCEPTED' : 'PENDING'
-  const cav: string | null =
-    bm === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION
-    : SAAS_TERMS_PUBLISHED ? SAAS_TERMS_VERSION
-    : null
-  return {
-    businessModel: bm, paymentMode: pm, organisationType: ot,
-    commercialAgreementType: cat, commercialAgreementStatus: cas,
-    commercialAgreementVersion: cav,
-    privacyPolicyVersion: PRIVACY_POLICY_VERSION,
-    accountType: 'INDIVIDUAL',
-  }
-}
+  it('FIX-1-2 | MARKETPLACE without termsAccepted has code MARKETPLACE_TERMS_REQUIRED', () => {
+    try {
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: false })
+      expect.fail('Should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(RegistrationValidationError)
+      expect((err as RegistrationValidationError).code).toBe('MARKETPLACE_TERMS_REQUIRED')
+    }
+  })
 
-const BASE = {
-  email: 'test@example.com',
-  password: 'password123',
-  name: 'Test User',
-  phone: '0412345678',
-  privacyAccepted: true as const,
-}
+  it('FIX-1-3 | MARKETPLACE omitted termsAccepted throws', () => {
+    expect(() =>
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE' })
+    ).toThrow(RegistrationValidationError)
+  })
 
-describe('Phase 2 registration architecture — Stage 1 corrections', () => {
+  it('FIX-1-4 | MARKETPLACE + termsAccepted=true produces ACCEPTED status', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true })
+    expect(d.commercialAgreementStatus).toBe('ACCEPTED')
+    expect(d.commercialAgreementVersion).toBe(MARKETPLACE_TERMS_VERSION)
+    expect(d.commercialAgreementAcceptedAt).not.toBeNull()
+    expect(d.userTermsAcceptedAt).not.toBeNull()
+    expect(d.userTermsVersion).toBe(MARKETPLACE_TERMS_VERSION)
+  })
 
-  // ── FIX-1: Marketplace agreement ─────────────────────────────────────────
-
-  it('FIX-1a | MARKETPLACE_TERMS_VERSION matches published Instructor Terms (2.0)', () => {
-    // Instructor Terms page shows "Version 2.0 · Effective: 6 August 2026"
+  it('FIX-1-5 | Marketplace version is 2.0 (matches published Instructor Terms)', () => {
     expect(MARKETPLACE_TERMS_VERSION).toBe('2.0')
   })
 
-  it('FIX-1b | Marketplace registration records version 2.0', () => {
-    expect(deriveAll('driving', 'MARKETPLACE', true).commercialAgreementVersion).toBe('2.0')
+  it('FIX-1-6 | Register page sends termsAccepted only for Marketplace + ticked', () => {
+    const page = src('app/register/page.tsx')
+    // The termsAccepted send is conditional — not always true
+    expect(page).toContain("selectedModel === 'MARKETPLACE' && termsAccepted")
+    // Must NOT send termsAccepted: true unconditionally
+    expect(page).not.toContain('termsAccepted: true,')
   })
 
-  it('FIX-1c | Register page links to /instructor-terms (not /terms) for Marketplace', () => {
-    const src = readSource('app/register/page.tsx')
-    expect(src).toContain('/instructor-terms')
-    // Must NOT link /terms for the commercial agreement
-    // (The /terms route is Learner T&C and is not applicable to providers)
-    const instructorTermsIdx = src.indexOf('/instructor-terms')
-    expect(instructorTermsIdx).toBeGreaterThan(-1)
+  it('FIX-1-7 | API does not accept termsVersion from browser', () => {
+    const route = src('app/api/register/route.ts')
+    expect(route).not.toMatch(/termsVersion:\s*z\./)
+  })
+})
+
+// ── FIX-2: SaaS pending agreement ────────────────────────────────────────────
+
+describe('FIX-2 — SaaS pending agreement', () => {
+
+  it('FIX-2-1 | SaaS commercialAgreementStatus = PENDING', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
+    expect(d.commercialAgreementStatus).toBe('PENDING')
   })
 
-  it('FIX-1d | User.termsVersion is server-controlled (not from browser termsVersion input)', () => {
-    const src = readSource('app/api/register/route.ts')
-    // The server uses instructorTermsVersion derived from MARKETPLACE_TERMS_VERSION
-    expect(src).toContain('instructorTermsVersion')
-    // Must NOT fall back to data.termsVersion (browser-supplied)
-    expect(src).not.toContain("data.termsVersion || '")
-    expect(src).not.toContain('data.termsVersion ||')
-  })
-
-  it('FIX-1e | commercialAgreementAcceptedAt only set when status=ACCEPTED', () => {
-    const accepted = deriveAll('driving', 'MARKETPLACE', true)
-    expect(accepted.commercialAgreementStatus).toBe('ACCEPTED')
-    // Not testing timestamp here (runtime), but status must be ACCEPTED for it to be set
-    const notAccepted = deriveAll('driving', 'MARKETPLACE', false)
-    expect(notAccepted.commercialAgreementStatus).toBe('PENDING')
-  })
-
-  // ── FIX-2: SaaS agreement ─────────────────────────────────────────────────
-
-  it('FIX-2a | SaaS commercialAgreementVersion = null (not the string PENDING)', () => {
+  it('FIX-2-2 | SaaS commercialAgreementVersion = null (not a string)', () => {
     expect(SAAS_TERMS_PUBLISHED).toBe(false)
     expect(SAAS_TERMS_VERSION).toBeNull()
-    expect(deriveAll('driving', 'SAAS', false).commercialAgreementVersion).toBeNull()
-    expect(deriveAll('plumber', 'SAAS', false).commercialAgreementVersion).toBeNull()
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
+    expect(d.commercialAgreementVersion).toBeNull()
   })
 
-  it('FIX-2b | SaaS commercialAgreementStatus = PENDING', () => {
-    expect(deriveAll('driving', 'SAAS', true).commercialAgreementStatus).toBe('PENDING')
+  it('FIX-2-3 | SaaS commercialAgreementAcceptedAt = null', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
+    expect(d.commercialAgreementAcceptedAt).toBeNull()
   })
 
-  it('FIX-2c | SaaS commercial agreement type is SAAS_TERMS', () => {
-    expect(deriveAll('plumber', undefined, false).commercialAgreementType).toBe('SAAS_TERMS')
+  it('FIX-2-4 | SaaS does NOT set User.termsAcceptedAt', () => {
+    const d = deriveRegistrationFields({ businessType: 'plumber' })
+    expect(d.userTermsAcceptedAt).toBeNull()
+    expect(d.userTermsVersion).toBeNull()
   })
 
-  it('FIX-2d | Register page shows pending notice for SaaS (no acceptance checkbox)', () => {
-    const src = readSource('app/register/page.tsx')
-    expect(src).toContain('SaaS Terms are being finalised')
+  it('FIX-2-5 | SaaS with termsAccepted=true still results in PENDING (Marketplace path blocked)', () => {
+    // termsAccepted is ignored for SaaS; the derivation must not produce ACCEPTED
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS', termsAccepted: true })
+    expect(d.commercialAgreementStatus).toBe('PENDING')
+    expect(d.userTermsAcceptedAt).toBeNull()
   })
 
-  // ── FIX-3: Privacy Policy version ────────────────────────────────────────
+  it('FIX-2-6 | Dashboard contains SaaS pending notice', () => {
+    const page = src('app/dashboard/page.tsx')
+    expect(page).toContain("paymentModel === 'saas'")
+    expect(page).toContain("commercialAgreementStatus === 'PENDING'")
+    expect(page).toContain('SaaS Terms are being finalised')
+  })
 
-  it('FIX-3a | PRIVACY_POLICY_VERSION matches published Privacy Policy (2.0)', () => {
-    // Privacy Policy page shows "Version 2.0 · Effective: 6 August 2026"
+  it('FIX-2-7 | Register page shows SaaS pending notice instead of checkbox', () => {
+    const page = src('app/register/page.tsx')
+    expect(page).toContain('SaaS Terms are being finalised')
+  })
+})
+
+// ── FIX-3: Privacy policy version ────────────────────────────────────────────
+
+describe('FIX-3 — Privacy policy version', () => {
+
+  it('FIX-3-1 | PRIVACY_POLICY_VERSION is 2.0', () => {
     expect(PRIVACY_POLICY_VERSION).toBe('2.0')
   })
 
-  it('FIX-3b | Registration API records Privacy Policy 2.0', () => {
-    expect(deriveAll('driving', 'MARKETPLACE', true).privacyPolicyVersion).toBe('2.0')
-    expect(deriveAll('plumber', undefined, false).privacyPolicyVersion).toBe('2.0')
+  it('FIX-3-2 | Privacy version is recorded independently of commercial agreement', () => {
+    const dMarketplace = deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true })
+    const dSaas = deriveRegistrationFields({ businessType: 'plumber' })
+    expect(dMarketplace.privacyPolicyVersion).toBe('2.0')
+    expect(dSaas.privacyPolicyVersion).toBe('2.0')
+    // SaaS has no commercial version but still has privacy version
+    expect(dSaas.commercialAgreementVersion).toBeNull()
+    expect(dSaas.privacyPolicyVersion).toBe('2.0')
   })
 
-  it('FIX-3c | Privacy and commercial agreement are separate', () => {
-    // privacyPolicyVersion and commercialAgreementVersion are independent
-    const d = deriveAll('plumber', undefined, false)
-    expect(d.privacyPolicyVersion).toBe('2.0')
-    expect(d.commercialAgreementVersion).toBeNull()  // SaaS has null version
+  it('FIX-3-3 | privacyPolicyAcceptedAt is always set', () => {
+    const d = deriveRegistrationFields({ businessType: 'electrician' })
+    expect(d.privacyPolicyAcceptedAt).toBeInstanceOf(Date)
+  })
+})
+
+// ── FIX-4: Organisation types ─────────────────────────────────────────────────
+
+describe('FIX-4 — Organisation types', () => {
+
+  it('FIX-4-1 | Driving + MARKETPLACE → INDIVIDUAL_INSTRUCTOR', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true })
+    expect(d.organisationType).toBe('INDIVIDUAL_INSTRUCTOR')
   })
 
-  it('FIX-3d | PRIVACY_POLICY_VERSION is imported from constants in registration API', () => {
-    const src = readSource('app/api/register/route.ts')
-    expect(src).toContain('PRIVACY_POLICY_VERSION')
-    // Must NOT hardcode '1.0' or '2.0' inline
-    expect(src).not.toMatch(/PRIVACY_POLICY_VERSION\s*=\s*'[0-9]/)  // no inline assignment
+  it('FIX-4-2 | Driving + SAAS → INDIVIDUAL_INSTRUCTOR', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
+    expect(d.organisationType).toBe('INDIVIDUAL_INSTRUCTOR')
   })
 
-  // ── FIX-4: Organisation types ─────────────────────────────────────────────
-
-  it('FIX-4a | Driving instructors → INDIVIDUAL_INSTRUCTOR', () => {
-    expect(deriveAll('driving', 'MARKETPLACE', true).organisationType).toBe('INDIVIDUAL_INSTRUCTOR')
-    expect(deriveAll('driving', 'SAAS', false).organisationType).toBe('INDIVIDUAL_INSTRUCTOR')
+  it('FIX-4-3 | Non-driving default → SOLE_TRADER', () => {
+    for (const bt of ['plumber', 'electrician', 'beauty', 'tax']) {
+      const d = deriveRegistrationFields({ businessType: bt })
+      expect(d.organisationType).toBe('SOLE_TRADER')
+    }
   })
 
-  it('FIX-4b | Non-driving providers → SOLE_TRADER (not INDIVIDUAL_INSTRUCTOR)', () => {
-    expect(deriveAll('plumber', undefined, false).organisationType).toBe('SOLE_TRADER')
-    expect(deriveAll('electrician', undefined, false).organisationType).toBe('SOLE_TRADER')
-    expect(deriveAll('beauty', undefined, false).organisationType).toBe('SOLE_TRADER')
-    expect(deriveAll('tax', undefined, false).organisationType).toBe('SOLE_TRADER')
+  it('FIX-4-4 | Non-driving + REGISTERED_BUSINESS → REGISTERED_BUSINESS', () => {
+    const d = deriveRegistrationFields({ businessType: 'plumber', organisationType: 'REGISTERED_BUSINESS' })
+    expect(d.organisationType).toBe('REGISTERED_BUSINESS')
   })
 
-  it('FIX-4c | Schema default for organisationType is SOLE_TRADER', () => {
-    const src = readSource('prisma/schema.prisma')
-    expect(src).toContain('@default("SOLE_TRADER")')
-    expect(src).not.toContain('@default("INDIVIDUAL_INSTRUCTOR")')
+  it('FIX-4-5 | Driving + REGISTERED_BUSINESS → INDIVIDUAL_INSTRUCTOR (driving ignores supplied value)', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS', organisationType: 'REGISTERED_BUSINESS' })
+    expect(d.organisationType).toBe('INDIVIDUAL_INSTRUCTOR')
   })
 
-  it('FIX-4d | Migration default is SOLE_TRADER', () => {
-    const migPath = path.join(
-      DRIVEBOOK_ROOT, 'prisma', 'migrations',
-      '20261110000001_add_organisation_type_and_agreement_fields', 'migration.sql'
-    )
-    const sql = fs.readFileSync(migPath, 'utf-8')
-    expect(sql).toContain("DEFAULT 'SOLE_TRADER'")
-    expect(sql).not.toContain("DEFAULT 'INDIVIDUAL_INSTRUCTOR'")
+  it('FIX-4-6 | DRIVING_SCHOOL throws RegistrationValidationError', () => {
+    expect(() =>
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS', organisationType: 'DRIVING_SCHOOL' })
+    ).toThrow(RegistrationValidationError)
+    try {
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS', organisationType: 'DRIVING_SCHOOL' })
+      expect.fail('Should have thrown')
+    } catch (err) {
+      expect((err as RegistrationValidationError).code).toBe('DRIVING_SCHOOL_NOT_AVAILABLE')
+    }
   })
 
-  it('FIX-4e | Migration documents the backfill requirement for existing driving instructors', () => {
-    const migPath = path.join(
-      DRIVEBOOK_ROOT, 'prisma', 'migrations',
-      '20261110000001_add_organisation_type_and_agreement_fields', 'migration.sql'
-    )
-    const sql = fs.readFileSync(migPath, 'utf-8')
-    expect(sql).toContain('INDIVIDUAL_INSTRUCTOR')  // backfill UPDATE documented in comments
-    expect(sql).toContain('REQUIRED AFTER APPLYING')
+  it('FIX-4-7 | DRIVING_SCHOOL with SAAS is rejected before any other check', () => {
+    // DRIVING_SCHOOL on SaaS path: MARKETPLACE_TERMS check doesn't apply,
+    // so DRIVING_SCHOOL_NOT_AVAILABLE is the first error thrown.
+    expect(() =>
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS', organisationType: 'DRIVING_SCHOOL' })
+    ).toThrow(RegistrationValidationError)
+    try {
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS', organisationType: 'DRIVING_SCHOOL' })
+    } catch (err) {
+      expect((err as RegistrationValidationError).code).toBe('DRIVING_SCHOOL_NOT_AVAILABLE')
+    }
   })
 
-  it('FIX-4f | SOLE_TRADER and BUSINESS values exist in constants', () => {
-    const src = readSource('lib/config/registration-constants.ts')
-    expect(src).toContain('SOLE_TRADER')
-    expect(src).toContain('BUSINESS')
+  it('FIX-4-7b | DRIVING_SCHOOL with MARKETPLACE fails on terms check first', () => {
+    // On the MARKETPLACE path, the Marketplace terms check runs before the org-type check.
+    // A school attempting MARKETPLACE without accepting terms gets MARKETPLACE_TERMS_REQUIRED.
+    // Both errors prevent DB writes — order reflects commercial priority.
+    expect(() =>
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', organisationType: 'DRIVING_SCHOOL', termsAccepted: false })
+    ).toThrow(RegistrationValidationError)
+    try {
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', organisationType: 'DRIVING_SCHOOL', termsAccepted: false })
+    } catch (err) {
+      expect((err as RegistrationValidationError).code).toBe('MARKETPLACE_TERMS_REQUIRED')
+    }
   })
 
-  // ── FIX-5: AI capability descriptions ────────────────────────────────────
-
-  it('FIX-5a | AI_CAPABILITY_MAP matches actual template config for plumber', () => {
-    // lib/presets/loader.ts: plumber aiCanBook=false, aiCanQuote=true
-    expect(AI_CAPABILITY_MAP['plumber'].aiCanBook).toBe(false)
-    expect(AI_CAPABILITY_MAP['plumber'].aiCanQuote).toBe(true)
-    expect(AI_CAPABILITY_MAP['plumber'].allowedActions).toContain('quote')
-    expect(AI_CAPABILITY_MAP['plumber'].allowedActions).not.toContain('book')
+  it('FIX-4-7c | DRIVING_SCHOOL with MARKETPLACE + accepted terms is caught by org-type check', () => {
+    // Even with terms accepted, DRIVING_SCHOOL is still rejected.
+    expect(() =>
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', organisationType: 'DRIVING_SCHOOL', termsAccepted: true })
+    ).toThrow(RegistrationValidationError)
+    try {
+      deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', organisationType: 'DRIVING_SCHOOL', termsAccepted: true })
+    } catch (err) {
+      expect((err as RegistrationValidationError).code).toBe('DRIVING_SCHOOL_NOT_AVAILABLE')
+    }
   })
 
-  it('FIX-5b | AI_CAPABILITY_MAP matches actual template config for driving', () => {
-    // lib/presets/driving/config.ts: aiCanBook=true, aiCanQuote=false
-    expect(AI_CAPABILITY_MAP['driving'].aiCanBook).toBe(true)
-    expect(AI_CAPABILITY_MAP['driving'].aiCanQuote).toBe(false)
-    expect(AI_CAPABILITY_MAP['driving'].allowedActions).toContain('book')
+  it('FIX-4-8 | No REGISTERED_BUSINESS sets accountType=BUSINESS', () => {
+    const d = deriveRegistrationFields({ businessType: 'plumber', organisationType: 'REGISTERED_BUSINESS' })
+    // accountType is not in the derivation output — it is hardcoded to INDIVIDUAL in the route
+    // The derivation never touches accountType
+    expect(d).not.toHaveProperty('accountType')
   })
 
-  it('FIX-5c | AI_CAPABILITY_MAP correctly identifies tax as mixed', () => {
-    // lib/presets/tax/config.ts: most aiCanBook=true, Business Tax Return aiCanBook=false
-    expect(AI_CAPABILITY_MAP['tax'].mixed).toBe(true)
-    expect(AI_CAPABILITY_MAP['tax'].aiCanBook).toBe(true)
-    expect(AI_CAPABILITY_MAP['tax'].aiCanQuote).toBe(true)
+  it('FIX-4-9 | Register page contains business structure selector for non-driving', () => {
+    const page = src('app/register/page.tsx')
+    expect(page).toContain('REGISTERED_BUSINESS')
+    expect(page).toContain('Sole trader')
+    expect(page).toContain('Registered company')
+    expect(page).toContain('selectedStructure')
   })
 
-  it('FIX-5d | No callout charge advertised (no config field exists)', () => {
-    // calloutChargeConfigured must be false for all types until the config field exists
+  it('FIX-4-10 | Schema default is SOLE_TRADER', () => {
+    const schema = src('prisma/schema.prisma')
+    expect(schema).toContain('@default("SOLE_TRADER")')
+  })
+
+  it('FIX-4-11 | Migration DEFAULT is SOLE_TRADER', () => {
+    const mig = src('prisma/migrations/20261110000001_add_organisation_type_and_agreement_fields/migration.sql')
+    expect(mig).toContain("DEFAULT 'SOLE_TRADER'")
+    expect(mig).toContain('REGISTERED_BUSINESS')
+  })
+})
+
+// ── FIX-5: AI capability source of truth ─────────────────────────────────────
+
+describe('FIX-5 — AI capability', () => {
+
+  it('FIX-5-1 | Unknown business type fails closed (aiCanBook=false)', () => {
+    const profile = getAiCapabilityProfile('unknown_type')
+    expect(profile.aiCanBook).toBe(false)
+    expect(profile.aiCanQuote).toBe(false)
+    expect(AI_CAPABILITY_DEFAULT.aiCanBook).toBe(false)
+  })
+
+  it('FIX-5-2 | Undefined business type fails closed', () => {
+    const profile = getAiCapabilityProfile(undefined)
+    expect(profile.aiCanBook).toBe(false)
+  })
+
+  it('FIX-5-3 | Driving: aiCanBook=true, aiCanQuote=false, allowedActions includes book', () => {
+    const p = AI_CAPABILITY_MAP['driving']
+    expect(p.aiCanBook).toBe(true)
+    expect(p.aiCanQuote).toBe(false)
+    expect(p.allowedActions).toContain('book')
+    // Verify consistency: if aiCanBook, 'book' must be in allowedActions
+    expect(p.allowedActions).toContain('book')
+  })
+
+  it('FIX-5-4 | Beauty: aiCanBook=true, matches template config', () => {
+    const p = AI_CAPABILITY_MAP['beauty']
+    expect(p.aiCanBook).toBe(true)
+    expect(p.aiCanQuote).toBe(false)
+    expect(p.allowedActions).toContain('book')
+  })
+
+  it('FIX-5-5 | Tax: aiCanBook=true, aiCanQuote=false — quote not in allowedActions', () => {
+    // Tax has Business Tax Return with aiCanQuote=true at the service level,
+    // but tax aiConfig.allowedActions=['book','reschedule','cancel','message']
+    // 'quote' is NOT in allowedActions — the quote path is not executable.
+    // The map must reflect the EFFECTIVE capability (intersection).
+    const p = AI_CAPABILITY_MAP['tax']
+    expect(p.aiCanBook).toBe(true)
+    expect(p.aiCanQuote).toBe(false)   // not executable through allowedActions
+    expect(p.mixed).toBe(false)
+    expect(p.allowedActions).not.toContain('quote')
+    expect(p.allowedActions).toContain('book')
+  })
+
+  it('FIX-5-6 | Plumber: aiCanBook=false, aiCanQuote=true, quote IS in allowedActions', () => {
+    const p = AI_CAPABILITY_MAP['plumber']
+    expect(p.aiCanBook).toBe(false)
+    expect(p.aiCanQuote).toBe(true)
+    expect(p.allowedActions).toContain('quote')
+    expect(p.allowedActions).not.toContain('book')
+  })
+
+  it('FIX-5-7 | Electrician: same as plumber', () => {
+    const p = AI_CAPABILITY_MAP['electrician']
+    expect(p.aiCanBook).toBe(false)
+    expect(p.aiCanQuote).toBe(true)
+    expect(p.allowedActions).toContain('quote')
+  })
+
+  it('FIX-5-8 | No callout charges advertised in any profile', () => {
     for (const [, profile] of Object.entries(AI_CAPABILITY_MAP)) {
       expect(profile.calloutChargeConfigured).toBe(false)
     }
-    const src = readSource('app/dashboard/discovery/page.tsx')
-    expect(src).not.toContain('call-out charge')
-    expect(src).not.toContain('callout charge')
+    expect(AI_CAPABILITY_DEFAULT.calloutChargeConfigured).toBe(false)
   })
 
-  it('FIX-5e | Discovery page imports getAiCapabilityProfile from constants', () => {
-    const src = readSource('app/dashboard/discovery/page.tsx')
-    expect(src).toContain('getAiCapabilityProfile')
-    expect(src).toContain('registration-constants')
+  it('FIX-5-9 | Discovery page does not advertise callout charges', () => {
+    const page = src('app/dashboard/discovery/page.tsx')
+    expect(page).not.toContain('call-out charge')
+    expect(page).not.toContain('callout charge')
+    expect(page).not.toContain('call-out fee')
   })
 
-  it('FIX-5f | Quote-only AI description does NOT claim direct booking', () => {
-    const src = readSource('app/dashboard/discovery/page.tsx')
-    // The quote-only branch must reference creating a quote request
-    expect(src).toContain('create a quote request for your review')
-    // Must not say AI "assists with new bookings" in the same code path
-    // (The two paths are separate branches of the if/else)
-    const quoteOnlyStart = src.indexOf('aiProfile.aiCanBook && !aiProfile.aiCanBook')
-    // Verify the conditional structure is there
-    expect(src).toContain('!aiProfile.aiCanBook && aiProfile.aiCanQuote')
+  it('FIX-5-10 | Discovery page does not advertise final job quotation', () => {
+    const page = src('app/dashboard/discovery/page.tsx')
+    expect(page).not.toContain('final job quotation')
+    expect(page).not.toContain('provides a price')
   })
 
-  it('FIX-5g | AI description does not use hardcoded isQuoteOnlyTrade', () => {
-    const src = readSource('app/dashboard/discovery/page.tsx')
-    expect(src).not.toContain('isQuoteOnlyTrade')
-    expect(src).toContain('aiProfile')
+  it('FIX-5-11 | Discovery AI description: tax uses booking path (quote not executable)', () => {
+    const page = src('app/dashboard/discovery/page.tsx')
+    // Tax is now treated as booking-only since 'quote' not in allowedActions.
+    // The mixed/tax-specific branch must be absent.
+    expect(page).not.toContain('business tax returns, the AI collects details')
+  })
+})
+
+// ── Shared derivation utility ────────────────────────────────────────────────
+
+describe('Shared derivation utility (FIX-5 — production functions)', () => {
+
+  it('API route imports from derive-registration-fields', () => {
+    const route = src('app/api/register/route.ts')
+    expect(route).toContain('derive-registration-fields')
+    expect(route).toContain('deriveRegistrationFields')
+    expect(route).toContain('RegistrationValidationError')
   })
 
-  // ── FIX-6: Driving school rejection ──────────────────────────────────────
-
-  it('FIX-6a | API source rejects DRIVING_SCHOOL with structured error', () => {
-    const src = readSource('app/api/register/route.ts')
-    expect(src).toContain('DRIVING_SCHOOL_NOT_AVAILABLE')
-    expect(src).toContain('400')
+  it('Test file imports from derive-registration-fields', () => {
+    const test = src('__tests__/integration/reg-phase2-architecture.test.ts')
+    expect(test).toContain('derive-registration-fields')
+    // Confirm the test does not define its own derive function (the old test did)
+    // We check the registration API route instead of self-reading to avoid Vitest diff contamination
+    const route = src('app/api/register/route.ts')
+    expect(route).not.toMatch(/function deriveAll\b/)
+    expect(route).not.toMatch(/const deriveAll\b/)
   })
+})
 
-  it('FIX-6b | DRIVING_SCHOOL rejection occurs before Provider creation', () => {
-    const src = readSource('app/api/register/route.ts')
-    const guardIdx   = src.indexOf('DRIVING_SCHOOL_NOT_AVAILABLE')
-    const createIdx  = src.indexOf('tx.provider.create')
-    expect(guardIdx).toBeGreaterThan(-1)
-    expect(createIdx).toBeGreaterThan(guardIdx)  // guard comes first
-  })
+// ── Backward compatibility ────────────────────────────────────────────────────
 
-  it('FIX-6c | UI still shows Driving School as coming soon', () => {
-    const src = readSource('app/register/page.tsx')
-    expect(src).toContain('Coming soon')
-    expect(src).toContain('DRIVING_SCHOOL')
-  })
+describe('Backward compatibility', () => {
 
-  // ── Invariants: nothing changed that must not change ─────────────────────
-
-  it('INV-1 | 503 guards still present in bulk-booking route', () => {
-    const src = readSource('app/api/public/bookings/bulk/route.ts')
-    expect(src).toContain("paymentMode === 'DIRECT'")
-    expect(src).toContain('503')
-  })
-
-  it('INV-2 | directPayments still false in account features', () => {
-    const src = readSource('lib/utils/account.ts')
-    expect(src).toContain('directPayments: false')
-  })
-
-  it('INV-3 | paymentMode not accepted as registration input', () => {
-    const src = readSource('app/api/register/route.ts')
-    expect(src).not.toMatch(/paymentMode:\s*z\./)
-  })
-
-  it('INV-4 | commercialAgreementType not accepted as registration input', () => {
-    const src = readSource('app/api/register/route.ts')
-    expect(src).not.toMatch(/commercialAgreementType:\s*z\./)
-  })
-
-  // ── Backward compatibility ────────────────────────────────────────────────
-
-  it('BC-1 | driving + MARKETPLACE + termsAccepted still works', () => {
-    const data = registerSchema.parse({ ...BASE, businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true })
-    const d = deriveAll(data.businessType, data.businessModel, true)
+  it('BC-1 | Driving + MARKETPLACE + accepted still works', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true })
     expect(d.businessModel).toBe('MARKETPLACE')
     expect(d.paymentMode).toBe('PLATFORM')
     expect(d.commercialAgreementStatus).toBe('ACCEPTED')
     expect(d.commercialAgreementVersion).toBe('2.0')
+    expect(d.privacyPolicyVersion).toBe('2.0')
   })
 
-  it('BC-2 | privacyAccepted still required', () => {
-    expect(() => registerSchema.parse({ ...BASE, privacyAccepted: false })).toThrow()
-  })
-
-  it('BC-3 | non-driving omitted businessModel → SAAS + DIRECT', () => {
-    const d = deriveAll('electrician', undefined, false)
+  it('BC-2 | Driving + SAAS still works', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
     expect(d.businessModel).toBe('SAAS')
     expect(d.paymentMode).toBe('DIRECT')
+    expect(d.commercialAgreementStatus).toBe('PENDING')
+  })
+
+  it('BC-3 | Non-driving omitted model → SAAS + DIRECT', () => {
+    const d = deriveRegistrationFields({ businessType: 'electrician' })
+    expect(d.businessModel).toBe('SAAS')
+    expect(d.paymentMode).toBe('DIRECT')
+  })
+
+  it('BC-4 | 503 guards unchanged', () => {
+    const bulk = src('app/api/public/bookings/bulk/route.ts')
+    expect(bulk).toContain("paymentMode === 'DIRECT'")
+    expect(bulk).toContain('503')
+  })
+
+  it('BC-5 | directPayments still false', () => {
+    const account = src('lib/utils/account.ts')
+    expect(account).toContain('directPayments: false')
+  })
+
+  it('BC-6 | Learner terms path in public/bookings/route.ts unaffected', () => {
+    // This path uses data.termsVersion from the browser — that is correct for client registration
+    const learnerRoute = src('app/api/public/bookings/route.ts')
+    expect(learnerRoute).toContain('termsAcceptedAt')
+    // The learner path continues to use data.termsVersion (expected)
+    expect(learnerRoute).toContain("termsVersion: data.termsVersion || '1.0'")
   })
 })

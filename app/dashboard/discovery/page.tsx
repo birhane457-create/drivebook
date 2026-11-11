@@ -124,26 +124,28 @@ export default function DiscoveryPage() {
     }
     if (cap.key === 'ai') {
       // Generate AI description from the actual capability profile.
+      // Effective capability = intersection of service aiCanBook/aiCanQuote AND allowedActions.
       let aiDescription: string;
       if (!aiProfile.aiCanBook && aiProfile.aiCanQuote) {
-        // Quote-only trades (plumber, electrician):
-        // AI collects enquiry details and creates a quote request for provider review.
-        // No fixed charge configuration exists in templates — do not advertise one.
+        // Quote-initiation trades (plumber, electrician):
+        // 'quote' IS in allowedActions for these templates — the action is executable.
+        // No fixed service charge configuration exists in templates.
         aiDescription =
           'An AI receptionist can answer incoming calls, collect job details and customer information, and create a quote request for your review. ' +
           'You receive the full enquiry details and decide whether to proceed and at what price. ' +
-          'The AI does not produce a final price or quotation — that remains your responsibility.';
-      } else if (aiProfile.aiCanBook && aiProfile.aiCanQuote && aiProfile.mixed) {
-        // Mixed trades (tax): some services are bookable; others require a quote first.
-        aiDescription =
-          'An AI receptionist can answer incoming calls and book supported appointments such as consultations and standard tax returns. ' +
-          'For more complex work such as business tax returns, the AI collects details and creates an enquiry for your review before any booking is confirmed. ' +
-          'Booking confirmations and relevant messages are sent automatically.';
-      } else {
-        // Booking-capable trades (driving, beauty):
+          'The AI collects enquiry information and does not produce a price — that remains your responsibility.';
+      } else if (aiProfile.aiCanBook) {
+        // Booking-capable trades (driving, beauty, tax):
+        // For tax: the Business Tax Return service has aiCanQuote=true at the service level,
+        // but 'quote' is NOT in the tax aiConfig.allowedActions — the quote path is not
+        // executable through the AI. Tax is treated as booking-only.
         aiDescription =
           'An AI receptionist can answer incoming calls, check availability using your booking calendar, assist with new bookings, and send booking confirmations and relevant messages. ' +
           'This reduces missed calls and manual handling of booking enquiries.';
+      } else {
+        // No executable AI actions (unknown or unconfigured business type — fails closed).
+        aiDescription =
+          'AI receptionist capability is available on eligible plans. The specific features available depend on your business type configuration.';
       }
       return { ...cap, description: aiDescription };
     }
