@@ -127,6 +127,22 @@ export function deriveRegistrationFields(input: RegistrationInput): DerivedRegis
     )
   }
 
+  // ── SAAS Terms version guard (fail-closed) ───────────────────────────────
+  // If terms are marked published but no version string is set, the derivation
+  // would record ACCEPTED with commercialAgreementVersion=null — accepting
+  // an agreement with no recorded version is a legal record-keeping defect.
+  // Fail hard before any DB write so the deployment procedure is enforced:
+  //   1. Set SAAS_TERMS_VERSION to the published version string
+  //   2. Set SAAS_TERMS_PUBLISHED to true
+  // Both must be set together.
+  if (businessModel === 'SAAS' && saasPublished && (!saasVersion || saasVersion.trim() === '')) {
+    throw new RegistrationValidationError(
+      'SAAS_TERMS_VERSION_MISSING',
+      'SaaS Terms are marked as published but no version is set. ' +
+      'Set SAAS_TERMS_VERSION to a non-empty string before setting SAAS_TERMS_PUBLISHED=true.'
+    )
+  }
+
   // ── Organisation type ─────────────────────────────────────────────────────
   // DRIVING_SCHOOL: designed but not yet available — reject before DB writes.
   if (isDriving && suppliedOrgType === 'DRIVING_SCHOOL') {

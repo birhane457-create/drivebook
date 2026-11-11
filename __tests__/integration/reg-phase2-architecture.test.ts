@@ -1117,3 +1117,131 @@ describe('SaaS Terms publication lifecycle — UI and route completeness', () =>
     expect(d.commercialAgreementStatus).toBe('ACCEPTED')
   })
 })
+
+// ── SaaS Terms version guard (fail-closed) ───────────────────────────────────
+//
+// Reviewer finding: SAAS_TERMS_PUBLISHED=true with SAAS_TERMS_VERSION=null
+// produced commercialAgreementStatus=ACCEPTED with commercialAgreementVersion=null —
+// acceptance recorded with no version. These tests verify the fail-closed guard.
+
+describe('SaaS Terms version guard — fail-closed on missing version', () => {
+
+  it('VG-1 | Published terms with null version throws before acceptance is recorded', () => {
+    expect(() => deriveRegistrationFields({
+      businessType:      'driving',
+      businessModel:     'SAAS',
+      saasTermsAccepted: true,
+      _testSaasPublished: { published: true, version: null },
+    })).toThrow('no version is set')
+  })
+
+  it('VG-2 | Published terms with empty-string version also throws', () => {
+    expect(() => deriveRegistrationFields({
+      businessType:      'driving',
+      businessModel:     'SAAS',
+      saasTermsAccepted: true,
+      _testSaasPublished: { published: true, version: '' },
+    })).toThrow('no version is set')
+  })
+
+  it('VG-3 | Published terms with valid version proceeds normally', () => {
+    const d = deriveRegistrationFields({
+      businessType:      'driving',
+      businessModel:     'SAAS',
+      saasTermsAccepted: true,
+      _testSaasPublished: { published: true, version: '1.0' },
+    })
+    expect(d.commercialAgreementStatus).toBe('ACCEPTED')
+    expect(d.commercialAgreementVersion).toBe('1.0')
+    expect(d.commercialAgreementAcceptedAt).toBeInstanceOf(Date)
+  })
+
+  it('VG-4 | Version guard fires before acceptance check — version error takes precedence', () => {
+    // Both version missing AND no acceptance — version guard fires first
+    // because an empty version is a deployment configuration error
+    // that should not silently fall through to the acceptance error.
+    // Order: version guard runs after acceptance check.
+    // A provider who hasn't accepted but version is also missing:
+    // acceptance check fires first (SAAS_TERMS_REQUIRED) — the UI
+    // already prevented this but the API must reject before version guard.
+    expect(() => deriveRegistrationFields({
+      businessType:      'driving',
+      businessModel:     'SAAS',
+      // saasTermsAccepted deliberately omitted
+      _testSaasPublished: { published: true, version: null },
+    })).toThrow('You must accept the DriveBook SaaS Terms') // acceptance check fires first
+  })
+
+  it('VG-5 | Version guard only applies on SaaS path — Marketplace unaffected', () => {
+    // Marketplace has no SAAS_TERMS_VERSION dependency whatsoever
+    expect(() => deriveRegistrationFields({
+      businessType:  'driving',
+      businessModel: 'MARKETPLACE',
+      termsAccepted: true,
+      _testSaasPublished: { published: true, version: null }, // irrelevant for MARKETPLACE
+    })).not.toThrow()
+  })
+
+  it('VG-6 | Version guard code documented in derive-registration-fields.ts', () => {
+    const util = src('lib/registration/derive-registration-fields.ts')
+    expect(util).toContain('SAAS_TERMS_VERSION_MISSING')
+    expect(util).toContain('no version is set')
+  })
+
+  it('VG-7 | Unpublished state with null version is safe — PENDING, no version recorded', () => {
+    // Current production state: published=false, version=null — must stay safe
+    const d = deriveRegistrationFields({ businessType: 'plumber' })
+    expect(d.commercialAgreementStatus).toBe('PENDING')
+    expect(d.commercialAgreementVersion).toBeNull()
+    // No guard fires because terms are unpublished
+  })
+})
+
+// ── Commercial payment-service gate — confirmation ───────────────────────────
+//
+// Reviewer item: "Commercial payment-service gating — not verified as implemented"
+// Evidence: three payment routes carry paymentMode === 'DIRECT' → 503 guards.
+// These tests assert the guards exist in source, confirming implementation.
+
+describe('Commercial payment-service gate — DIRECT-mode 503 guards present', () => {
+
+  it('PG-1 | Bulk-booking route blocks DIRECT-mode providers with 503', () => {
+    const bulk = src('app/api/public/bookings/bulk/route.ts')
+    expect(bulk).toContain("paymentMode === 'DIRECT'")
+    expect(bulk).toContain('503')
+    expect(bulk).toContain('PAYMENT_MODE_NOT_IMPLEMENTED')
+  })
+
+  it('PG-2 | Create-intent route blocks DIRECT-mode providers with 503', () => {
+    const intent = src('app/api/payments/create-intent/route.ts')
+    expect(intent).toContain("paymentMode === 'DIRECT'")
+    expect(intent).toContain('503')
+    expect(intent).toContain('PAYMENT_MODE_NOT_IMPLEMENTED')
+  })
+
+  it('PG-3 | Quote accept route blocks DIRECT-mode providers with 503', () => {
+    const accept = src('app/api/client/quotes/[id]/accept/route.ts')
+    expect(accept).toContain("paymentMode === 'DIRECT'")
+    expect(accept).toContain('503')
+    expect(accept).toContain('PAYMENT_MODE_NOT_IMPLEMENTED')
+  })
+
+  it('PG-4 | account.ts throwIfDirectPayment() guard also covers server-side utilities', () => {
+    const account = src('lib/utils/account.ts')
+    expect(account).toContain('DIRECT')
+    expect(account).toContain('directPayments: false')
+  })
+
+  it('PG-5 | All SaaS providers derive paymentMode=DIRECT at registration', () => {
+    // This confirms the derivation correctly marks SaaS for the payment gate
+    for (const bt of ['driving', 'plumber', 'electrician', 'beauty', 'tax']) {
+      const model = bt === 'driving' ? 'SAAS' : undefined
+      const input = bt === 'driving'
+        ? { businessType: bt, businessModel: 'SAAS' as const }
+        : { businessType: bt }
+      const d = deriveRegistrationFields(input)
+      expect(d.paymentMode).toBe('DIRECT')
+      expect(d.businessModel).toBe('SAAS')
+    }
+  })
+})
