@@ -9,12 +9,9 @@ import { checkRateLimitStrict, getRateLimitIdentifier, authRateLimit } from '@/l
 import { normalizeEmail } from '@/lib/auth-email'
 import { loadTemplateConfig, createBusinessFromTemplate } from '@/lib/presets/loader'
 import {
-  MARKETPLACE_TERMS_VERSION,
-  PRIVACY_POLICY_VERSION,
-  SAAS_TERMS_VERSION,
-  SAAS_TERMS_PUBLISHED,
-  type OrganisationType,
-} from '@/lib/config/registration-constants'
+  deriveRegistrationFields,
+  RegistrationValidationError,
+} from '@/lib/registration/derive-registration-fields'
 
 
 export const dynamic = 'force-dynamic';
@@ -32,11 +29,11 @@ const registerSchema = z.object({
   // Non-driving business types are always SAAS (the API enforces this).
   // Omitted for driving defaults to MARKETPLACE (backward compatible).
   businessModel: z.enum(['MARKETPLACE', 'SAAS']).optional(),
-  // Organisation type — driving instructors only.
-  // INDIVIDUAL_INSTRUCTOR: single provider (default).
-  // DRIVING_SCHOOL: not yet activated — the UI shows it as coming soon.
-  // Non-driving providers are always INDIVIDUAL_INSTRUCTOR (the API enforces this).
-  organisationType: z.enum(['INDIVIDUAL_INSTRUCTOR', 'DRIVING_SCHOOL']).optional(),
+  // Organisation type:
+  //   Driving — INDIVIDUAL_INSTRUCTOR (always; DRIVING_SCHOOL is rejected server-side)
+  //   Non-driving — SOLE_TRADER (default) or REGISTERED_BUSINESS (provider selects)
+  //   BUSINESS is reserved for multi-provider architecture, never assigned here.
+  organisationType: z.enum(['INDIVIDUAL_INSTRUCTOR', 'DRIVING_SCHOOL', 'SOLE_TRADER', 'REGISTERED_BUSINESS', 'BUSINESS']).optional(),
   // Privacy consent — required for registration.
   // privacyAccepted must be true; the browser is not trusted to determine the version.
   // The API uses a server-side constant for the current privacy policy version.
@@ -50,9 +47,12 @@ const registerSchema = z.object({
   serviceRadiusKm: z.number().optional().default(20),
   licenseNumber: z.string().optional(),
   insuranceNumber: z.string().optional(),
+  // Marketplace acceptance — required for MARKETPLACE registrations.
+  // Not sent for SaaS registrations (no agreement to accept yet).
   termsAccepted: z.boolean().optional(),
   ageDeclaration: z.boolean().optional(),
-  termsVersion: z.string().optional(),
+  // termsVersion is intentionally NOT accepted from the browser.
+  // The server derives the version from constants in lib/registration/derive-registration-fields.ts.
 })
 
 export async function POST(req: NextRequest) {
@@ -103,74 +103,42 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Derive businessModel and paymentMode with server-side validation.
-    //
-    // Rules (first release):
-    //   driving + MARKETPLACE → MARKETPLACE + PLATFORM  (default if businessModel omitted)
-    //   driving + SAAS        → SAAS + DIRECT
-    //   non-driving           → SAAS + DIRECT           (SAAS forced regardless of request)
-    //
-    // paymentMode is derived from businessModel, not independently chosen.
-    // The fields remain separate in the schema so future releases can allow
-    // SaaS providers to choose DriveBook-managed payments without redesign.
-    const isDriving = data.businessType === 'driving'
-    const businessModel: 'MARKETPLACE' | 'SAAS' =
-      isDriving && data.businessModel === 'SAAS' ? 'SAAS'
-      : isDriving ? 'MARKETPLACE'   // driving + omitted/invalid → MARKETPLACE (backward compatible)
-      : 'SAAS'                       // non-driving → always SAAS (marketplace not offered)
-    const paymentMode: 'PLATFORM' | 'DIRECT' =
-      businessModel === 'SAAS' ? 'DIRECT' : 'PLATFORM'
-
-    // Derive organisationType — server-side enforced.
-    // DRIVING_SCHOOL is designed but not yet enabled.
-    // Reject DRIVING_SCHOOL at the API level until the school registration flow,
-    // school-specific data collection, and activation controls are implemented.
-    // Non-driving providers are always SOLE_TRADER (not INDIVIDUAL_INSTRUCTOR —
-    // that value is specific to driving instructors).
-    if (isDriving && data.organisationType === 'DRIVING_SCHOOL') {
-      return NextResponse.json(
-        {
-          error: 'Driving school registration is not yet available. Please register as an independent instructor and contact support when the driving school feature becomes available.',
-          code: 'DRIVING_SCHOOL_NOT_AVAILABLE',
-        },
-        { status: 400 }
-      )
+    // ── Derive all registration fields — via shared production utility ──────
+    // This utility throws RegistrationValidationError for:
+    //   - MARKETPLACE without termsAccepted=true (must reject before any DB writes)
+    //   - DRIVING_SCHOOL (not yet available)
+    // Both errors are caught below and returned as 400 responses.
+    let derived: ReturnType<typeof deriveRegistrationFields>
+    try {
+      derived = deriveRegistrationFields({
+        businessType:     data.businessType,
+        businessModel:    data.businessModel,
+        organisationType: data.organisationType,
+        termsAccepted:    data.termsAccepted,
+      })
+    } catch (err) {
+      if (err instanceof RegistrationValidationError) {
+        return NextResponse.json(
+          { error: err.message, code: err.code },
+          { status: 400 }
+        )
+      }
+      throw err
     }
-    const resolvedOrganisationType: OrganisationType =
-      isDriving ? 'INDIVIDUAL_INSTRUCTOR' : 'SOLE_TRADER'
 
-    // Derive commercial agreement type and status — server-side, never from browser.
-    //
-    // MARKETPLACE providers accept the Instructor Terms (published, v2.0).
-    //   commercialAgreementType    = 'MARKETPLACE_TERMS'
-    //   commercialAgreementVersion = MARKETPLACE_TERMS_VERSION (from constants)
-    //   commercialAgreementStatus  = 'ACCEPTED' when termsAccepted = true
-    //
-    // SAAS providers: SaaS Terms are not yet published.
-    //   commercialAgreementType    = 'SAAS_TERMS'
-    //   commercialAgreementVersion = null  (not the string 'PENDING' — null means absent)
-    //   commercialAgreementStatus  = 'PENDING'
-    //   commercialAgreementAcceptedAt = null
-    const commercialAgreementType    = businessModel === 'MARKETPLACE' ? 'MARKETPLACE_TERMS' : 'SAAS_TERMS'
-    const commercialAgreementStatus  =
-      businessModel === 'MARKETPLACE' && data.termsAccepted ? 'ACCEPTED' : 'PENDING'
-    const commercialAgreementVersion: string | null =
-      businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION
-      : SAAS_TERMS_PUBLISHED ? SAAS_TERMS_VERSION  // when SaaS Terms are published
-      : null                                          // null = SaaS Terms not yet published
-    const commercialAgreementAcceptedAt =
-      commercialAgreementStatus === 'ACCEPTED' ? new Date() : null
-
-    // Privacy policy — server-side version from constants; timestamp from now.
-    // The browser sends privacyAccepted: true; the API records the current published version.
-    // privacyAccepted is validated as z.literal(true) — registration fails if false/omitted.
-    const privacyPolicyVersion    = PRIVACY_POLICY_VERSION
-    const privacyPolicyAcceptedAt = new Date()
-
-    // User.termsVersion — records the Instructor Terms version the provider accepted.
-    // Server-controlled; not from the browser. Only set for MARKETPLACE providers
-    // who accepted the terms (data.termsAccepted = true).
-    const instructorTermsVersion = businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION : undefined
+    const {
+      businessModel,
+      paymentMode,
+      organisationType,
+      commercialAgreementType,
+      commercialAgreementStatus,
+      commercialAgreementVersion,
+      commercialAgreementAcceptedAt,
+      privacyPolicyVersion,
+      privacyPolicyAcceptedAt,
+      userTermsAcceptedAt,
+      userTermsVersion,
+    } = derived
 
     // Create user, provider, and business in a transaction (15s timeout for Business template creation)
     const result = await prisma.$transaction(async (tx) => {
@@ -183,11 +151,11 @@ export async function POST(req: NextRequest) {
           emailVerified: false,
           verificationToken,
           verificationTokenExpiry,
-          ...(data.termsAccepted && {
-            termsAcceptedAt: new Date(),
+          ...(userTermsAcceptedAt && {
+            termsAcceptedAt: userTermsAcceptedAt,
             // Server-controlled version — not from the browser.
             // Only set for MARKETPLACE providers who accepted the Instructor Terms.
-            termsVersion: instructorTermsVersion,
+            termsVersion: userTermsVersion ?? undefined,
             ageDeclaration: data.ageDeclaration ?? false,
           }),
         },
@@ -208,7 +176,7 @@ export async function POST(req: NextRequest) {
           // driving+SAAS where businessModel=SAAS but industry=driving).
           industry: data.businessType,
           // Organisation type — separate from accountType, never activates multi-provider
-          organisationType: resolvedOrganisationType,
+          organisationType,
           // accountType is always INDIVIDUAL — accountType=BUSINESS requires a
           // separate, explicit activation flow that is not yet implemented.
           accountType: 'INDIVIDUAL',

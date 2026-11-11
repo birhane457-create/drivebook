@@ -508,6 +508,25 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      {/* ── SaaS pending commercial agreement notice ─────────────────── */}
+      {/* Show only for SaaS providers whose agreement status is PENDING.
+          This occurs when SaaS Terms have not yet been published/accepted.
+          Does not block any functionality — purely informational. */}
+      {session!.user?.paymentModel === 'saas' &&
+        (instructor as any).commercialAgreementStatus === 'PENDING' && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-600">Service agreement pending</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              DriveBook SaaS Terms are being finalised. Your account and all booking, scheduling and business management features are available now. You will be notified and asked to accept the terms before commercial payment services are activated.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ── Profile completeness ─────────────────────────────────────────── */}
       <ProfileCompletenessCard instructor={{
         ...instructorWithExtensions,

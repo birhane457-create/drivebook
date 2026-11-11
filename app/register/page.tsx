@@ -79,8 +79,13 @@ export default function RegisterPage() {
   // Organisation type — only for driving instructors.
   // INDIVIDUAL_INSTRUCTOR is the default and the only currently enabled option.
   // DRIVING_SCHOOL is designed but disabled (shown as coming soon).
-  // Non-driving providers are always INDIVIDUAL_INSTRUCTOR.
+  // Non-driving providers select their business structure separately.
   const [selectedOrgType, setSelectedOrgType] = useState<'INDIVIDUAL_INSTRUCTOR'>('INDIVIDUAL_INSTRUCTOR')
+
+  // Business structure — for non-driving providers only.
+  // SOLE_TRADER: operating as a sole trader (default).
+  // REGISTERED_BUSINESS: operating through a registered company or business entity.
+  const [selectedStructure, setSelectedStructure] = useState<'SOLE_TRADER' | 'REGISTERED_BUSINESS'>('SOLE_TRADER')
 
   // Get business type from URL params, default to driving
   const businessType = searchParams.get('businessType') || 'driving'
@@ -126,13 +131,18 @@ export default function RegisterPage() {
           // omitted values to MARKETPLACE. For non-driving, the API forces SAAS
           // regardless of what is sent here.
           ...(isDriving && selectedModel ? { businessModel: selectedModel } : {}),
-          // organisationType — only sent for driving instructors.
-          // Non-driving providers are always INDIVIDUAL_INSTRUCTOR (server-enforced).
-          ...(isDriving ? { organisationType: selectedOrgType } : {}),
+          // organisationType — driving instructors always INDIVIDUAL_INSTRUCTOR;
+          // non-driving providers send SOLE_TRADER or REGISTERED_BUSINESS.
+          ...(isDriving
+            ? { organisationType: selectedOrgType }
+            : selectedStructure ? { organisationType: selectedStructure } : {}),
           // Privacy policy acceptance — required. The API validates this as literal true.
           privacyAccepted: true as const,
-          termsAccepted: true,
-          termsVersion:  '1.0',
+          // termsAccepted — only sent for Marketplace providers who ticked the checkbox.
+          // SaaS providers: do not send this field.
+          ...(isDriving && selectedModel === 'MARKETPLACE' && termsAccepted
+            ? { termsAccepted: true as const }
+            : {}),
         }),
       })
 
@@ -288,6 +298,70 @@ export default function RegisterPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Business structure — non-driving providers only */}
+          {!isDriving && (
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold text-gray-900 mb-3">What is your business structure?</h2>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedStructure('SOLE_TRADER')}
+                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                    selectedStructure === 'SOLE_TRADER'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center ${
+                      selectedStructure === 'SOLE_TRADER' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                    }`}>
+                      {selectedStructure === 'SOLE_TRADER' && (
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-900">Sole trader</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        You operate as an individual under your own name or registered trading name.
+                      </p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedStructure('REGISTERED_BUSINESS')}
+                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
+                    selectedStructure === 'REGISTERED_BUSINESS'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center ${
+                      selectedStructure === 'REGISTERED_BUSINESS' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                    }`}>
+                      {selectedStructure === 'REGISTERED_BUSINESS' && (
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-gray-900">Registered company or business</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        You operate through a registered company, trust or partnership with its own ABN or ACN.
+                      </p>
+                    </div>
+                  </div>
+                </button>
               </div>
             </div>
           )}

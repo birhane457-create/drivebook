@@ -38,13 +38,15 @@ export const SAAS_TERMS_PUBLISHED: boolean       = false
 export type OrganisationType =
   | 'INDIVIDUAL_INSTRUCTOR'   // driving instructor operating independently
   | 'DRIVING_SCHOOL'          // school with multiple instructors (designed, not yet enabled)
-  | 'SOLE_TRADER'             // non-driving sole trader (default for plumber/electrician/beauty/tax)
+  | 'SOLE_TRADER'             // non-driving sole trader (plumber/electrician/beauty/tax default)
+  | 'REGISTERED_BUSINESS'     // non-driving registered company (ABN, ACN or equivalent)
   | 'BUSINESS'                // multi-provider organisation (reserved; not assigned at registration)
 
 export const ORGANISATION_TYPES = {
   INDIVIDUAL_INSTRUCTOR: 'INDIVIDUAL_INSTRUCTOR',
   DRIVING_SCHOOL:        'DRIVING_SCHOOL',
   SOLE_TRADER:           'SOLE_TRADER',
+  REGISTERED_BUSINESS:   'REGISTERED_BUSINESS',
   BUSINESS:              'BUSINESS',
 } as const
 
@@ -71,6 +73,9 @@ export interface AiCapabilityProfile {
 
 export const AI_CAPABILITY_MAP: Record<string, AiCapabilityProfile> = {
   driving: {
+    // Driving config: 60min, 90min, 2h lessons → aiCanBook=true, aiCanQuote=false
+    // PDA Test Package → aiCanBook=false (but other services cover booking)
+    // allowedActions: ['book', 'reschedule', 'cancel', 'message'] ✅
     aiCanBook:              true,
     aiCanQuote:            false,
     mixed:                 false,
@@ -78,6 +83,8 @@ export const AI_CAPABILITY_MAP: Record<string, AiCapabilityProfile> = {
     allowedActions:        ['book', 'reschedule', 'cancel', 'message'],
   },
   beauty: {
+    // Beauty config: all services aiCanBook=true, aiCanQuote=false
+    // allowedActions: ['book', 'reschedule', 'cancel', 'message'] ✅
     aiCanBook:              true,
     aiCanQuote:            false,
     mixed:                 false,
@@ -85,15 +92,23 @@ export const AI_CAPABILITY_MAP: Record<string, AiCapabilityProfile> = {
     allowedActions:        ['book', 'reschedule', 'cancel', 'message'],
   },
   tax: {
-    // Most tax services: aiCanBook=true. Business Tax Return: aiCanBook=false, aiCanQuote=true.
+    // Tax config: initial consultation, individual return, BAS → aiCanBook=true
+    // Business Tax Return → aiCanBook=false, aiCanQuote=true
+    // BUT: tax aiConfig.allowedActions = ['book', 'reschedule', 'cancel', 'message']
+    // 'quote' is NOT in allowedActions — the quote path is not executable.
+    // Effective capability = intersection of service config AND allowedActions.
+    // Therefore: aiCanBook=true, aiCanQuote=false (quote not in allowedActions).
+    // The Business Tax Return note is for the provider's own quoting process,
+    // not an AI-executable action.
     aiCanBook:              true,
-    aiCanQuote:            true,
-    mixed:                 true,
+    aiCanQuote:            false,   // 'quote' not in tax allowedActions — not executable
+    mixed:                 false,   // treated as booking-only given the action constraint
     calloutChargeConfigured: false,
     allowedActions:        ['book', 'reschedule', 'cancel', 'message'],
   },
   plumber: {
     // Generic trade loader: all services aiCanBook=false, aiCanQuote=true
+    // allowedActions: ['quote', 'message'] ✅ — quote IS executable
     aiCanBook:              false,
     aiCanQuote:            true,
     mixed:                 false,
@@ -101,6 +116,7 @@ export const AI_CAPABILITY_MAP: Record<string, AiCapabilityProfile> = {
     allowedActions:        ['quote', 'message'],
   },
   electrician: {
+    // Same as plumber — generic trade loader
     aiCanBook:              false,
     aiCanQuote:            true,
     mixed:                 false,
@@ -109,13 +125,17 @@ export const AI_CAPABILITY_MAP: Record<string, AiCapabilityProfile> = {
   },
 }
 
-/** Fallback profile for unknown business types */
+/**
+ * Fallback profile for unknown business types.
+ * Fails CLOSED — assumes no AI capability when the business type is unrecognised.
+ * This prevents advertising booking or quoting for untested configurations.
+ */
 export const AI_CAPABILITY_DEFAULT: AiCapabilityProfile = {
-  aiCanBook:              true,
+  aiCanBook:              false,  // fail closed — unknown type, do not assume booking
   aiCanQuote:            false,
   mixed:                 false,
   calloutChargeConfigured: false,
-  allowedActions:        ['book', 'message'],
+  allowedActions:        [],
 }
 
 /** Returns the AI capability profile for a given industry/businessType */
