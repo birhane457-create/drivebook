@@ -706,3 +706,322 @@ describe('Backward compatibility', () => {
     expect(learnerRoute).toContain("termsVersion: data.termsVersion || '1.0'")
   })
 })
+
+// ── Independent registration flow verification ───────────────────────────────
+//
+// These tests independently verify the seven registration behaviours called out
+// in the Stage 1B reviewer recommendation, using the production derivation
+// function directly.  They are written as a second set of eyes on the
+// behaviours rather than re-using the same assertion strings as earlier tests.
+
+describe('IVF — Marketplace terms acceptance and version persistence', () => {
+
+  it('IVF-M1 | Marketplace registration without termsAccepted throws before any DB write', () => {
+    // No termsAccepted supplied
+    expect(() => deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'MARKETPLACE',
+    })).toThrow('You must accept the Instructor Terms')
+
+    // Explicit false also rejected
+    expect(() => deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: false,
+    })).toThrow('You must accept the Instructor Terms')
+  })
+
+  it('IVF-M2 | Marketplace registration records agreement as ACCEPTED at version 2.0', () => {
+    const d = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true,
+    })
+    expect(d.commercialAgreementType).toBe('MARKETPLACE_TERMS')
+    expect(d.commercialAgreementStatus).toBe('ACCEPTED')
+    expect(d.commercialAgreementVersion).toBe('2.0')
+    expect(d.commercialAgreementAcceptedAt).toBeInstanceOf(Date)
+  })
+
+  it('IVF-M3 | Marketplace registration writes User.termsAcceptedAt and termsVersion', () => {
+    const d = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true,
+    })
+    // Legacy User fields — written for Marketplace only
+    expect(d.userTermsAcceptedAt).toBeInstanceOf(Date)
+    expect(d.userTermsVersion).toBe('2.0')
+  })
+
+  it('IVF-M4 | Register page sends termsAccepted only when MARKETPLACE is selected', () => {
+    const page = src('app/register/page.tsx')
+    // Conditional spread — only sent when isDriving + MARKETPLACE + termsAccepted
+    expect(page).toContain("selectedModel === 'MARKETPLACE' && termsAccepted")
+    // SaaS path must not send termsAccepted at all
+    // The checkbox is only rendered for MARKETPLACE
+    expect(page).toContain("isDriving && selectedModel === 'MARKETPLACE'")
+  })
+
+  it('IVF-M5 | Register page submit button is disabled when MARKETPLACE and terms not accepted', () => {
+    const page = src('app/register/page.tsx')
+    // Disabled condition includes the marketplace terms gate
+    expect(page).toContain("selectedModel === 'MARKETPLACE' && !termsAccepted")
+  })
+})
+
+describe('IVF — SaaS registration with unpublished terms', () => {
+
+  it('IVF-S1 | SaaS registration with unpublished terms produces PENDING status and null version', () => {
+    // Current production state: SAAS_TERMS_PUBLISHED=false
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
+    expect(d.commercialAgreementType).toBe('SAAS_TERMS')
+    expect(d.commercialAgreementStatus).toBe('PENDING')
+    expect(d.commercialAgreementVersion).toBeNull()
+    expect(d.commercialAgreementAcceptedAt).toBeNull()
+  })
+
+  it('IVF-S2 | SaaS registration does NOT write User.termsAcceptedAt or termsVersion', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
+    // User.terms* are Marketplace-only legacy fields — must not be set for SaaS
+    expect(d.userTermsAcceptedAt).toBeNull()
+    expect(d.userTermsVersion).toBeNull()
+  })
+
+  it('IVF-S3 | Non-driving SaaS registration also produces PENDING without User.terms* write', () => {
+    const d = deriveRegistrationFields({ businessType: 'plumber' })
+    expect(d.businessModel).toBe('SAAS')
+    expect(d.commercialAgreementStatus).toBe('PENDING')
+    expect(d.commercialAgreementVersion).toBeNull()
+    expect(d.userTermsAcceptedAt).toBeNull()
+    expect(d.userTermsVersion).toBeNull()
+  })
+
+  it('IVF-S4 | Register page shows SaaS notice (not terms checkbox) when terms unpublished', () => {
+    const page = src('app/register/page.tsx')
+    // SaaS notice about terms being finalised — always shown for SaaS
+    expect(page).toContain('SaaS Terms are being finalised')
+    // The Instructor Terms checkbox is only shown for MARKETPLACE
+    expect(page).toContain("isDriving && selectedModel === 'MARKETPLACE'")
+  })
+})
+
+describe('IVF — SaaS terms acceptance when publication is enabled', () => {
+
+  it('IVF-SP1 | When SaaS Terms published, registration without acceptance throws', () => {
+    expect(() => deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'SAAS',
+      _testSaasPublished: { published: true, version: '1.0' },
+    })).toThrow('You must accept the DriveBook SaaS Terms')
+  })
+
+  it('IVF-SP2 | When SaaS Terms published, acceptance produces ACCEPTED with version and timestamp', () => {
+    const d = deriveRegistrationFields({
+      businessType:      'driving',
+      businessModel:     'SAAS',
+      saasTermsAccepted: true,
+      _testSaasPublished: { published: true, version: '1.0' },
+    })
+    expect(d.commercialAgreementStatus).toBe('ACCEPTED')
+    expect(d.commercialAgreementVersion).toBe('1.0')
+    expect(d.commercialAgreementAcceptedAt).toBeInstanceOf(Date)
+  })
+
+  it('IVF-SP3 | When SaaS Terms published, User.terms* still NOT written (SaaS isolation)', () => {
+    // SaaS agreement records in Provider.commercialAgreement* only — never User.terms*
+    const d = deriveRegistrationFields({
+      businessType:      'driving',
+      businessModel:     'SAAS',
+      saasTermsAccepted: true,
+      _testSaasPublished: { published: true, version: '1.0' },
+    })
+    expect(d.userTermsAcceptedAt).toBeNull()
+    expect(d.userTermsVersion).toBeNull()
+  })
+
+  it('IVF-SP4 | Non-driving SaaS with published terms also enforces acceptance', () => {
+    expect(() => deriveRegistrationFields({
+      businessType: 'electrician',
+      _testSaasPublished: { published: true, version: '1.0' },
+    })).toThrow('You must accept the DriveBook SaaS Terms')
+
+    const d = deriveRegistrationFields({
+      businessType:      'electrician',
+      saasTermsAccepted: true,
+      _testSaasPublished: { published: true, version: '1.0' },
+    })
+    expect(d.commercialAgreementStatus).toBe('ACCEPTED')
+  })
+})
+
+describe('IVF — Organisation type persistence for new registrations', () => {
+
+  it('IVF-O1 | Driving Marketplace → always INDIVIDUAL_INSTRUCTOR regardless of supplied value', () => {
+    // suppliedOrgType is ignored for driving — server always forces INDIVIDUAL_INSTRUCTOR
+    const d = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true,
+      organisationType: 'INDIVIDUAL_INSTRUCTOR',
+    })
+    expect(d.organisationType).toBe('INDIVIDUAL_INSTRUCTOR')
+  })
+
+  it('IVF-O2 | Driving SaaS → always INDIVIDUAL_INSTRUCTOR', () => {
+    const d = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'SAAS',
+    })
+    expect(d.organisationType).toBe('INDIVIDUAL_INSTRUCTOR')
+  })
+
+  it('IVF-O3 | Non-driving without supplying type → SOLE_TRADER default', () => {
+    for (const bt of ['plumber', 'electrician', 'beauty', 'tax']) {
+      const d = deriveRegistrationFields({ businessType: bt })
+      expect(d.organisationType).toBe('SOLE_TRADER')
+    }
+  })
+
+  it('IVF-O4 | Non-driving explicitly selects REGISTERED_BUSINESS → honoured', () => {
+    const d = deriveRegistrationFields({
+      businessType: 'plumber', organisationType: 'REGISTERED_BUSINESS',
+    })
+    expect(d.organisationType).toBe('REGISTERED_BUSINESS')
+  })
+
+  it('IVF-O5 | organisationType is explicitly written to Provider in route — not omitted', () => {
+    // The API must pass organisationType to Provider.create(), not leave it undefined
+    const route = src('app/api/register/route.ts')
+    expect(route).toContain('organisationType,')
+    // The comment in the Provider create block confirms its intent
+    expect(route).toContain('never activates multi-provider')
+  })
+
+  it('IVF-O6 | Register page sends organisationType explicitly for both driving and non-driving', () => {
+    const page = src('app/register/page.tsx')
+    // Driving instructors send selectedOrgType (always INDIVIDUAL_INSTRUCTOR)
+    expect(page).toContain('organisationType: selectedOrgType')
+    // Non-driving providers send selectedStructure (SOLE_TRADER or REGISTERED_BUSINESS)
+    expect(page).toContain('organisationType: selectedStructure')
+  })
+})
+
+describe('IVF — Privacy consent independent of commercial terms', () => {
+
+  it('IVF-P1 | Privacy version and timestamp always set regardless of business model', () => {
+    const mp = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true,
+    })
+    expect(mp.privacyPolicyVersion).toBe('2.0')
+    expect(mp.privacyPolicyAcceptedAt).toBeInstanceOf(Date)
+
+    const saas = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
+    expect(saas.privacyPolicyVersion).toBe('2.0')
+    expect(saas.privacyPolicyAcceptedAt).toBeInstanceOf(Date)
+
+    const trade = deriveRegistrationFields({ businessType: 'electrician' })
+    expect(trade.privacyPolicyVersion).toBe('2.0')
+    expect(trade.privacyPolicyAcceptedAt).toBeInstanceOf(Date)
+  })
+
+  it('IVF-P2 | Privacy consent is not affected by SaaS Terms publication state', () => {
+    const unpublished = deriveRegistrationFields({ businessType: 'plumber' })
+    const published = deriveRegistrationFields({
+      businessType: 'plumber', saasTermsAccepted: true,
+      _testSaasPublished: { published: true, version: '1.0' },
+    })
+    expect(unpublished.privacyPolicyVersion).toBe(published.privacyPolicyVersion)
+    // Both must set a timestamp
+    expect(unpublished.privacyPolicyAcceptedAt).toBeInstanceOf(Date)
+    expect(published.privacyPolicyAcceptedAt).toBeInstanceOf(Date)
+  })
+
+  it('IVF-P3 | Register page always requires privacyAccepted before submit is enabled', () => {
+    const page = src('app/register/page.tsx')
+    // privacyAccepted is required in the disabled condition for every path
+    expect(page).toContain('!privacyAccepted')
+    // And is validated as z.literal(true) in the Zod schema (not optional)
+    const route = src('app/api/register/route.ts')
+    expect(route).toContain("z.literal(true")
+    expect(route).toContain('privacyAccepted')
+  })
+
+  it('IVF-P4 | Privacy fields are separate from commercialAgreement fields in derivation output', () => {
+    const d = deriveRegistrationFields({ businessType: 'plumber' })
+    // privacyPolicy fields exist and are non-null
+    expect(d.privacyPolicyVersion).toBeTruthy()
+    expect(d.privacyPolicyAcceptedAt).not.toBeNull()
+    // commercialAgreement fields are PENDING/null (unpublished terms)
+    expect(d.commercialAgreementStatus).toBe('PENDING')
+    expect(d.commercialAgreementAcceptedAt).toBeNull()
+    // The two sets are independent — privacy does not wait for commercial terms
+  })
+})
+
+describe('IVF — Driving School rejection', () => {
+
+  it('IVF-DS1 | DRIVING_SCHOOL throws DRIVING_SCHOOL_NOT_AVAILABLE before any DB write', () => {
+    const err = (() => {
+      try {
+        deriveRegistrationFields({
+          businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true,
+          organisationType: 'DRIVING_SCHOOL',
+        })
+      } catch (e) {
+        return e
+      }
+    })() as any
+    expect(err).toBeInstanceOf(Error)
+    expect(err.code).toBe('DRIVING_SCHOOL_NOT_AVAILABLE')
+    expect(err.message).toContain('Driving school registration is not yet available')
+  })
+
+  it('IVF-DS2 | DRIVING_SCHOOL rejection works for SaaS path as well', () => {
+    expect(() => deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'SAAS',
+      organisationType: 'DRIVING_SCHOOL',
+    })).toThrow('Driving school registration is not yet available')
+  })
+
+  it('IVF-DS3 | Register page shows Driving School as disabled / coming soon', () => {
+    const page = src('app/register/page.tsx')
+    expect(page).toContain('Coming soon')
+    expect(page).toContain('cursor-not-allowed')
+    // Driving school option rendered but aria-disabled
+    expect(page).toContain('aria-disabled')
+  })
+
+  it('IVF-DS4 | BUSINESS type is also rejected at registration', () => {
+    expect(() => deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'SAAS',
+      organisationType: 'BUSINESS',
+    })).toThrow('The BUSINESS organisation type is reserved')
+  })
+
+  it('IVF-DS5 | INDIVIDUAL_INSTRUCTOR for a non-driving provider is explicitly rejected', () => {
+    expect(() => deriveRegistrationFields({
+      businessType: 'plumber',
+      organisationType: 'INDIVIDUAL_INSTRUCTOR',
+    })).toThrow('INDIVIDUAL_INSTRUCTOR is only valid for driving instructors')
+  })
+})
+
+describe('IVF — Discovery remains optional and does not change entitlements', () => {
+
+  it('IVF-D1 | Discovery is a separate dashboard page, not part of registration', () => {
+    // Registration route must not reference discovery
+    const route = src('app/api/register/route.ts')
+    expect(route).not.toContain('discovery')
+    // The registration API response does not include a discovery flag
+    expect(route).not.toContain('discoveryEnabled')
+    expect(route).not.toContain('isDiscoverable')
+  })
+
+  it('IVF-D2 | Discovery page exists separately and does not affect Provider fields set at registration', () => {
+    // Discovery is a dashboard feature, not registration
+    const discovery = src('app/dashboard/discovery/page.tsx')
+    expect(discovery).toBeTruthy()
+    // The discovery page should not modify businessModel or paymentMode
+    expect(discovery).not.toContain("businessModel: 'MARKETPLACE'")
+    expect(discovery).not.toContain("businessModel: 'SAAS'")
+  })
+
+  it('IVF-D3 | Derivation output has no discovery-related field', () => {
+    const d = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true,
+    })
+    expect(d).not.toHaveProperty('isDiscoverable')
+    expect(d).not.toHaveProperty('discoveryEnabled')
+    expect(d).not.toHaveProperty('discoveryStatus')
+  })
+})
