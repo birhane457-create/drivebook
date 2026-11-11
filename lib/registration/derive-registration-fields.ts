@@ -29,10 +29,11 @@ import {
 // ── Input shape ──────────────────────────────────────────────────────────────
 
 export interface RegistrationInput {
-  businessType:     string                               // 'driving' | 'plumber' | ...
-  businessModel?:   'MARKETPLACE' | 'SAAS' | undefined  // driving instructors only
-  organisationType?: string | undefined                  // optional; non-driving may supply
-  termsAccepted?:   boolean | undefined                  // only relevant for MARKETPLACE
+  businessType:      string                               // 'driving' | 'plumber' | ...
+  businessModel?:    'MARKETPLACE' | 'SAAS' | undefined  // driving instructors only
+  organisationType?: string | undefined                   // optional; non-driving may supply
+  termsAccepted?:    boolean | undefined                  // Marketplace acceptance
+  saasTermsAccepted?: boolean | undefined                 // SaaS acceptance (when published)
 }
 
 // ── Output shape ─────────────────────────────────────────────────────────────
@@ -78,7 +79,7 @@ export class RegistrationValidationError extends Error {
  * before any database writes occur.
  */
 export function deriveRegistrationFields(input: RegistrationInput): DerivedRegistrationFields {
-  const { businessType, businessModel: suppliedModel, organisationType: suppliedOrgType, termsAccepted } = input
+  const { businessType, businessModel: suppliedModel, organisationType: suppliedOrgType, termsAccepted, saasTermsAccepted } = input
   const isDriving = businessType === 'driving'
 
   // ── Business model and payment mode ────────────────────────────────────────
@@ -102,12 +103,39 @@ export function deriveRegistrationFields(input: RegistrationInput): DerivedRegis
     )
   }
 
+  // ── SAAS Terms enforcement (when published) ──────────────────────────────
+  // When SAAS_TERMS_PUBLISHED = true, SaaS Terms must be explicitly accepted.
+  // While unpublished: no acceptance required; status remains PENDING.
+  if (businessModel === 'SAAS' && SAAS_TERMS_PUBLISHED && saasTermsAccepted !== true) {
+    throw new RegistrationValidationError(
+      'SAAS_TERMS_REQUIRED',
+      'You must accept the DriveBook SaaS Terms to register.'
+    )
+  }
+
   // ── Organisation type ─────────────────────────────────────────────────────
   // DRIVING_SCHOOL: designed but not yet available — reject before DB writes.
   if (isDriving && suppliedOrgType === 'DRIVING_SCHOOL') {
     throw new RegistrationValidationError(
       'DRIVING_SCHOOL_NOT_AVAILABLE',
       'Driving school registration is not yet available. Please register as an independent instructor and contact support when the driving school feature becomes available.'
+    )
+  }
+
+  // BUSINESS: reserved for multi-provider architecture — never assignable at registration.
+  if (suppliedOrgType === 'BUSINESS') {
+    throw new RegistrationValidationError(
+      'ORGANISATION_TYPE_NOT_AVAILABLE',
+      'The BUSINESS organisation type is reserved and cannot be selected at registration.'
+    )
+  }
+
+  // INDIVIDUAL_INSTRUCTOR supplied for a non-driving provider is a mismatch —
+  // reject explicitly rather than silently converting.
+  if (!isDriving && suppliedOrgType === 'INDIVIDUAL_INSTRUCTOR') {
+    throw new RegistrationValidationError(
+      'INVALID_ORGANISATION_TYPE',
+      'INDIVIDUAL_INSTRUCTOR is only valid for driving instructors. Please select SOLE_TRADER or REGISTERED_BUSINESS.'
     )
   }
 
@@ -138,6 +166,7 @@ export function deriveRegistrationFields(input: RegistrationInput): DerivedRegis
 
   const commercialAgreementStatus: 'ACCEPTED' | 'PENDING' =
     businessModel === 'MARKETPLACE' ? 'ACCEPTED'   // termsAccepted validated above
+    : businessModel === 'SAAS' && SAAS_TERMS_PUBLISHED && saasTermsAccepted === true ? 'ACCEPTED'
     : 'PENDING'
 
   const commercialAgreementVersion: string | null =
@@ -156,16 +185,21 @@ export function deriveRegistrationFields(input: RegistrationInput): DerivedRegis
   const privacyPolicyAcceptedAt = new Date()
 
   // ── User.terms* fields ────────────────────────────────────────────────────
-  // Write User.termsAcceptedAt and User.termsVersion ONLY for MARKETPLACE
-  // providers. SaaS providers never accepted a commercial agreement, so these
-  // fields must remain null.
+  // Write User.termsAcceptedAt and User.termsVersion for:
+  //   - MARKETPLACE providers who accepted the Instructor Terms (always, since enforced above)
+  //   - SaaS providers when SaaS Terms are published and accepted
+  // For unpublished SaaS, leave both null.
   //
   // Important: app/api/public/bookings/route.ts also writes User.termsAcceptedAt
   // for CLIENT registrations — that is a separate path and is not affected here.
   const userTermsAcceptedAt: Date | null =
-    businessModel === 'MARKETPLACE' ? new Date() : null
+    businessModel === 'MARKETPLACE' ? new Date()
+    : businessModel === 'SAAS' && commercialAgreementStatus === 'ACCEPTED' ? new Date()
+    : null
   const userTermsVersion: string | null =
-    businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION : null
+    businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION
+    : businessModel === 'SAAS' && commercialAgreementStatus === 'ACCEPTED' && commercialAgreementVersion ? commercialAgreementVersion
+    : null
 
   return {
     businessModel,

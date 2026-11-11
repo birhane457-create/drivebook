@@ -50,6 +50,9 @@ const registerSchema = z.object({
   // Marketplace acceptance — required for MARKETPLACE registrations.
   // Not sent for SaaS registrations (no agreement to accept yet).
   termsAccepted: z.boolean().optional(),
+  // SaaS acceptance — required when SaaS Terms are published (SAAS_TERMS_PUBLISHED=true).
+  // Not sent while SaaS Terms are unpublished.
+  saasTermsAccepted: z.boolean().optional(),
   ageDeclaration: z.boolean().optional(),
   // termsVersion is intentionally NOT accepted from the browser.
   // The server derives the version from constants in lib/registration/derive-registration-fields.ts.
@@ -111,10 +114,11 @@ export async function POST(req: NextRequest) {
     let derived: ReturnType<typeof deriveRegistrationFields>
     try {
       derived = deriveRegistrationFields({
-        businessType:     data.businessType,
-        businessModel:    data.businessModel,
-        organisationType: data.organisationType,
-        termsAccepted:    data.termsAccepted,
+        businessType:      data.businessType,
+        businessModel:     data.businessModel,
+        organisationType:  data.organisationType,
+        termsAccepted:     data.termsAccepted,
+        saasTermsAccepted: data.saasTermsAccepted,
       })
     } catch (err) {
       if (err instanceof RegistrationValidationError) {
@@ -220,7 +224,7 @@ export async function POST(req: NextRequest) {
 
       return { user, provider }
     }, {
-      timeout: 10000, // Lean transaction — no template creation here
+      timeout: 30000, // 30s — allows for high-latency remote DB connections
     })
 
     const { user, provider } = result
@@ -427,7 +431,7 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         providerId: provider.id,
         businessType: data.businessType,
-        organisationType: resolvedOrganisationType,
+        organisationType: organisationType,
         commercialAgreementType,
         commercialAgreementStatus,
         status: 'pending_approval',

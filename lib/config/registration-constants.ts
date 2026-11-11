@@ -24,14 +24,24 @@ export const PRIVACY_POLICY_VERSION = '2.0'
 
 /**
  * SaaS Terms — NOT YET PUBLISHED.
- * When published, set this to the version string (e.g. '1.0') and update
- * SAAS_TERMS_PUBLISHED to true. The registration API will then:
- *   - Set commercialAgreementVersion = SAAS_TERMS_VERSION
- *   - Show the SaaS Terms checkbox to SaaS providers
- *   - Accept commercialAgreementStatus = ACCEPTED on acceptance
+ *
+ * Transition procedure when SaaS Terms are published:
+ *   1. Set SAAS_TERMS_VERSION to the published version string (e.g. '1.0')
+ *   2. Set SAAS_TERMS_PUBLISHED to true
+ *
+ * Effects (automatic — no other code changes required):
+ *   - Registration API enforces saasTermsAccepted=true for SaaS registrations
+ *   - Register page shows SaaS Terms checkbox (linking to SAAS_TERMS_URL)
+ *   - Derivation utility produces ACCEPTED status, records version and timestamp
+ *   - New SaaS registrations without acceptance are rejected with SAAS_TERMS_REQUIRED
+ *
+ * IMPORTANT: Existing SaaS providers registered before this flip will retain
+ *   commercialAgreementStatus=PENDING until they explicitly accept the terms.
+ *   A separate acceptance flow (not in registration) must handle existing accounts.
  */
 export const SAAS_TERMS_VERSION:   string | null = null   // null = not published
 export const SAAS_TERMS_PUBLISHED: boolean       = false
+export const SAAS_TERMS_URL:       string        = '/saas-terms' // future URL when published
 
 // ── Organisation type values ──────────────────────────────────────────────────
 
@@ -50,18 +60,25 @@ export const ORGANISATION_TYPES = {
   BUSINESS:              'BUSINESS',
 } as const
 
-// ── AI capability map — derived from actual service template configurations ───
+// ── AI capability map — maintained snapshot of actual service template configs ─
 //
-// Source of truth: lib/presets/{driving,beauty,tax,loader}.ts service definitions
+// This map is a MAINTAINED SNAPSHOT. It must agree with the actual template
+// configurations in lib/presets/{driving,beauty,tax,loader}.ts. Tests in
+// __tests__/integration/reg-phase2-architecture.test.ts verify this agreement
+// and will fail if the templates change without updating this map.
 //
-// Each entry describes what the AI receptionist can and cannot do for that
-// industry. Used by the discovery page to show accurate capability descriptions.
+// Effective capability = intersection of:
+//   1. Service-level aiCanBook / aiCanQuote (from service definitions)
+//   2. Business-level allowedActions (from aiConfig, the operative executable gate)
 //
-// aiCanBook:  At least one configured service has aiCanBook = true
-// aiCanQuote: At least one configured service has aiCanQuote = true
-// mixed:      true when aiCanBook and aiCanQuote are both true across different services
-// calloutChargeConfigured: true only when a fixed call-out charge field exists in config
-//             (currently false for all business types — no such config field exists yet)
+// 'quote' action is executable only when it appears in allowedActions.
+// The app/api/business/ai-config/route.ts Zod schema confirms allowedActions
+// is the gate: z.array(z.enum(['book','reschedule','cancel','quote','message','payment'])).
+//
+// calloutChargeConfigured: true only when a fixed call-out charge field exists
+//   in the template config. Currently false for all types — no such field exists.
+//
+// Source: lib/presets/{driving,beauty,tax,loader}.ts
 
 export interface AiCapabilityProfile {
   aiCanBook:              boolean
