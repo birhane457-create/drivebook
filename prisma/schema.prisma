@@ -182,10 +182,13 @@ model Provider {
   // Organisation type — separate from accountType and businessModel.
   // INDIVIDUAL_INSTRUCTOR: driving instructor operating independently.
   // DRIVING_SCHOOL: school with multiple instructors (designed, not yet enabled).
-  // SOLE_TRADER: non-driving sole trader (default for plumber/electrician/beauty/tax).
+  // SOLE_TRADER: non-driving sole trader (selected at registration for trades).
+  // REGISTERED_BUSINESS: non-driving registered company.
   // BUSINESS: multi-provider organisation (reserved; not assigned at registration).
-  // Does NOT activate accountType=BUSINESS or multi-provider permissions.
-  organisationType          String     @default("SOLE_TRADER")
+  // NULL: existing providers registered before this field was introduced.
+  //   Cannot be reliably classified from DB evidence alone.
+  //   New registrations always receive an explicit value from the API.
+  organisationType          String?    // nullable — existing rows get NULL; new rows explicitly set
   // Commercial agreement — type and status derived server-side from businessModel.
   // Type: MARKETPLACE_TERMS | SAAS_TERMS
   // Status: PENDING (terms not yet published/accepted) | ACCEPTED

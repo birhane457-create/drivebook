@@ -387,15 +387,22 @@ describe('FIX-4 — Organisation types', () => {
     expect(page).toContain('selectedStructure')
   })
 
-  it('FIX-4-10 | Schema default is SOLE_TRADER', () => {
+// ── FIX-4-10 — schema and migration ──────────────────────────────────────────
+
+  it('FIX-4-10 | Schema organisationType is nullable (no default)', () => {
     const schema = src('prisma/schema.prisma')
-    expect(schema).toContain('@default("SOLE_TRADER")')
+    // Must be nullable String? not String with default
+    expect(schema).toContain('organisationType          String?')
+    expect(schema).not.toContain('@default("SOLE_TRADER")')
   })
 
-  it('FIX-4-11 | Migration DEFAULT is SOLE_TRADER', () => {
+  it('FIX-4-11 | Migration adds organisationType as NULL (no DEFAULT clause)', () => {
     const mig = src('prisma/migrations/20261110000001_add_organisation_type_and_agreement_fields/migration.sql')
-    expect(mig).toContain("DEFAULT 'SOLE_TRADER'")
-    expect(mig).toContain('REGISTERED_BUSINESS')
+    // Column must be nullable TEXT with no DEFAULT — existing rows get NULL
+    expect(mig).toContain('"organisationType"             TEXT,')
+    expect(mig).not.toContain("DEFAULT 'SOLE_TRADER'")
+    // The migration must document why NULL is intentional
+    expect(mig).toContain('organisationType is NULL for all existing rows')
   })
 })
 
@@ -506,6 +513,99 @@ describe('Shared derivation utility (FIX-5 — production functions)', () => {
     const route = src('app/api/register/route.ts')
     expect(route).not.toMatch(/function deriveAll\b/)
     expect(route).not.toMatch(/const deriveAll\b/)
+  })
+})
+
+// ── ageDeclaration: CLIENT/LEARNER declaration only ──────────────────────────
+
+describe('ageDeclaration — CLIENT/LEARNER declaration only', () => {
+
+  it('AGE-1 | ageDeclaration is NOT in the provider registration Zod schema', () => {
+    const route = src('app/api/register/route.ts')
+    // The field must not be in the schema as a Zod validator
+    expect(route).not.toMatch(/ageDeclaration:\s*z\./)
+  })
+
+  it('AGE-2 | provider registration does NOT write ageDeclaration to User record', () => {
+    const route = src('app/api/register/route.ts')
+    // The User write must not reference ageDeclaration
+    expect(route).not.toContain('ageDeclaration: data.ageDeclaration')
+    expect(route).not.toContain('ageDeclaration: false')
+  })
+
+  it('AGE-3 | ageDeclaration appears only in the learner/client booking path', () => {
+    // The booking form and public bookings route use it for learner eligibility
+    const bookingForm = src('components/BookingFormNew.tsx')
+    expect(bookingForm).toContain('ageDeclaration')
+    expect(bookingForm).toContain('at least 16 years old')
+    // The learner booking API route uses it
+    const learnerRoute = src('app/api/public/bookings/route.ts')
+    expect(learnerRoute).toContain('ageDeclaration')
+  })
+
+  it('AGE-4 | provider registration page has no ageDeclaration field', () => {
+    const page = src('app/register/page.tsx')
+    expect(page).not.toContain('ageDeclaration')
+  })
+
+  it('AGE-5 | ageDeclaration is documented as CLIENT-only in registration API', () => {
+    const route = src('app/api/register/route.ts')
+    expect(route).toContain('LEARNER/CLIENT declaration')
+  })
+
+  it('AGE-6 | Marketplace registration does not couple ageDeclaration to termsAccepted', () => {
+    // Derivation output must not contain ageDeclaration
+    const d = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true,
+    })
+    expect(d).not.toHaveProperty('ageDeclaration')
+    // SaaS also no ageDeclaration
+    const dSaas = deriveRegistrationFields({ businessType: 'plumber' })
+    expect(dSaas).not.toHaveProperty('ageDeclaration')
+  })
+})
+
+// ── Migration classification strategy ─────────────────────────────────────────
+
+describe('Migration classification — organisationType strategy', () => {
+
+  it('MIG-1 | Existing providers get NULL organisationType (not SOLE_TRADER default)', () => {
+    const mig = src('prisma/migrations/20261110000001_add_organisation_type_and_agreement_fields/migration.sql')
+    // Column definition must be nullable TEXT with no DEFAULT
+    expect(mig).toContain('"organisationType"             TEXT,')
+    expect(mig).not.toContain("DEFAULT 'SOLE_TRADER'")
+  })
+
+  it('MIG-2 | New registrations always receive an explicit organisationType from API', () => {
+    const route = src('app/api/register/route.ts')
+    // The derivation sets organisationType explicitly
+    expect(route).toContain('organisationType,')
+    // The derive-registration-fields utility always returns a value for new registrations
+    const driving = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
+    expect(driving.organisationType).toBe('INDIVIDUAL_INSTRUCTOR')
+    const plumber = deriveRegistrationFields({ businessType: 'plumber' })
+    expect(plumber.organisationType).toBe('SOLE_TRADER')
+  })
+
+  it('MIG-3 | Classification script uses industry field (not just businessModel)', () => {
+    const script = src('scripts/migration-phase2-classification.cjs')
+    expect(script).toContain('p.industry')
+    expect(script).toContain('NON_DRIVING_INDUSTRIES')
+    expect(script).toContain('REVIEW')
+  })
+
+  it('MIG-4 | Classification script explicitly populates REVIEW group', () => {
+    const script = src('scripts/migration-phase2-classification.cjs')
+    // REVIEW must be populated, not always empty
+    expect(script).toContain("groups.REVIEW.push")
+    expect(script).toContain('MANUAL REVIEW REQUIRED')
+  })
+
+  it('MIG-5 | Rollback assessment documents data-destruction risk', () => {
+    const script = src('scripts/migration-phase2-classification.cjs')
+    expect(script).toContain('destroys real legal consent records')
+    expect(script).toContain('CREATE TABLE')  // backup step documented
+    expect(script).toContain('legal review')
   })
 })
 
