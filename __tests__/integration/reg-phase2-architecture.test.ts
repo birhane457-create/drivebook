@@ -129,6 +129,143 @@ describe('FIX-2 — SaaS pending agreement', () => {
   })
 })
 
+// ── FIX-2B: SaaS published lifecycle (injected test state) ───────────────────
+// These tests exercise the published SaaS Terms path using _testSaasPublished
+// to inject a "published" state without modifying production constants.
+// SAAS_TERMS_PUBLISHED remains false in production throughout these tests.
+
+describe('FIX-2B — SaaS Terms published lifecycle', () => {
+
+  const PUBLISHED_STATE = { published: true, version: '1.0' }
+
+  it('SaaS-PUB-1 | Published + no acceptance → SAAS_TERMS_REQUIRED', () => {
+    expect(() =>
+      deriveRegistrationFields({
+        businessType: 'driving', businessModel: 'SAAS',
+        _testSaasPublished: PUBLISHED_STATE,
+        // saasTermsAccepted not supplied
+      })
+    ).toThrow(RegistrationValidationError)
+    try {
+      deriveRegistrationFields({
+        businessType: 'driving', businessModel: 'SAAS',
+        _testSaasPublished: PUBLISHED_STATE,
+      })
+      expect.fail('Should have thrown')
+    } catch (err) {
+      expect((err as RegistrationValidationError).code).toBe('SAAS_TERMS_REQUIRED')
+    }
+  })
+
+  it('SaaS-PUB-2 | Published + saasTermsAccepted=false → SAAS_TERMS_REQUIRED', () => {
+    expect(() =>
+      deriveRegistrationFields({
+        businessType: 'plumber',
+        _testSaasPublished: PUBLISHED_STATE,
+        saasTermsAccepted: false,
+      })
+    ).toThrow(RegistrationValidationError)
+  })
+
+  it('SaaS-PUB-3 | Published + accepted → ACCEPTED with correct version', () => {
+    const d = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'SAAS',
+      _testSaasPublished: PUBLISHED_STATE,
+      saasTermsAccepted: true,
+    })
+    expect(d.commercialAgreementStatus).toBe('ACCEPTED')
+    expect(d.commercialAgreementVersion).toBe('1.0')
+    expect(d.commercialAgreementType).toBe('SAAS_TERMS')
+    expect(d.commercialAgreementAcceptedAt).toBeInstanceOf(Date)
+  })
+
+  it('SaaS-PUB-4 | Published + accepted → User.termsAcceptedAt remains null (SaaS never touches legacy fields)', () => {
+    // SaaS Terms are not Instructor Terms. SaaS acceptance must NOT populate
+    // User.termsAcceptedAt / User.termsVersion — those are Marketplace fields.
+    const d = deriveRegistrationFields({
+      businessType: 'driving', businessModel: 'SAAS',
+      _testSaasPublished: PUBLISHED_STATE,
+      saasTermsAccepted: true,
+    })
+    expect(d.userTermsAcceptedAt).toBeNull()
+    expect(d.userTermsVersion).toBeNull()
+  })
+
+  it('SaaS-PUB-5 | Unpublished → PENDING regardless of saasTermsAccepted', () => {
+    // With _testSaasPublished = { published: false }, the state is unpublished.
+    const d = deriveRegistrationFields({
+      businessType: 'plumber',
+      _testSaasPublished: { published: false, version: null },
+      saasTermsAccepted: true,  // attempting acceptance when unpublished
+    })
+    expect(d.commercialAgreementStatus).toBe('PENDING')
+    expect(d.commercialAgreementVersion).toBeNull()
+    expect(d.userTermsAcceptedAt).toBeNull()
+  })
+
+  it('SaaS-PUB-6 | Privacy consent is always recorded independently of SaaS Terms state', () => {
+    // Published + accepted
+    const dAccepted = deriveRegistrationFields({
+      businessType: 'electrician',
+      _testSaasPublished: PUBLISHED_STATE,
+      saasTermsAccepted: true,
+    })
+    expect(dAccepted.privacyPolicyVersion).toBe('2.0')
+    expect(dAccepted.privacyPolicyAcceptedAt).toBeInstanceOf(Date)
+    // Unpublished
+    const dPending = deriveRegistrationFields({ businessType: 'electrician' })
+    expect(dPending.privacyPolicyVersion).toBe('2.0')
+    expect(dPending.privacyPolicyAcceptedAt).toBeInstanceOf(Date)
+  })
+
+  it('SaaS-PUB-7 | Production constants are unchanged by these tests', () => {
+    // Confirm the module-level constants are still false/null
+    // (the tests used _testSaasPublished injection, not constant mutation)
+    expect(SAAS_TERMS_PUBLISHED).toBe(false)
+    expect(SAAS_TERMS_VERSION).toBeNull()
+  })
+})
+
+// ── FIX-1B: Agreement record ownership ───────────────────────────────────────
+
+describe('FIX-1B — Agreement record ownership', () => {
+
+  it('OWN-1 | MARKETPLACE acceptance populates legacy User fields', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'MARKETPLACE', termsAccepted: true })
+    expect(d.userTermsAcceptedAt).toBeInstanceOf(Date)
+    expect(d.userTermsVersion).toBe(MARKETPLACE_TERMS_VERSION)
+  })
+
+  it('OWN-2 | SaaS (unpublished) — User fields are null, Provider agreement PENDING', () => {
+    const d = deriveRegistrationFields({ businessType: 'driving', businessModel: 'SAAS' })
+    expect(d.userTermsAcceptedAt).toBeNull()
+    expect(d.userTermsVersion).toBeNull()
+    expect(d.commercialAgreementStatus).toBe('PENDING')
+    expect(d.commercialAgreementType).toBe('SAAS_TERMS')
+  })
+
+  it('OWN-3 | SaaS (published + accepted) — User fields still null, Provider agreement ACCEPTED', () => {
+    const d = deriveRegistrationFields({
+      businessType: 'plumber',
+      _testSaasPublished: { published: true, version: '1.0' },
+      saasTermsAccepted: true,
+    })
+    // SaaS Terms ≠ Instructor Terms. The User legacy fields must stay null.
+    expect(d.userTermsAcceptedAt).toBeNull()
+    expect(d.userTermsVersion).toBeNull()
+    // The SaaS agreement is recorded in Provider fields only.
+    expect(d.commercialAgreementStatus).toBe('ACCEPTED')
+    expect(d.commercialAgreementVersion).toBe('1.0')
+    expect(d.commercialAgreementAcceptedAt).toBeInstanceOf(Date)
+  })
+
+  it('OWN-4 | Derivation utility comment describes Marketplace-only User fields', () => {
+    const deriveSrc = src('lib/registration/derive-registration-fields.ts')
+    expect(deriveSrc).toContain('MARKETPLACE ONLY')
+    expect(deriveSrc).toContain('legacy Instructor Terms')
+  })
+})
+
 // ── FIX-3: Privacy policy version ────────────────────────────────────────────
 
 describe('FIX-3 — Privacy policy version', () => {

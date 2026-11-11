@@ -15,7 +15,9 @@
  * - Privacy version and timestamp are always server-controlled constants.
  * - Marketplace acceptance requires explicit `termsAccepted === true`.
  * - SaaS commercial agreement remains PENDING while SaaS Terms are unpublished.
- * - `User.termsAcceptedAt` is only written for MARKETPLACE providers who accepted.
+ * - `User.termsAcceptedAt` / `User.termsVersion` are Instructor Terms (MARKETPLACE)
+ *   legacy fields. They are only written for MARKETPLACE providers.
+ *   SaaS agreement acceptance is recorded in Provider.commercialAgreement* only.
  */
 
 import {
@@ -34,6 +36,12 @@ export interface RegistrationInput {
   organisationType?: string | undefined                   // optional; non-driving may supply
   termsAccepted?:    boolean | undefined                  // Marketplace acceptance
   saasTermsAccepted?: boolean | undefined                 // SaaS acceptance (when published)
+  /**
+   * Override for testing: inject SaaS Terms publication state without changing
+   * the module-level constants. If omitted, the production constants are used.
+   * Never supply this in production — it is for test isolation only.
+   */
+  _testSaasPublished?: { published: boolean; version: string | null }
 }
 
 // ── Output shape ─────────────────────────────────────────────────────────────
@@ -79,8 +87,14 @@ export class RegistrationValidationError extends Error {
  * before any database writes occur.
  */
 export function deriveRegistrationFields(input: RegistrationInput): DerivedRegistrationFields {
-  const { businessType, businessModel: suppliedModel, organisationType: suppliedOrgType, termsAccepted, saasTermsAccepted } = input
+  const { businessType, businessModel: suppliedModel, organisationType: suppliedOrgType, termsAccepted, saasTermsAccepted, _testSaasPublished } = input
   const isDriving = businessType === 'driving'
+
+  // Resolve SaaS Terms publication state.
+  // In production: always read from the module-level constants.
+  // In tests: _testSaasPublished may inject a different state without touching constants.
+  const saasPublished = _testSaasPublished !== undefined ? _testSaasPublished.published : SAAS_TERMS_PUBLISHED
+  const saasVersion   = _testSaasPublished !== undefined ? _testSaasPublished.version   : SAAS_TERMS_VERSION
 
   // ── Business model and payment mode ────────────────────────────────────────
   // - Driving + SAAS → SAAS + DIRECT
@@ -106,7 +120,7 @@ export function deriveRegistrationFields(input: RegistrationInput): DerivedRegis
   // ── SAAS Terms enforcement (when published) ──────────────────────────────
   // When SAAS_TERMS_PUBLISHED = true, SaaS Terms must be explicitly accepted.
   // While unpublished: no acceptance required; status remains PENDING.
-  if (businessModel === 'SAAS' && SAAS_TERMS_PUBLISHED && saasTermsAccepted !== true) {
+  if (businessModel === 'SAAS' && saasPublished && saasTermsAccepted !== true) {
     throw new RegistrationValidationError(
       'SAAS_TERMS_REQUIRED',
       'You must accept the DriveBook SaaS Terms to register.'
@@ -166,12 +180,12 @@ export function deriveRegistrationFields(input: RegistrationInput): DerivedRegis
 
   const commercialAgreementStatus: 'ACCEPTED' | 'PENDING' =
     businessModel === 'MARKETPLACE' ? 'ACCEPTED'   // termsAccepted validated above
-    : businessModel === 'SAAS' && SAAS_TERMS_PUBLISHED && saasTermsAccepted === true ? 'ACCEPTED'
+    : businessModel === 'SAAS' && saasPublished && saasTermsAccepted === true ? 'ACCEPTED'
     : 'PENDING'
 
   const commercialAgreementVersion: string | null =
     businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION
-    : SAAS_TERMS_PUBLISHED          ? SAAS_TERMS_VERSION
+    : saasPublished                  ? saasVersion
     : null
 
   const commercialAgreementAcceptedAt: Date | null =
@@ -184,22 +198,20 @@ export function deriveRegistrationFields(input: RegistrationInput): DerivedRegis
   const privacyPolicyVersion    = PRIVACY_POLICY_VERSION
   const privacyPolicyAcceptedAt = new Date()
 
-  // ── User.terms* fields ────────────────────────────────────────────────────
-  // Write User.termsAcceptedAt and User.termsVersion for:
-  //   - MARKETPLACE providers who accepted the Instructor Terms (always, since enforced above)
-  //   - SaaS providers when SaaS Terms are published and accepted
-  // For unpublished SaaS, leave both null.
+  // ── User.terms* fields — MARKETPLACE ONLY ────────────────────────────────
+  // User.termsAcceptedAt and User.termsVersion are legacy Instructor Terms
+  // (Marketplace) acceptance fields. They must only be populated when a
+  // MARKETPLACE provider accepts the Instructor Terms.
+  //
+  // SaaS agreement acceptance is recorded exclusively in Provider.commercialAgreement*.
+  // SaaS terms are distinct from Instructor Terms and must not share these fields.
   //
   // Important: app/api/public/bookings/route.ts also writes User.termsAcceptedAt
   // for CLIENT registrations — that is a separate path and is not affected here.
   const userTermsAcceptedAt: Date | null =
-    businessModel === 'MARKETPLACE' ? new Date()
-    : businessModel === 'SAAS' && commercialAgreementStatus === 'ACCEPTED' ? new Date()
-    : null
+    businessModel === 'MARKETPLACE' ? new Date() : null
   const userTermsVersion: string | null =
-    businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION
-    : businessModel === 'SAAS' && commercialAgreementStatus === 'ACCEPTED' && commercialAgreementVersion ? commercialAgreementVersion
-    : null
+    businessModel === 'MARKETPLACE' ? MARKETPLACE_TERMS_VERSION : null
 
   return {
     businessModel,
