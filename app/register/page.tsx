@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { UserPlus, Loader2, CheckCircle, Car, Wrench, Zap, Sparkles, Calculator } from 'lucide-react'
+import { SAAS_TERMS_PUBLISHED, SAAS_TERMS_URL } from '@/lib/config/registration-constants'
 
 // Business type configuration
 const businessTypeConfig: Record<string, {
@@ -71,6 +72,9 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [privacyAccepted, setPrivacyAccepted] = useState(false)
+  // SaaS Terms acceptance — only relevant when SAAS_TERMS_PUBLISHED is true.
+  // The checkbox is not rendered while terms are unpublished, so this stays false.
+  const [saasTermsAccepted, setSaasTermsAccepted] = useState(false)
 
   // Business model selection — only for driving instructors.
   // Other trades are always SaaS (the API enforces this server-side).
@@ -142,6 +146,12 @@ export default function RegisterPage() {
           // SaaS providers: do not send this field.
           ...(isDriving && selectedModel === 'MARKETPLACE' && termsAccepted
             ? { termsAccepted: true as const }
+            : {}),
+          // saasTermsAccepted — only sent when SaaS Terms are published AND the
+          // provider is on the SaaS path (driving+SaaS or non-driving).
+          // While terms are unpublished, this field is never sent.
+          ...(SAAS_TERMS_PUBLISHED && (isDriving ? selectedModel === 'SAAS' : true) && saasTermsAccepted
+            ? { saasTermsAccepted: true as const }
             : {}),
         }),
       })
@@ -451,14 +461,36 @@ export default function RegisterPage() {
                 </label>
               )}
 
-              {/* SaaS notice — no terms to accept yet */}
-              {(isDriving && selectedModel === 'SAAS') || !isDriving ? (
-                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                  <p className="text-xs text-amber-800">
-                    <strong>Service agreement:</strong> DriveBook SaaS Terms are being finalised. You will be notified when they are published and asked to accept them before commercial services are activated. Your account and all non-commercial features are available immediately after registration.
-                  </p>
-                </div>
-              ) : null}
+              {/* SaaS notice / acceptance — rendered for all SaaS paths */}
+              {((isDriving && selectedModel === 'SAAS') || !isDriving) && (
+                SAAS_TERMS_PUBLISHED ? (
+                  /* SaaS Terms are published — show the acceptance checkbox */
+                  <label className="flex items-start gap-3 cursor-pointer group">
+                    <div className="mt-0.5 shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={saasTermsAccepted}
+                        onChange={e => setSaasTermsAccepted(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 bg-white accent-violet-600 cursor-pointer"
+                      />
+                    </div>
+                    <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors leading-relaxed">
+                      I agree to the{' '}
+                      <Link href={SAAS_TERMS_URL} target="_blank" rel="noopener noreferrer"
+                        className="text-violet-600 hover:text-violet-700 font-medium underline underline-offset-2">
+                        DriveBook SaaS Terms
+                      </Link>
+                    </span>
+                  </label>
+                ) : (
+                  /* SaaS Terms not yet published — inform the provider */
+                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-xs text-amber-800">
+                      <strong>Service agreement:</strong> DriveBook SaaS Terms are being finalised. You will be notified when they are published and asked to accept them before commercial services are activated. Your account and all non-commercial features are available immediately after registration.
+                    </p>
+                  </div>
+                )
+              )}
 
               {/* Privacy policy — always required, all providers */}
               <label className="flex items-start gap-3 cursor-pointer group">
@@ -482,7 +514,7 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={loading || !privacyAccepted || (isDriving && !selectedModel) || (isDriving && selectedModel === 'MARKETPLACE' && !termsAccepted)}
+              disabled={loading || !privacyAccepted || (isDriving && !selectedModel) || (isDriving && selectedModel === 'MARKETPLACE' && !termsAccepted) || (SAAS_TERMS_PUBLISHED && (isDriving ? selectedModel === 'SAAS' : true) && !saasTermsAccepted)}
               className={[
                 'w-full py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2',
                 'bg-gradient-to-r from-violet-600 to-purple-600 text-white',
