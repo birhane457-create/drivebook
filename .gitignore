@@ -13,6 +13,10 @@ test-*.bat
 verify-*.js
 postman-*.json
 
+# playwright
+/test-results/
+/playwright-report/
+
 # next.js
 /.next/
 /out/
