@@ -59,16 +59,26 @@ function fail(label) { console.log(`  ❌ FAIL: ${label}`); process.exitCode = 1
 function info(label) { console.log(`     ${label}`); }
 
 async function cleanup(emails) {
+  let deleted = 0;
+  let failed = 0;
+  let notFound = 0;
   for (const email of emails) {
     try {
       const user = await prisma.user.findUnique({ where: { email }, select: { id: true, providerId: true } });
-      if (!user) continue;
+      if (!user) { notFound++; continue; }
       if (user.providerId) {
-        await prisma.provider.delete({ where: { id: user.providerId } }).catch(() => {});
+        await prisma.provider.delete({ where: { id: user.providerId } }).catch(e => { failed++; console.error(`  ⚠ Failed to delete Provider ${user.providerId}: ${e.message}`); });
       }
-      await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
-    } catch {}
+      await prisma.user.delete({ where: { id: user.id } }).catch(e => { failed++; console.error(`  ⚠ Failed to delete User ${user.id}: ${e.message}`); });
+      deleted++;
+    } catch (e) {
+      failed++;
+      console.error(`  ⚠ Cleanup error for ${email}: ${e.message}`);
+    }
   }
+  console.log(`  Cleanup: ${deleted} deleted, ${notFound} not found, ${failed} failed`);
+  if (failed > 0) console.error('  ⚠ CLEANUP FAILURES — manual deletion may be required');
+  return failed;
 }
 
 const created = [];
@@ -120,8 +130,10 @@ async function main() {
   r3.body?.commercialAgreementStatus === 'ACCEPTED' ? ok('commercialAgreementStatus=ACCEPTED') : fail(`Expected ACCEPTED, got ${r3.body?.commercialAgreementStatus}`);
 
   // ── SP-3DB: Full Provider DB persistence — published SaaS accepted ──────
-  if (r3.status === 201 && r3.body?.providerId) {
-    console.log('\nSP-3DB | Full Provider DB persistence — published SaaS accepted');
+  if (r3.status === 201) {
+    if (!r3.body?.providerId) { fail('HTTP 201 missing providerId — DB assertions cannot run'); }
+    else {
+      console.log('\nSP-3DB | Full Provider DB persistence — published SaaS accepted');
     const p3 = await prisma.provider.findUnique({
       where: { id: r3.body.providerId },
       select: { commercialAgreementType: true, commercialAgreementStatus: true, commercialAgreementVersion: true,
@@ -143,6 +155,7 @@ async function main() {
     const u3 = await prisma.user.findUnique({ where: { email: email3 }, select: { termsAcceptedAt: true, termsVersion: true } });
     u3?.termsAcceptedAt === null ? ok('DB: User.termsAcceptedAt=null (SaaS isolation maintained)') : fail('DB: expected null User.termsAcceptedAt');
     u3?.termsVersion === null ? ok('DB: User.termsVersion=null (SaaS isolation maintained)') : fail(`DB: expected null, got ${u3?.termsVersion}`);
+    }
   }
 
   // ── SP-4: Non-driving SaaS without acceptance → 400 ─────────────────────

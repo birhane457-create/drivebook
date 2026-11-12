@@ -49,16 +49,26 @@ function fail(label) { console.log(`  ❌ FAIL: ${label}`); process.exitCode = 1
 function info(label) { console.log(`     ${label}`); }
 
 async function cleanup(emails) {
+  let deleted = 0;
+  let failed = 0;
+  let notFound = 0;
   for (const email of emails) {
     try {
       const user = await prisma.user.findUnique({ where: { email }, select: { id: true, providerId: true } });
-      if (!user) continue;
+      if (!user) { notFound++; continue; }
       if (user.providerId) {
-        await prisma.provider.delete({ where: { id: user.providerId } }).catch(() => {});
+        await prisma.provider.delete({ where: { id: user.providerId } }).catch(e => { failed++; console.error(`  ⚠ Failed to delete Provider ${user.providerId}: ${e.message}`); });
       }
-      await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
-    } catch {}
+      await prisma.user.delete({ where: { id: user.id } }).catch(e => { failed++; console.error(`  ⚠ Failed to delete User ${user.id}: ${e.message}`); });
+      deleted++;
+    } catch (e) {
+      failed++;
+      console.error(`  ⚠ Cleanup error for ${email}: ${e.message}`);
+    }
   }
+  console.log(`  Cleanup: ${deleted} deleted, ${notFound} not found, ${failed} failed`);
+  if (failed > 0) console.error('  ⚠ CLEANUP FAILURES — manual deletion may be required');
+  return failed;
 }
 
 const created = [];
@@ -90,9 +100,11 @@ async function main() {
   r1.body?.commercialAgreementStatus === 'ACCEPTED' ? ok('commercialAgreementStatus=ACCEPTED') : fail(`Expected ACCEPTED, got ${r1.body?.commercialAgreementStatus}`);
 
   // RT-1DB: Full Provider DB persistence — Marketplace
-  if (r1.status === 201 && r1.body?.providerId) {
-    console.log('\nRT-1DB | Full Provider DB persistence — Marketplace');
-    const p1 = await prisma.provider.findUnique({
+  if (r1.status === 201) {
+    if (!r1.body?.providerId) { fail('HTTP 201 missing providerId — DB assertions cannot run'); }
+    else {
+      console.log('\nRT-1DB | Full Provider DB persistence — Marketplace');
+      const p1 = await prisma.provider.findUnique({
       where: { id: r1.body.providerId },
       select: { commercialAgreementType: true, commercialAgreementStatus: true, commercialAgreementVersion: true,
                 commercialAgreementAcceptedAt: true, privacyPolicyVersion: true, privacyPolicyAcceptedAt: true,
@@ -113,6 +125,7 @@ async function main() {
     const u1 = await prisma.user.findUnique({ where: { email: email1 }, select: { termsAcceptedAt: true, termsVersion: true } });
     u1?.termsAcceptedAt !== null ? ok('DB: User.termsAcceptedAt set (Marketplace)') : fail('DB: expected non-null User.termsAcceptedAt');
     u1?.termsVersion === '2.0' ? ok('DB: User.termsVersion=2.0 (Marketplace)') : fail(`DB: expected 2.0, got ${u1?.termsVersion}`);
+    }
   }
 
   // ── RT-2: Marketplace without termsAccepted → 400 MARKETPLACE_TERMS_REQUIRED
@@ -155,8 +168,10 @@ async function main() {
   }
 
   // RT-4DB: Full Provider DB persistence — SaaS
-  if (r4.status === 201 && r4.body?.providerId) {
-    console.log('\nRT-4DB | Full Provider DB persistence — SaaS');
+  if (r4.status === 201) {
+    if (!r4.body?.providerId) { fail('HTTP 201 missing providerId — DB assertions cannot run'); }
+    else {
+      console.log('\nRT-4DB | Full Provider DB persistence — SaaS');
     const p4 = await prisma.provider.findUnique({
       where: { id: r4.body.providerId },
       select: { commercialAgreementType: true, commercialAgreementStatus: true, commercialAgreementVersion: true,
@@ -174,6 +189,7 @@ async function main() {
     p4?.organisationType === 'INDIVIDUAL_INSTRUCTOR' ? ok('DB: organisationType=INDIVIDUAL_INSTRUCTOR') : fail(`DB: expected INDIVIDUAL_INSTRUCTOR, got ${p4?.organisationType}`);
     p4?.businessModel === 'SAAS' ? ok('DB: businessModel=SAAS') : fail(`DB: expected SAAS, got ${p4?.businessModel}`);
     p4?.paymentMode === 'DIRECT' ? ok('DB: paymentMode=DIRECT') : fail(`DB: expected DIRECT, got ${p4?.paymentMode}`);
+    }
   }
 
   // ── RT-5: Non-driving (plumber) → 201 SOLE_TRADER, PENDING ───────────────
@@ -188,8 +204,10 @@ async function main() {
   r5.body?.organisationType === 'SOLE_TRADER' ? ok('organisationType=SOLE_TRADER') : fail(`Expected SOLE_TRADER, got ${r5.body?.organisationType}`);
 
   // RT-5DB: Full Provider DB persistence — Non-driving SaaS (Plumber)
-  if (r5.status === 201 && r5.body?.providerId) {
-    console.log('\nRT-5DB | Full Provider DB persistence — Plumber (non-driving SaaS)');
+  if (r5.status === 201) {
+    if (!r5.body?.providerId) { fail('HTTP 201 missing providerId — DB assertions cannot run'); }
+    else {
+      console.log('\nRT-5DB | Full Provider DB persistence — Plumber (non-driving SaaS)');
     const p5 = await prisma.provider.findUnique({
       where: { id: r5.body.providerId },
       select: { commercialAgreementType: true, commercialAgreementStatus: true, commercialAgreementVersion: true,
@@ -208,6 +226,7 @@ async function main() {
     p5?.businessModel === 'SAAS' ? ok('DB: businessModel=SAAS') : fail(`DB: expected SAAS, got ${p5?.businessModel}`);
     p5?.paymentMode === 'DIRECT' ? ok('DB: paymentMode=DIRECT') : fail(`DB: expected DIRECT, got ${p5?.paymentMode}`);
     p5?.industry === 'plumber' ? ok('DB: industry=plumber') : fail(`DB: expected plumber, got ${p5?.industry}`);
+    }
   }
 
   // ── RT-6: Non-driving + REGISTERED_BUSINESS → 201 REGISTERED_BUSINESS ────
