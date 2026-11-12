@@ -500,7 +500,7 @@ export async function executePayout(
               to: instructor.user.email,
               subject: `Payout Adjustment · ${toFixed(toDecimal(totalDeducted), 2)} deducted (${payout.payoutRef})`,
               html,
-            }).catch(e => console.error('Adjustment deduction email failed (non-critical):', e));
+            }).catch((e: any) => console.error('Adjustment deduction email failed (non-critical):', e));
           } catch (e) {
             console.error('[PAYOUT] Failed to send adjustment email (non-critical):', e);
           }

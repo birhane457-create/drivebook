@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
             customerName,
             startTime,
             pickupAddress,
-          }).catch(e => console.error(`Instructor SMS failed for ${booking.id}:`, e));
+          }).catch((e: any) => console.error(`Instructor SMS failed for ${booking.id}:`, e));
         }
 
         // Email reminder to instructor (via in-app notification system — already handled above)
@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
             instructorName,
             startTime,
             pickupAddress,
-          }).catch(e => console.error(`Student SMS failed for ${booking.id}:`, e));
+          }).catch((e: any) => console.error(`Student SMS failed for ${booking.id}:`, e));
         }
 
         // Email reminder to student (offline students — send directly to stored email)
@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
                 <strong>Time:</strong> ${timeStr}${pickupAddress ? `<br><strong>Pickup:</strong> ${pickupAddress}` : ''}</p>
                 <p>See you then!</p>
               `,
-            }).catch(e => console.error(`Offline student email failed for ${booking.id}:`, e));
+            }).catch((e: any) => console.error(`Offline student email failed for ${booking.id}:`, e));
           }
         }
 

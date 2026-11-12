@@ -179,7 +179,7 @@ export async function POST(
         },
         'onboarding.approved',
         1
-      ).catch(e => console.error('[approve] Onboarding approved email failed (non-critical):', e))
+      ).catch((e: any) => console.error('[approve] Onboarding approved email failed (non-critical):', e))
     }
 
     return NextResponse.json({ success: true, instructor: approvedInstructor });

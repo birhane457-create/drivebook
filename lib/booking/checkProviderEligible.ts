@@ -58,6 +58,7 @@ export interface EligibilityGranted {
     paymentMode:        string
     businessModel:      string
     accountType:        string
+    businessName:       string | null
     syncGoogleCalendar: boolean
     userId:             string | null
     timezone:           string | null

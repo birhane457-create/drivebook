@@ -1711,7 +1711,7 @@ async function handleBookingPaymentSuccess(
           stripeRef: paymentIntent.id,
           paymentMethod: 'Card',
           bookingId,
-        }).catch(e => logger.error('Package receipt email failed', { error: e instanceof Error ? e.message : String(e) }));
+        }).catch((e: any) => logger.error('Package receipt email failed', { error: e instanceof Error ? e.message : String(e) }));
       } else {
         await sendSingleLessonReceipt({
           customerName: (booking as any).customer.name,
@@ -1729,7 +1729,7 @@ async function handleBookingPaymentSuccess(
           stripeRef: paymentIntent.id,
           paymentMethod: 'Card',
           bookingId,
-        }).catch(e => logger.error('Single lesson receipt email failed', { error: e instanceof Error ? e.message : String(e) }));
+        }).catch((e: any) => logger.error('Single lesson receipt email failed', { error: e instanceof Error ? e.message : String(e) }));
       }
     }
 

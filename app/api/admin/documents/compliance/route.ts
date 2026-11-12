@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
               <ul>${docList}</ul>
               <p>Please upload updated documents from your <a href="${process.env.NEXTAUTH_URL}/dashboard/documents">instructor dashboard</a> to avoid suspension.</p>
             `,
-          }).catch(e => console.error('Document reminder email failed:', e));
+          }).catch((e: any) => console.error('Document reminder email failed:', e));
         }
       }
       return NextResponse.json({ success: true, message: 'Reminder sent' });

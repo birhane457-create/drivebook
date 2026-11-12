@@ -284,7 +284,7 @@ export async function upsertBusinessBranding(
         // failure or partial-write response. Logging alone is insufficient — the
         // invariant must be enforced, not merely observed.
         await (db as any).business.delete({ where: { id: bizId } })
-          .catch(err => console.error(
+          .catch((err: any) => console.error(
             `[WLA-014] Failed to clean up orphaned Business ${bizId}:`,
             err instanceof Error ? err.message : String(err)
           ))

@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
         displayName,
         ipAddress,
         userAgent,
-      ).catch(err => {
+      ).catch((err: any) => {
         console.error('[DeviceCheck] Email notification failed:', err)
       })
     }
