@@ -1156,14 +1156,14 @@ describe('SaaS Terms version guard — fail-closed on missing version', () => {
     expect(d.commercialAgreementAcceptedAt).toBeInstanceOf(Date)
   })
 
-  it('VG-4 | Version guard fires before acceptance check — version error takes precedence', () => {
-    // Both version missing AND no acceptance — version guard fires first
-    // because an empty version is a deployment configuration error
-    // that should not silently fall through to the acceptance error.
-    // Order: version guard runs after acceptance check.
-    // A provider who hasn't accepted but version is also missing:
-    // acceptance check fires first (SAAS_TERMS_REQUIRED) — the UI
-    // already prevented this but the API must reject before version guard.
+  it('VG-4 | Acceptance check fires before version guard — acceptance error takes precedence', () => {
+    // When both version is missing AND acceptance is not provided,
+    // the acceptance check fires first (SAAS_TERMS_REQUIRED) because it
+    // runs before the version guard in the derivation logic.
+    // This is the correct order: a user-facing "you must accept" error
+    // is more actionable than a deployment-config "version is missing" error.
+    // The version guard only fires when acceptance HAS been provided but
+    // the version is still null/empty (see VG-1 and VG-2).
     expect(() => deriveRegistrationFields({
       businessType:      'driving',
       businessModel:     'SAAS',
