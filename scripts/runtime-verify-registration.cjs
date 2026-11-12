@@ -17,14 +17,15 @@ const { PrismaClient } = require('@prisma/client');
 process.env.DATABASE_URL = process.env.DIRECT_URL || process.env.DATABASE_URL;
 const prisma = new PrismaClient();
 
-const BASE_URL = 'http://localhost:3000';
+const PORT = process.env.TEST_PORT || 3000;
+const BASE_URL = `http://localhost:${PORT}`;
 const TIMESTAMP = Date.now();
 
 async function post(path, body) {
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify(body);
     const opts = {
-      hostname: 'localhost', port: 3000, path, method: 'POST',
+      hostname: 'localhost', port: PORT, path, method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload),
                  // Use different IPs to avoid rate limiting across test runs
                  'x-forwarded-for': `192.168.1.${Math.floor(Math.random() * 200) + 10}` },
@@ -88,6 +89,32 @@ async function main() {
   r1.status === 201 ? ok('HTTP 201') : fail(`Expected 201, got ${r1.status}: ${JSON.stringify(r1.body)}`);
   r1.body?.commercialAgreementStatus === 'ACCEPTED' ? ok('commercialAgreementStatus=ACCEPTED') : fail(`Expected ACCEPTED, got ${r1.body?.commercialAgreementStatus}`);
 
+  // RT-1DB: Full Provider DB persistence — Marketplace
+  if (r1.status === 201 && r1.body?.providerId) {
+    console.log('\nRT-1DB | Full Provider DB persistence — Marketplace');
+    const p1 = await prisma.provider.findUnique({
+      where: { id: r1.body.providerId },
+      select: { commercialAgreementType: true, commercialAgreementStatus: true, commercialAgreementVersion: true,
+                commercialAgreementAcceptedAt: true, privacyPolicyVersion: true, privacyPolicyAcceptedAt: true,
+                organisationType: true, businessModel: true, paymentMode: true },
+    });
+    info(`agreementType=${p1?.commercialAgreementType} status=${p1?.commercialAgreementStatus} version=${p1?.commercialAgreementVersion}`);
+    info(`privacyVersion=${p1?.privacyPolicyVersion} orgType=${p1?.organisationType} businessModel=${p1?.businessModel} paymentMode=${p1?.paymentMode}`);
+    p1?.commercialAgreementType === 'MARKETPLACE_TERMS' ? ok('DB: commercialAgreementType=MARKETPLACE_TERMS') : fail(`DB: expected MARKETPLACE_TERMS, got ${p1?.commercialAgreementType}`);
+    p1?.commercialAgreementStatus === 'ACCEPTED' ? ok('DB: commercialAgreementStatus=ACCEPTED') : fail(`DB: expected ACCEPTED, got ${p1?.commercialAgreementStatus}`);
+    p1?.commercialAgreementVersion === '2.0' ? ok('DB: commercialAgreementVersion=2.0') : fail(`DB: expected 2.0, got ${p1?.commercialAgreementVersion}`);
+    p1?.commercialAgreementAcceptedAt !== null ? ok('DB: commercialAgreementAcceptedAt set') : fail('DB: expected non-null commercialAgreementAcceptedAt');
+    p1?.privacyPolicyVersion === '2.0' ? ok('DB: privacyPolicyVersion=2.0') : fail(`DB: expected 2.0, got ${p1?.privacyPolicyVersion}`);
+    p1?.privacyPolicyAcceptedAt !== null ? ok('DB: privacyPolicyAcceptedAt set') : fail('DB: expected non-null privacyPolicyAcceptedAt');
+    p1?.organisationType === 'INDIVIDUAL_INSTRUCTOR' ? ok('DB: organisationType=INDIVIDUAL_INSTRUCTOR') : fail(`DB: expected INDIVIDUAL_INSTRUCTOR, got ${p1?.organisationType}`);
+    p1?.businessModel === 'MARKETPLACE' ? ok('DB: businessModel=MARKETPLACE') : fail(`DB: expected MARKETPLACE, got ${p1?.businessModel}`);
+    p1?.paymentMode === 'PLATFORM' ? ok('DB: paymentMode=PLATFORM') : fail(`DB: expected PLATFORM, got ${p1?.paymentMode}`);
+    // Also verify User.termsAcceptedAt is set for Marketplace
+    const u1 = await prisma.user.findUnique({ where: { email: email1 }, select: { termsAcceptedAt: true, termsVersion: true } });
+    u1?.termsAcceptedAt !== null ? ok('DB: User.termsAcceptedAt set (Marketplace)') : fail('DB: expected non-null User.termsAcceptedAt');
+    u1?.termsVersion === '2.0' ? ok('DB: User.termsVersion=2.0 (Marketplace)') : fail(`DB: expected 2.0, got ${u1?.termsVersion}`);
+  }
+
   // ── RT-2: Marketplace without termsAccepted → 400 MARKETPLACE_TERMS_REQUIRED
   console.log('\nRT-2 | Marketplace without termsAccepted → 400 MARKETPLACE_TERMS_REQUIRED');
   const email2 = `rt-mkt-no-terms-${TIMESTAMP}@rt.test`;
@@ -127,6 +154,28 @@ async function main() {
     user4?.termsVersion === null ? ok('User.termsVersion=null (SaaS)') : fail(`Expected null termsVersion, got ${user4?.termsVersion}`);
   }
 
+  // RT-4DB: Full Provider DB persistence — SaaS
+  if (r4.status === 201 && r4.body?.providerId) {
+    console.log('\nRT-4DB | Full Provider DB persistence — SaaS');
+    const p4 = await prisma.provider.findUnique({
+      where: { id: r4.body.providerId },
+      select: { commercialAgreementType: true, commercialAgreementStatus: true, commercialAgreementVersion: true,
+                commercialAgreementAcceptedAt: true, privacyPolicyVersion: true, privacyPolicyAcceptedAt: true,
+                organisationType: true, businessModel: true, paymentMode: true },
+    });
+    info(`agreementType=${p4?.commercialAgreementType} status=${p4?.commercialAgreementStatus} version=${p4?.commercialAgreementVersion}`);
+    info(`privacyVersion=${p4?.privacyPolicyVersion} orgType=${p4?.organisationType} businessModel=${p4?.businessModel} paymentMode=${p4?.paymentMode}`);
+    p4?.commercialAgreementType === 'SAAS_TERMS' ? ok('DB: commercialAgreementType=SAAS_TERMS') : fail(`DB: expected SAAS_TERMS, got ${p4?.commercialAgreementType}`);
+    p4?.commercialAgreementStatus === 'PENDING' ? ok('DB: commercialAgreementStatus=PENDING') : fail(`DB: expected PENDING, got ${p4?.commercialAgreementStatus}`);
+    p4?.commercialAgreementVersion === null ? ok('DB: commercialAgreementVersion=null') : fail(`DB: expected null, got ${p4?.commercialAgreementVersion}`);
+    p4?.commercialAgreementAcceptedAt === null ? ok('DB: commercialAgreementAcceptedAt=null') : fail('DB: expected null commercialAgreementAcceptedAt');
+    p4?.privacyPolicyVersion === '2.0' ? ok('DB: privacyPolicyVersion=2.0') : fail(`DB: expected 2.0, got ${p4?.privacyPolicyVersion}`);
+    p4?.privacyPolicyAcceptedAt !== null ? ok('DB: privacyPolicyAcceptedAt set') : fail('DB: expected non-null privacyPolicyAcceptedAt');
+    p4?.organisationType === 'INDIVIDUAL_INSTRUCTOR' ? ok('DB: organisationType=INDIVIDUAL_INSTRUCTOR') : fail(`DB: expected INDIVIDUAL_INSTRUCTOR, got ${p4?.organisationType}`);
+    p4?.businessModel === 'SAAS' ? ok('DB: businessModel=SAAS') : fail(`DB: expected SAAS, got ${p4?.businessModel}`);
+    p4?.paymentMode === 'DIRECT' ? ok('DB: paymentMode=DIRECT') : fail(`DB: expected DIRECT, got ${p4?.paymentMode}`);
+  }
+
   // ── RT-5: Non-driving (plumber) → 201 SOLE_TRADER, PENDING ───────────────
   console.log('\nRT-5 | Plumber → 201 SOLE_TRADER, PENDING');
   const email5 = `rt-plumber-${TIMESTAMP}@rt.test`;
@@ -137,6 +186,29 @@ async function main() {
   info(`status=${r5.status} organisationType=${r5.body?.organisationType}`);
   r5.status === 201 ? ok('HTTP 201') : fail(`Expected 201, got ${r5.status}: ${JSON.stringify(r5.body)}`);
   r5.body?.organisationType === 'SOLE_TRADER' ? ok('organisationType=SOLE_TRADER') : fail(`Expected SOLE_TRADER, got ${r5.body?.organisationType}`);
+
+  // RT-5DB: Full Provider DB persistence — Non-driving SaaS (Plumber)
+  if (r5.status === 201 && r5.body?.providerId) {
+    console.log('\nRT-5DB | Full Provider DB persistence — Plumber (non-driving SaaS)');
+    const p5 = await prisma.provider.findUnique({
+      where: { id: r5.body.providerId },
+      select: { commercialAgreementType: true, commercialAgreementStatus: true, commercialAgreementVersion: true,
+                commercialAgreementAcceptedAt: true, privacyPolicyVersion: true, privacyPolicyAcceptedAt: true,
+                organisationType: true, businessModel: true, paymentMode: true, industry: true },
+    });
+    info(`agreementType=${p5?.commercialAgreementType} status=${p5?.commercialAgreementStatus} version=${p5?.commercialAgreementVersion}`);
+    info(`privacyVersion=${p5?.privacyPolicyVersion} orgType=${p5?.organisationType} businessModel=${p5?.businessModel} paymentMode=${p5?.paymentMode} industry=${p5?.industry}`);
+    p5?.commercialAgreementType === 'SAAS_TERMS' ? ok('DB: commercialAgreementType=SAAS_TERMS') : fail(`DB: expected SAAS_TERMS, got ${p5?.commercialAgreementType}`);
+    p5?.commercialAgreementStatus === 'PENDING' ? ok('DB: commercialAgreementStatus=PENDING') : fail(`DB: expected PENDING, got ${p5?.commercialAgreementStatus}`);
+    p5?.commercialAgreementVersion === null ? ok('DB: commercialAgreementVersion=null') : fail(`DB: expected null, got ${p5?.commercialAgreementVersion}`);
+    p5?.commercialAgreementAcceptedAt === null ? ok('DB: commercialAgreementAcceptedAt=null') : fail('DB: expected null commercialAgreementAcceptedAt');
+    p5?.privacyPolicyVersion === '2.0' ? ok('DB: privacyPolicyVersion=2.0') : fail(`DB: expected 2.0, got ${p5?.privacyPolicyVersion}`);
+    p5?.privacyPolicyAcceptedAt !== null ? ok('DB: privacyPolicyAcceptedAt set (independent of commercial)') : fail('DB: expected non-null privacyPolicyAcceptedAt');
+    p5?.organisationType === 'SOLE_TRADER' ? ok('DB: organisationType=SOLE_TRADER') : fail(`DB: expected SOLE_TRADER, got ${p5?.organisationType}`);
+    p5?.businessModel === 'SAAS' ? ok('DB: businessModel=SAAS') : fail(`DB: expected SAAS, got ${p5?.businessModel}`);
+    p5?.paymentMode === 'DIRECT' ? ok('DB: paymentMode=DIRECT') : fail(`DB: expected DIRECT, got ${p5?.paymentMode}`);
+    p5?.industry === 'plumber' ? ok('DB: industry=plumber') : fail(`DB: expected plumber, got ${p5?.industry}`);
+  }
 
   // ── RT-6: Non-driving + REGISTERED_BUSINESS → 201 REGISTERED_BUSINESS ────
   console.log('\nRT-6 | Plumber + REGISTERED_BUSINESS → 201 REGISTERED_BUSINESS');
