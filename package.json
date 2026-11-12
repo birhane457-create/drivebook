@@ -83,6 +83,7 @@
         "zod": "^3.23.8"
     },
     "devDependencies": {
+        "@playwright/test": "^1.65.0",
         "@types/bcryptjs": "^2.4.6",
         "@types/node": "^20.19.43",
         "@types/qrcode": "^1.5.5",
@@ -95,6 +96,7 @@
         "autoprefixer": "^10.4.19",
         "eslint": "^8.57.0",
         "eslint-config-next": "^14.2.3",
+        "@playwright/test": "^1.65.0",
         "postcss": "^8.4.38",
         "prisma": "^5.14.0",
         "remark-parse": "^11.0.0",
