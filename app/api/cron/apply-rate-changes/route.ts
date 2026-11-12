@@ -235,7 +235,7 @@ async function notifyInstructors(
             </body>
             </html>
           `,
-        }).catch(e => console.error(`Email failed for ${instructor.user?.email}:`, e));
+        }).catch((e: any) => console.error(`Email failed for ${instructor.user?.email}:`, e));
       }
     } catch (err) {
       console.error(`Failed to notify instructor ${instructor.id}:`, err);

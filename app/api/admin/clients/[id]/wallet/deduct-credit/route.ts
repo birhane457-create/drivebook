@@ -357,7 +357,7 @@ export async function POST(
     }
 
     // FinancialLedger — record admin wallet deduction (non-critical)
-    if (responseBody && !responseBody.replay) {
+    if (responseBody && !(responseBody as any).replay) {
       try {
         const { recordAdminWalletAdjustment } = await import('@/lib/services/ledger-operations');
         await recordAdminWalletAdjustment({

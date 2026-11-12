@@ -427,7 +427,7 @@ export async function POST(req: NextRequest) {
         },
         'onboarding.welcome',
         1
-      ).catch(e => console.error('[register] Onboarding welcome email failed (non-critical):', e))
+      ).catch((e: any) => console.error('[register] Onboarding welcome email failed (non-critical):', e))
     }
 
     return NextResponse.json(

@@ -177,14 +177,14 @@ export async function POST(req: NextRequest) {
             </p>
           </div>
         `,
-      }).catch(err => console.error('[OTP] Email delivery failed:', err));
+      }).catch((err: any) => console.error('[OTP] Email delivery failed:', err));
     } else if (data.phone) {
       import('@/lib/services/sms').then(({ smsService }) =>
         smsService.sendSMS({
           to: data.phone!,
           message: `DriveBook verification code: ${otp}. Expires in 5 minutes.`,
         })
-      ).catch(err => console.error('[OTP] SMS delivery failed:', err));
+      ).catch((err: any) => console.error('[OTP] SMS delivery failed:', err));
     }
 
     return responsePayload;

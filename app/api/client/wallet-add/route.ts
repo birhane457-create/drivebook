@@ -77,8 +77,9 @@ export async function POST(req: NextRequest) {
     // P0 FIX #3: Verify paymentIntentId actually succeeded via Stripe API
     // Don't accept any paymentIntentId without Stripe confirmation
     // This prevents fraud where attacker could call wallet-add with a fake/pending intent ID
+    let paymentIntent: any;
     try {
-      const paymentIntent = await stripeService.retrievePaymentIntent(paymentIntentId);
+      paymentIntent = await stripeService.retrievePaymentIntent(paymentIntentId);
       
       if (!paymentIntent) {
         return NextResponse.json(
