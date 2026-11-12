@@ -66,18 +66,33 @@ async function cleanup(emails) {
     try {
       const user = await prisma.user.findUnique({ where: { email }, select: { id: true, providerId: true } });
       if (!user) { notFound++; continue; }
+      // Delete Provider first — if this fails, User deletion will fail due to FK
       if (user.providerId) {
-        await prisma.provider.delete({ where: { id: user.providerId } }).catch(e => { failed++; console.error(`  ⚠ Failed to delete Provider ${user.providerId}: ${e.message}`); });
+        try {
+          await prisma.provider.delete({ where: { id: user.providerId } });
+        } catch (e) {
+          failed++;
+          console.error(`  ⚠ Failed to delete Provider ${user.providerId}: ${e.message}`);
+          continue; // Skip User deletion — FK relationship will prevent it
+        }
       }
-      await prisma.user.delete({ where: { id: user.id } }).catch(e => { failed++; console.error(`  ⚠ Failed to delete User ${user.id}: ${e.message}`); });
-      deleted++;
+      try {
+        await prisma.user.delete({ where: { id: user.id } });
+        deleted++;
+      } catch (e) {
+        failed++;
+        console.error(`  ⚠ Failed to delete User ${user.id}: ${e.message}`);
+      }
     } catch (e) {
       failed++;
       console.error(`  ⚠ Cleanup error for ${email}: ${e.message}`);
     }
   }
   console.log(`  Cleanup: ${deleted} deleted, ${notFound} not found, ${failed} failed`);
-  if (failed > 0) console.error('  ⚠ CLEANUP FAILURES — manual deletion may be required');
+  if (failed > 0) {
+    console.error('  ⚠ CLEANUP FAILURES — manual deletion may be required');
+    process.exitCode = process.exitCode || 1;
+  }
   return failed;
 }
 
