@@ -39,8 +39,8 @@ export const PRIVACY_POLICY_VERSION = '2.0'
  *   commercialAgreementStatus=PENDING until they explicitly accept the terms.
  *   A separate acceptance flow (not in registration) must handle existing accounts.
  */
-export const SAAS_TERMS_VERSION:   string | null = null   // null = not published
-export const SAAS_TERMS_PUBLISHED: boolean       = false
+export const SAAS_TERMS_VERSION:   string | null = process.env.SAAS_TERMS_VERSION_OVERRIDE   ?? null   // null = not published
+export const SAAS_TERMS_PUBLISHED: boolean       = process.env.SAAS_TERMS_PUBLISHED_OVERRIDE === 'true'
 export const SAAS_TERMS_URL:       string        = '/saas-terms' // future URL when published
 
 // ── Organisation type values ──────────────────────────────────────────────────
