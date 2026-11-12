@@ -1,166 +1,258 @@
 /**
  * Browser-level registration verification.
  *
- * Verifies the actual rendered UI on the registration page:
- * - Marketplace terms checkbox visibility and submit gating
- * - SaaS unpublished notice
- * - Privacy acceptance required
- * - Driving School shown as disabled
- * - Correct form structure for each business type
- *
- * Requires the dev server running on the TEST_BASE_URL (default localhost:3000).
+ * Tests the actual rendered registration page via Playwright + Chromium.
+ * The dev server is started automatically by playwright.config.ts webServer.
  *
  * Run:
- *   npx playwright test --config playwright.config.ts
- *   or
  *   node node_modules/@playwright/test/cli.js test --config playwright.config.ts
  */
 
-import { test, expect } from '@playwright/test'
+import { test, expect, Page } from '@playwright/test'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Wait for the Marketplace model button to register as selected (violet border). */
+async function selectMarketplace(page: Page) {
+  await page.waitForSelector('text=DriveBook Marketplace')
+  await page.getByRole('button', { name: /DriveBook Marketplace/i }).click()
+  await page.waitForFunction(() => {
+    const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('DriveBook Marketplace'))
+    return btn?.className?.includes('border-violet-500')
+  })
+}
+
+/** Wait for the SaaS model button to register as selected (violet border). */
+async function selectSaas(page: Page) {
+  await page.waitForSelector('text=DriveBook SaaS')
+  await page.getByRole('button', { name: /DriveBook SaaS/i }).click()
+  await page.waitForFunction(() => {
+    const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('DriveBook SaaS'))
+    return btn?.className?.includes('border-violet-500')
+  })
+}
+
+/** Fill the required form fields with test values. */
+async function fillForm(page: Page, overrides: Record<string, string> = {}) {
+  const ts = Date.now()
+  await page.getByLabel(/Full Name/i).fill(overrides.name ?? 'BW Test User')
+  await page.getByLabel(/Email/i).fill(overrides.email ?? `bw-test-${ts}@bw.test`)
+  await page.getByLabel(/Password/i).fill(overrides.password ?? 'TestPass1234!')
+  await page.getByLabel(/Mobile Number/i).fill(overrides.phone ?? '0411111199')
+}
+
+// ── BW-1: Marketplace checkbox gating ─────────────────────────────────────────
 
 test.describe('Registration page — Marketplace driving instructor', () => {
-  test('BW-1 | Marketplace checkbox is visible and submit is disabled until accepted', async ({ page }) => {
+  test('BW-1 | Marketplace checkbox visible + submit gated by both terms and privacy', async ({ page }) => {
     await page.goto('/register?businessType=driving')
-    // Wait for the business model selection to render
-    await page.waitForSelector('text=DriveBook Marketplace')
+    await selectMarketplace(page)
 
-    // Select Marketplace model
-    await page.getByRole('button', { name: /DriveBook Marketplace/i }).click()
-    // Confirm selection took effect — the button's border changes to violet
-    await page.waitForFunction(() => {
-      const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('DriveBook Marketplace'))
-      return btn?.className?.includes('border-violet-500')
-    })
+    // Instructor Terms label must appear after selecting Marketplace
+    await expect(page.getByText(/I agree to the.*Instructor Terms/i)).toBeVisible()
 
-    // Terms label should appear
-    const termsLabel = page.getByText(/I agree to the.*Instructor Terms/i)
-    await expect(termsLabel).toBeVisible()
-
-    // Submit button should be disabled (privacy not yet accepted)
     const submitBtn = page.getByRole('button', { name: /Create account/i })
+
+    // Disabled: neither accepted yet
     await expect(submitBtn).toBeDisabled()
 
-    // Accept privacy by clicking the checkbox input directly
-    const privacyCheckbox = page.locator('input[type="checkbox"]').last()
-    await privacyCheckbox.check()
-
-    // Submit should still be disabled (terms not yet accepted)
+    // Accept privacy only — still disabled (Instructor Terms not accepted)
+    await page.locator('input[type="checkbox"]').last().check()
     await expect(submitBtn).toBeDisabled()
 
-    // Accept terms by clicking its checkbox
-    const termsCheckbox = page.locator('input[type="checkbox"]').first()
-    await termsCheckbox.check()
-
-    // Now submit should be enabled
+    // Accept Instructor Terms — now enabled
+    await page.locator('input[type="checkbox"]').first().check()
     await expect(submitBtn).toBeEnabled()
   })
 })
+
+// ── BW-2: SaaS unpublished notice ─────────────────────────────────────────────
 
 test.describe('Registration page — SaaS driving instructor', () => {
-  test('BW-2 | SaaS shows unpublished notice (not terms checkbox)', async ({ page }) => {
+  test('BW-2 | SaaS shows unpublished notice, not terms checkbox; privacy alone enables submit', async ({ page }) => {
     await page.goto('/register?businessType=driving')
-    await page.waitForSelector('text=DriveBook SaaS')
+    await selectSaas(page)
 
-    // Select SaaS model
-    await page.getByRole('button', { name: /DriveBook SaaS/i }).click()
-    await page.waitForFunction(() => {
-      const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('DriveBook SaaS'))
-      return btn?.className?.includes('border-violet-500')
-    })
-
-    // Should show the "being finalised" notice, not a terms checkbox
+    // Unpublished notice must be visible
     await expect(page.getByText(/SaaS Terms are being finalised/i)).toBeVisible()
-
-    // Should NOT show an Instructor Terms checkbox
+    // Instructor Terms label must NOT appear
     await expect(page.getByText(/I agree to the.*Instructor Terms/i)).not.toBeVisible()
 
-    // Accept privacy by clicking its checkbox — submit should be enabled (no SaaS terms yet)
-    const privacyCheckbox = page.locator('input[type="checkbox"]').first()
-    await privacyCheckbox.check()
-
-    const submitBtn = page.getByRole('button', { name: /Create account/i })
-    await expect(submitBtn).toBeEnabled()
+    // Accept privacy — submit should be enabled (no SaaS terms required yet)
+    await page.locator('input[type="checkbox"]').first().check()
+    await expect(page.getByRole('button', { name: /Create account/i })).toBeEnabled()
   })
 })
 
+// ── BW-3: Non-driving structure selector ─────────────────────────────────────
+
 test.describe('Registration page — Non-driving (Plumber)', () => {
-  test('BW-3 | Non-driving shows SaaS notice and business structure selector', async ({ page }) => {
+  test('BW-3 | Business structure selector present; model selector absent; SaaS notice shown', async ({ page }) => {
     await page.goto('/register?businessType=plumber')
 
-    // Should show business structure selector
     await expect(page.getByText(/What is your business structure/i)).toBeVisible()
     await expect(page.getByText(/Sole trader/i)).toBeVisible()
     await expect(page.getByText(/Registered company or business/i)).toBeVisible()
-
-    // Should show SaaS notice (non-driving is always SaaS)
     await expect(page.getByText(/SaaS Terms are being finalised/i)).toBeVisible()
 
-    // Should NOT show Marketplace/SaaS model selector
+    // Non-driving never sees the Marketplace/SaaS model selector
     await expect(page.getByText(/How would you like to use DriveBook/i)).not.toBeVisible()
 
-    // Accept privacy by clicking its checkbox directly
-    const privacyCheckbox = page.locator('input[type="checkbox"]').first()
-    await privacyCheckbox.check()
-
-    const submitBtn = page.getByRole('button', { name: /Create account/i })
-    await expect(submitBtn).toBeEnabled()
+    // Privacy only — submit enabled
+    await page.locator('input[type="checkbox"]').first().check()
+    await expect(page.getByRole('button', { name: /Create account/i })).toBeEnabled()
   })
 })
+
+// ── BW-4: Driving School disabled ────────────────────────────────────────────
 
 test.describe('Registration page — Driving School disabled', () => {
-  test('BW-4 | Driving School is shown as Coming Soon and not clickable', async ({ page }) => {
+  test('BW-4 | Driving School option is aria-disabled and shows Coming Soon badge', async ({ page }) => {
     await page.goto('/register?businessType=driving')
+    await selectSaas(page)
 
-    // Select SaaS model to see organisation type section
-    await page.getByRole('button', { name: /DriveBook SaaS/i }).click()
+    // Locate the Driving School option specifically by its containing element
+    const schoolContainer = page.locator('[aria-disabled="true"]').filter({ hasText: /Driving school/i })
+    await expect(schoolContainer).toBeVisible()
+    await expect(schoolContainer.getByText(/Coming soon/i)).toBeVisible()
 
-    // Driving school option should be visible but disabled
-    await expect(page.getByText(/Driving school/i)).toBeVisible()
-    await expect(page.getByText(/Coming soon/i)).toBeVisible()
-
-    // The driving school option should have aria-disabled
-    const schoolOption = page.locator('[aria-disabled="true"]')
-    await expect(schoolOption).toBeVisible()
+    // The Independent instructor option must NOT be aria-disabled
+    const instructorOption = page.locator('text=Independent instructor').first()
+    await expect(instructorOption).toBeVisible()
+    // Its closest [aria-disabled] container should not exist
+    await expect(page.locator('[aria-disabled="true"]').filter({ hasText: /Independent instructor/i })).toHaveCount(0)
   })
 })
 
+// ── BW-5: Privacy always required ────────────────────────────────────────────
+
 test.describe('Registration page — Privacy required', () => {
-  test('BW-5 | Privacy acceptance is always required regardless of business type', async ({ page }) => {
+  test('BW-5 | Instructor Terms alone does not enable submit — privacy is independently required', async ({ page }) => {
     await page.goto('/register?businessType=driving')
-    await page.waitForSelector('text=DriveBook Marketplace')
+    await selectMarketplace(page)
 
-    // Select Marketplace
-    await page.getByRole('button', { name: /DriveBook Marketplace/i }).click()
-    await page.waitForFunction(() => {
-      const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('DriveBook Marketplace'))
-      return btn?.className?.includes('border-violet-500')
-    })
+    // Accept Instructor Terms only
+    await page.locator('input[type="checkbox"]').first().check()
 
-    // Accept terms checkbox
-    const termsCheckbox = page.locator('input[type="checkbox"]').first()
-    await termsCheckbox.check()
-
-    // Submit should still be disabled (privacy not accepted)
     const submitBtn = page.getByRole('button', { name: /Create account/i })
+    // Still disabled — privacy not accepted
     await expect(submitBtn).toBeDisabled()
 
-    // Accept privacy
-    const privacyCheckbox = page.locator('input[type="checkbox"]').last()
-    await privacyCheckbox.check()
-
-    // Now submit should be enabled
+    // Accept privacy — now enabled
+    await page.locator('input[type="checkbox"]').last().check()
     await expect(submitBtn).toBeEnabled()
   })
 })
 
-test.describe('Registration page — Independent instructor is only org type for driving', () => {
-  test('BW-6 | Independent instructor is pre-selected for driving', async ({ page }) => {
+// ── BW-6: Independent instructor pre-selected ────────────────────────────────
+
+test.describe('Registration page — Independent instructor pre-selected', () => {
+  test('BW-6 | Independent instructor option is rendered as selected (violet border)', async ({ page }) => {
     await page.goto('/register?businessType=driving')
+    await selectSaas(page)
 
-    // Select SaaS to see the org type section
-    await page.getByRole('button', { name: /DriveBook SaaS/i }).click()
+    // The Independent instructor option must carry the selected style (violet border)
+    const instructorOption = page.locator('div').filter({ hasText: /^Independent instructor/ }).first()
+    await expect(instructorOption).toBeVisible()
+    // The parent card for this option should have the selected border class
+    const selectedCard = page.locator('.border-violet-500').filter({ hasText: /Independent instructor/i })
+    await expect(selectedCard).toBeVisible()
+  })
+})
 
-    // Independent instructor should be visible and pre-selected
-    await expect(page.getByText(/Independent instructor/i)).toBeVisible()
+// ── BW-7: Marketplace submission sends correct payload ───────────────────────
+
+test.describe('Registration submission — Marketplace', () => {
+  test('BW-7 | Marketplace form submits with termsAccepted and privacyAccepted; reaches /login', async ({ page }) => {
+    test.setTimeout(60000)  // Marketplace registration includes more email side effects
+    await page.goto('/register?businessType=driving')
+    await selectMarketplace(page)
+    await fillForm(page)
+
+    // Intercept the registration POST to verify the request body
+    let capturedBody: Record<string, unknown> | null = null
+    await page.route('**/api/register', async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      capturedBody = body
+      await route.continue()
+    })
+
+    // Accept both checkboxes
+    await page.locator('input[type="checkbox"]').first().check()   // Instructor Terms
+    await page.locator('input[type="checkbox"]').last().check()    // Privacy
+
+    // Submit
+    await page.getByRole('button', { name: /Create account/i }).click()
+
+    // Wait for redirect — successful registration goes to /login?registered=1
+    await page.waitForURL(/\/login/, { timeout: 55000 })
+
+    // Verify the intercepted request body
+    expect(capturedBody).not.toBeNull()
+    expect(capturedBody!.businessType).toBe('driving')
+    expect(capturedBody!.businessModel).toBe('MARKETPLACE')
+    expect(capturedBody!.termsAccepted).toBe(true)
+    expect(capturedBody!.privacyAccepted).toBe(true)
+    expect(capturedBody!.saasTermsAccepted).toBeUndefined()
+  })
+})
+
+// ── BW-8: SaaS submission does NOT send termsAccepted ────────────────────────
+
+test.describe('Registration submission — SaaS unpublished', () => {
+  test('BW-8 | SaaS form submits without termsAccepted; privacyAccepted=true; reaches /login', async ({ page }) => {
+    await page.goto('/register?businessType=driving')
+    await selectSaas(page)
+    await fillForm(page)
+
+    let capturedBody: Record<string, unknown> | null = null
+    await page.route('**/api/register', async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      capturedBody = body
+      await route.continue()
+    })
+
+    // Accept privacy only
+    await page.locator('input[type="checkbox"]').first().check()
+
+    // Submit
+    await page.getByRole('button', { name: /Create account/i }).click()
+    await page.waitForURL(/\/login/, { timeout: 30000 })
+
+    expect(capturedBody).not.toBeNull()
+    expect(capturedBody!.businessType).toBe('driving')
+    expect(capturedBody!.businessModel).toBe('SAAS')
+    expect(capturedBody!.termsAccepted).toBeUndefined()   // must NOT be sent
+    expect(capturedBody!.saasTermsAccepted).toBeUndefined()  // terms not published
+    expect(capturedBody!.privacyAccepted).toBe(true)
+  })
+})
+
+// ── BW-9: Non-driving submission includes organisationType ───────────────────
+
+test.describe('Registration submission — Non-driving', () => {
+  test('BW-9 | Plumber submits with SOLE_TRADER organisationType and no termsAccepted', async ({ page }) => {
+    await page.goto('/register?businessType=plumber')
+    await fillForm(page)
+
+    let capturedBody: Record<string, unknown> | null = null
+    await page.route('**/api/register', async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      capturedBody = body
+      await route.continue()
+    })
+
+    // Accept privacy
+    await page.locator('input[type="checkbox"]').first().check()
+
+    await page.getByRole('button', { name: /Create account/i }).click()
+    await page.waitForURL(/\/login/, { timeout: 30000 })
+
+    expect(capturedBody).not.toBeNull()
+    expect(capturedBody!.businessType).toBe('plumber')
+    expect(capturedBody!.organisationType).toBe('SOLE_TRADER')
+    expect(capturedBody!.privacyAccepted).toBe(true)
+    expect(capturedBody!.termsAccepted).toBeUndefined()
+    expect(capturedBody!.saasTermsAccepted).toBeUndefined()
   })
 })
