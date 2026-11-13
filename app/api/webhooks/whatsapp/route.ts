@@ -32,10 +32,11 @@ export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('hub.verify_token')
   const challenge = req.nextUrl.searchParams.get('hub.challenge')
 
-  const expectedToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
+  // Support both env var names for compatibility
+  const expectedToken = process.env.WHATSAPP_VERIFY_TOKEN || process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
 
   if (!expectedToken) {
-    logger.error('[WhatsApp Webhook] WHATSAPP_WEBHOOK_VERIFY_TOKEN not set in env')
+    logger.error('[WhatsApp Webhook] WHATSAPP_VERIFY_TOKEN not set in env')
     return new NextResponse('Verify token not configured', { status: 500 })
   }
 
