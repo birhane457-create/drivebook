@@ -1,8 +1,9 @@
 ﻿# Credential Rotation Checklist
 
-⚠️ **BEFORE PRODUCTION DEPLOYMENT - ROTATE ALL CREDENTIALS**
+⚠️ **ROTATE ALL CREDENTIALS BEFORE PRODUCTION DEPLOYMENT**
 
-This checklist tracks which credentials have been exposed in version control and need rotation before going live.
+This checklist tracks which credentials must be rotated before going live.
+All actual credential values have been removed from this file. See `.env.local` (not committed) for current dev values.
 
 ## Status: 🔴 NOT ROTATED (Development Only)
 
@@ -11,72 +12,69 @@ This checklist tracks which credentials have been exposed in version control and
 ## Credentials Requiring Rotation
 
 ### 1. Database (Supabase)
-- [ ] **DATABASE_URL** - Contains: postgres:<REDACTED_PASSWORD>@db.ikhqphbbilrocsghjyda.supabase.co
-- [ ] **DIRECT_URL** - Contains same password
-- **Action:** Supabase Dashboard → Settings → Database → Reset Password
+- [ ] **DATABASE_URL** — Supabase pooler connection
+- [ ] **DIRECT_URL** — Supabase direct connection
+- **Action:** Supabase Dashboard → Settings → Database → Reset Password → update Vercel env vars
 
 ### 2. NextAuth
-- [ ] **NEXTAUTH_SECRET** - Value: REDACTED_NEXTAUTH_SECRET
-- **Action:** Generate new with: openssl rand -base64 32
+- [ ] **NEXTAUTH_SECRET**
+- **Action:** Generate new: `openssl rand -base64 32` → update Vercel env var
 
 ### 3. Stripe
-- [ ] **STRIPE_SECRET_KEY** - Test key: sk_test_51Rt9FIPFqwsHwRMq...
-- [ ] **STRIPE_WEBHOOK_SECRET** - Value: whsec_<REDACTED>
-- **Action:** Stripe Dashboard → Developers → API Keys → Roll Keys
+- [ ] **STRIPE_SECRET_KEY** (test key)
+- [ ] **STRIPE_WEBHOOK_SECRET**
+- **Action:** Stripe Dashboard → Developers → API Keys → Roll → update Vercel env vars
 
 ### 4. Twilio
-- [ ] **TWILIO_AUTH_TOKEN** - Value: REDACTED_TWILIO_AUTH_TOKEN
-- **Action:** Twilio Console → Settings → Auth Token → Create Secondary
+- [ ] **TWILIO_ACCOUNT_SID**
+- [ ] **TWILIO_AUTH_TOKEN**
+- **Action:** Twilio Console → Settings → Auth Token → Rotate → update Vercel env vars
 
 ### 5. OpenAI
-- [ ] **OPENAI_API_KEY** - Key: sk-proj-BHpVnFj_Z2B9RecgxLPRNAvm...
-- **Action:** OpenAI Dashboard → API Keys → Create New, Delete Old
+- [ ] **OPENAI_API_KEY**
+- **Action:** platform.openai.com → API Keys → Create New, Delete Old → update Vercel env var
 
-### 6. Email (Gmail)
-- [ ] **SMTP_PASS** - App password: ilt rmvl ubup nnvi
-- **Action:** Google Account → Security → App Passwords → Revoke & Create New
+### 6. Email (Gmail SMTP)
+- [ ] **SMTP_PASS** (App password)
+- **Action:** Google Account → Security → App Passwords → Revoke & Create New → update Vercel env var
 
 ### 7. VAPI
-- [ ] **VAPI_WEBHOOK_SECRET** - Value: 194cad50a0fe4bd2...
-- [ ] **VAPI_API_KEY** - Value: 0b85cb8-acf6-4717-95d4-d9af01d1af42
-- **Action:** VAPI Dashboard → Regenerate Keys
+- [ ] **VAPI_WEBHOOK_SECRET**
+- [ ] **VAPI_API_KEY**
+- **Action:** VAPI Dashboard → Regenerate Keys → update Vercel env vars
 
 ### 8. Cloudinary
-- [ ] **CLOUDINARY_API_SECRET** - Value: REDACTED_CLOUDINARY_API_SECRET
-- **Action:** Cloudinary Dashboard → Settings → Security → Regenerate
+- [ ] **CLOUDINARY_API_KEY**
+- [ ] **CLOUDINARY_API_SECRET**
+- **Action:** Cloudinary Dashboard → Settings → Security → Regenerate → update Vercel env vars
 
 ### 9. Upstash Redis
-- [ ] **UPSTASH_REDIS_REST_TOKEN** - Value: gQAAAAAAATaOAAIg...
-- [ ] **KV_REST_API_TOKEN** - Same value
-- **Action:** Upstash Console → Database → REST API → Reset Token
+- [ ] **UPSTASH_REDIS_REST_TOKEN**
+- [ ] **KV_REST_API_TOKEN**
+- **Action:** Upstash Console → Database → REST API → Reset Token → update Vercel env vars
 
-### 10. Google Services
-- [ ] **GOOGLE_CLIENT_SECRET** - Value: REDACTED_GOOGLE_CLIENT_SECRET
-- **Action:** Google Cloud Console → Credentials → Reset Secret
+### 10. Google OAuth
+- [ ] **GOOGLE_CLIENT_ID**
+- [ ] **GOOGLE_CLIENT_SECRET**
+- **Action:** console.cloud.google.com → Credentials → OAuth 2.0 Client → Reset Secret → update Vercel env vars
 
 ---
 
 ## Post-Rotation Steps
 
-After rotating credentials:
-
-1. [ ] Update all credentials in production environment variables (Vercel, AWS, etc.)
+1. [ ] Update all credentials in Vercel environment settings
 2. [ ] Test application startup with new credentials
-3. [ ] Verify all integrations working (Stripe, Twilio, Email, etc.)
-4. [ ] Delete this checklist file
-5. [ ] Consider using secrets manager (AWS Secrets Manager, Vercel Environment Variables)
+3. [ ] Verify all integrations working (Stripe, Twilio, Email, VAPI, etc.)
+4. [ ] Verify old credentials no longer authenticate
+5. [ ] Contact GitHub/GitLab support to purge cached views of old commits
 
 ---
 
-## Additional Security Measures
+## Git History Cleanup — COMPLETED
 
-- [ ] Remove .env from git history if needed: git filter-branch or BFG Repo-Cleaner
-- [ ] Set up pre-commit hooks to prevent future credential commits
-- [ ] Enable 2FA on all service accounts
-- [ ] Set up monitoring/alerts for suspicious API usage
-- [ ] Review access logs for unauthorized access during exposure period
+All credential values were removed from Git history using `git filter-repo` on 2026-11-13.
+History rewritten across all three remotes (GitHub `origin`, GitLab `gitlab`, GitLab `old-origin`).
+Credentials in Git history are now `REDACTED_*` placeholders.
 
----
-
-**Created:** 2026-09-01 18:23  
-**Status:** Development - Credentials still exposed but not in production use
+The `.env.local` file (never tracked) holds current development values.
+Rotate all values above before production deployment.
