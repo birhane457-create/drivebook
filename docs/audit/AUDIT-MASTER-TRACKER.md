@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.67 (Stage 1B registration verification complete: Vitest 165/165, HTTP+DB runtime tests exit 0, 11/11 Playwright browser tests; migration deferred)
-**Last Updated:** 2026-11-13 (v6.67)
+**Version:** 6.68 (Registration onboarding baseline v1.1 — corrected gap statuses, roadmap dependencies, public SaaS readiness criteria, discovery spec)
+**Last Updated:** 2026-11-14 (v6.68)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -890,7 +890,7 @@ Reviewer has not independently rerun these test suites. Behavioral HTTP testing 
 ## Section 11 — Stage 1B: Provider Registration Architecture
 
 **Version:** v1 (2026-11-13)
-**Status:** FIX-VERIFIED at source, API, database and browser levels. Production migration deferred.
+**Status:** FIX-VERIFIED at source, API, database and browser levels. Production migration deferred. Registration onboarding baseline documented in `REGISTRATION-ONBOARDING-BASELINE.md` v1.1.
 **Scope:** Registration flow business-model selection, organisation type, commercial agreement fields, SaaS lifecycle, provider discovery separation, age declaration removal, Playwright browser tests.
 
 ### 11.1 — Registration Implementation
