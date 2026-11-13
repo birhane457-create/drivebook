@@ -39,6 +39,7 @@ debug.log
 .env
 .env*.local
 .env.test
+.env.sydney
 !.env.example
 !.env.voice-service.example
 
