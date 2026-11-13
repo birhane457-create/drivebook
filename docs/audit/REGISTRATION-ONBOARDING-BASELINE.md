@@ -1,9 +1,9 @@
 # Registration Onboarding Baseline
 
-**Version:** 1.1 (2026-11-14)
+**Version:** 1.2 (2026-11-14)
 **Authority:** This document is the single authoritative reference for the registration onboarding design, implementation status, verification evidence, outstanding gaps, and implementation roadmap. All subsequent registration work must update this document in the same delivery cycle as the code change.
 **Linked tracker:** `AUDIT-MASTER-TRACKER.md` Section 11
-**Current version:** v1.1 (2026-11-14) — see change history at end of document
+**Current version:** v1.2 (2026-11-14) — see change history at end of document
 
 ---
 
@@ -402,6 +402,54 @@ Items 7–8 (Driving School, BUSINESS) ← independent of all above; depend on m
 
 Items 4 and 5 can proceed independently and in parallel. Item 6 (model switching) is blocked by both Items 2 and 4 and Item 5. Items 7–8 depend on a separate architecture design.
 
+### Action Priority — what to do now, what stays pending, what is post-launch
+
+This section separates the gaps into three actionable categories. It is the practical complement to the dependency graph above.
+
+#### ACT NOW — blocks safe Marketplace launch
+
+These items must be resolved before opening Marketplace registration to real users.
+
+| # | Item | Gap | Why now | What to do |
+|---|---|---|---|---|
+| A1 | Rotate exposed database password and Stripe webhook secret | SEC-CRED-01 (tracker Section 9) | Credentials are in public Git history. CRITICAL security risk regardless of whether real data exists. | 1. Rotate Supabase DB password. 2. Rotate Stripe webhook secret. 3. Update Vercel env vars. 4. Verify old credentials fail. 5. Clean Git history (BFG/filter-repo) or accept historical exposure with new credentials active. |
+| A2 | Clean up remaining 13 test Provider records from production DB | — (operational) | Production DB has 13 disposable test Provider records with default-assigned `organisationType=SOLE_TRADER`. They are not real users but should not remain in a production database. | Run `scripts/cleanup-test-accounts.cjs` (already cleaned 10 .test emails); manually delete remaining 13 Provider records (7 audit fixtures with no user, 1 branding fixture, 3 Phase3B @example.com, 2 @gmail.com owner test accounts). Confirm 0 Provider rows after cleanup. |
+| A3 | Verify deployed Vercel registration flow end-to-end | — (verification gap) | All tests ran against local dev server. The Vercel-deployed registration flow has not been independently verified against production. | 1. Confirm Vercel deployment is live and healthy. 2. Submit a test registration via the deployed URL. 3. Verify HTTP 201 response. 4. Verify Provider record in production DB has correct fields. 5. Clean up the test record. |
+
+#### STAYS PENDING — tracked, not blocking Marketplace launch
+
+These items are tracked in the roadmap but do not block a Marketplace-only launch. Some block a future SaaS public launch.
+
+| # | Item | Gap | Blocks | Status |
+|---|---|---|---|---|
+| P1 | SaaS Terms legal content finalisation | GAP-03 | Public SaaS launch | OPEN — legal review required |
+| P2 | Existing SaaS provider terms acceptance flow | GAP-02 | SaaS Terms publication; model switching | OPEN — needs API endpoint + dashboard notice |
+| P3 | SaaS registration eligibility for public launch | GAP-10 | Public SaaS launch | DEFERRED — policy decision needed after P1+P2 |
+| P4 | DIRECT payment mode implementation | GAP-04 | SaaS commercial features; model switching | OPEN — Stripe Connect onboarding + webhook + payment flow + 503 guard removal |
+| P5 | Schema drift correction (`organisationType` NOT NULL DEFAULT → nullable) | GAP-07 | Migration-history accuracy | OPEN — cosmetic; does NOT affect registration API (always supplies value) |
+| P6 | Migration-history reconciliation (40 unrecorded + 1 failed) | GAP-08 | Future `prisma migrate deploy` usage | OPEN — separate infrastructure task (tracker Section 10) |
+| P7 | Browser test server startup automation | GAP-09 | Dev convenience | OPEN — Windows/Next.js webpack worker OOM constraint |
+
+**Launch gate summary:**
+
+| Launch type | What is required | What is NOT required |
+|---|---|---|
+| Marketplace registration (public) | A1 + A2 + A3 | P1–P7 (none block Marketplace) |
+| SaaS registration (public) | A1–A3 + P1 + P2 + P3 + P4 (at minimum) | P5–P7 (infrastructure/dev convenience) |
+| Model switching (Marketplace ↔ SaaS) | P2 + P4 + P5 + P6 (all resolved) | — |
+
+#### POST-LAUNCH — future features, separate scope
+
+These are not launch blockers. They are future product features with their own architecture dependencies.
+
+| # | Item | Gap | Dependency | Scope |
+|---|---|---|---|---|
+| F1 | Post-registration business-model transition (Marketplace ↔ SaaS) | GAP-01 | P2 + P4 + P6 | Provider request UI; eligibility checks; agreement acceptance; admin approval; financial reconciliation; effective date; immutable audit history. Existing bookings remain governed by original arrangements. |
+| F2 | Driving School registration | GAP-05 | Multi-instructor architecture (external design) | `DRIVING_SCHOOL` organisation type available; multiple instructors under one school identity. |
+| F3 | BUSINESS/multi-provider account type | GAP-06 | Multi-provider architecture (external design) | `BUSINESS` organisation type available; multiple providers under one organisation; admin roles; team management. |
+
+These should not be started until their dependencies are resolved and the product contract for each is defined.
+
 ### Documentation update rule
 
 Every implementation task must update this document in the same delivery cycle as the code change:
@@ -424,3 +472,4 @@ If implementation is incomplete, the document must say so. A commit alone must n
 |---|---|---|---|
 | 1.0 | 2026-11-13 | Kiro | Initial creation — full baseline of registration onboarding implementation, evidence, gaps and roadmap |
 | 1.1 | 2026-11-14 | Kiro | v1.1 revision per documentation revision plan: (1) Separated implementation status (EXISTS/VERIFIED/PARTIAL) from gap status (OPEN/IN PROGRESS/BLOCKED/DEFERRED/RESOLVED); corrected GAP-07/08/09 from EXISTS to OPEN. (2) Corrected roadmap dependencies — Item 6 (model switching) now depends on Items 2+4+5; Items 4 and 5 can proceed independently; added dependency graph. (3) Added Public SaaS Launch Readiness section with 5 criteria. (4) Renamed Gate 7 to "Post-registration business discovery"; added discovery storage, editability and no-effect-on-entitlements items. (5) Clarified SaaS Terms version 1.0 as test override not production legal version; distinguished application-derived organisation types from DB defaults; replaced abbreviated migration paths with exact filenames. (6) Added evidence qualifier: all results are "reported" unless explicitly marked otherwise. (7) Updated roadmap with corrected dependencies and independent-vs-blocked markers. (8) Added v1.1 change history entry. No application code or production configuration changed. |
+| 1.2 | 2026-11-14 | Kiro | Added "Action Priority" section separating gaps into three categories: ACT NOW (blocks safe Marketplace launch: credential rotation, test record cleanup, deployed flow verification), STAYS PENDING (tracked, not blocking Marketplace launch: SaaS Terms content, acceptance flow, eligibility policy, DIRECT payments, schema drift, migration history, browser test automation), POST-LAUNCH (future features: model switching, Driving School, BUSINESS type). Added launch gate summary table showing what is required vs not required for each launch type. No application code or production configuration changed. |
