@@ -6,9 +6,11 @@ const config: CapacitorConfig = {
   webDir: 'www',
   server: {
     androidScheme: 'https',
-    // Your computer's IP on phone hotspot network
-    url: process.env.CAPACITOR_SERVER_URL || 'http://192.168.148.108:3000',
-    cleartext: true, // Allow HTTP for local development
+    // Production: loads from the live DriveBook web app
+    // For local dev: set CAPACITOR_SERVER_URL=http://YOUR_LAN_IP:3000 before running `npx cap sync`
+    url: process.env.CAPACITOR_SERVER_URL || 'https://drivebook.com.au',
+    // Only needed for local dev over HTTP — harmless when using HTTPS
+    cleartext: true,
   },
   plugins: {
     SplashScreen: {

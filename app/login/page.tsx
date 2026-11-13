@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import Link from 'next/link'
 import { LogIn, Loader2, Mail, ShieldCheck, RefreshCw } from 'lucide-react'
+import BiometricLoginButton, { BiometricSetupPrompt } from '@/components/mobile/BiometricLoginButton'
 
 function ResendVerificationButton({ email }: { email: string }) {
   const [sent, setSent] = useState(false)
@@ -160,6 +161,13 @@ export default function LoginPage() {
     redirectTo: string
   } | null>(null)
 
+  // Biometric setup prompt — shown after successful login on native app
+  const [biometricSetup, setBiometricSetup] = useState<{
+    email: string
+    password: string
+    redirectTo: string
+  } | null>(null)
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setLoading(true)
@@ -296,10 +304,53 @@ export default function LoginPage() {
           }
         } catch { /* non-fatal — use default redirect */ }
       }
+
+      // Show biometric setup prompt before navigating (native app only, first time)
+      // The prompt is non-blocking — if declined or unavailable it navigates immediately
+      try {
+        const { isBiometricAvailable: checkBio, isBiometricEnabled } = await import('@/lib/capacitor/biometric')
+        const bioAvailable = await checkBio()
+        if (bioAvailable && !isBiometricEnabled()) {
+          // Store setup info and show prompt — onDone navigates to finalRedirect
+          setBiometricSetup({ email, password, redirectTo: finalRedirect })
+          setLoading(false)
+          return
+        }
+      } catch { /* non-fatal */ }
+
       window.location.replace(finalRedirect)
 
     } catch {
       setError('An error occurred. Please try again.')
+      setLoading(false)
+    }
+  }
+
+  // ── Biometric auto-login ──────────────────────────────────────────────────
+  // Called by BiometricLoginButton when fingerprint/face ID succeeds
+  const handleBiometricCredentials = async (email: string, password: string) => {
+    setLoading(true)
+    setError('')
+    const formEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>
+    // Re-use the existing submit flow by injecting credentials directly
+    try {
+      const result = await signIn('credentials', { email, password, redirect: false })
+      if (result?.error || !result?.ok) {
+        setError('Biometric login failed. Please log in with your password.')
+        setLoading(false)
+        return
+      }
+      const sessionRes = await fetch('/api/auth/session', { cache: 'no-store' })
+      const session = sessionRes.ok ? await sessionRes.json() : {}
+      const role = session?.user?.role
+      const dest =
+        (role === 'SUPER_ADMIN' || role === 'ADMIN') ? '/admin'
+        : role === 'provider' ? '/dashboard'
+        : role === 'CLIENT' ? '/client-dashboard'
+        : '/dashboard'
+      window.location.replace(dest)
+    } catch {
+      setError('Biometric login failed. Please try again.')
       setLoading(false)
     }
   }
@@ -311,6 +362,19 @@ export default function LoginPage() {
           email={otpState.email}
           verificationId={otpState.verificationId}
           redirectTo={otpState.redirectTo}
+        />
+      )}
+
+      {/* Biometric setup prompt — slides up after first successful login on native app */}
+      {biometricSetup && (
+        <BiometricSetupPrompt
+          email={biometricSetup.email}
+          password={biometricSetup.password}
+          onDone={() => {
+            const dest = biometricSetup.redirectTo
+            setBiometricSetup(null)
+            window.location.replace(dest)
+          }}
         />
       )}
 
@@ -378,6 +442,12 @@ export default function LoginPage() {
                   : 'Login'}
               </button>
             </form>
+
+            {/* Biometric login — only shown in Capacitor native app when fingerprint/face ID is set up */}
+            <BiometricLoginButton
+              onCredentials={handleBiometricCredentials}
+              disabled={loading}
+            />
           </div>
 
           <p className="text-center mt-6 text-sm text-gray-600">

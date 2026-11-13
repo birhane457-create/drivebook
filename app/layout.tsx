@@ -98,6 +98,7 @@ export const viewport: Viewport = {
   maximumScale: 5,
   userScalable: true,
   themeColor: "#2563eb",
+  viewportFit: "cover", // Required for env(safe-area-inset-*) to work on notch/gesture-bar devices
 };
 
 export default function RootLayout({

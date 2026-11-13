@@ -18,8 +18,10 @@ import { DashboardPageLayout } from '@/components/ui'
 // have previously authenticated, not necessarily live sessions.
 
 import { useState, useEffect } from 'react'
-import { Monitor, Smartphone, Trash2, RefreshCw, ShieldCheck, AlertCircle } from 'lucide-react'
+import { Monitor, Smartphone, Trash2, RefreshCw, ShieldCheck, AlertCircle, Fingerprint } from 'lucide-react'
 import { DEVICE_STORAGE_KEY } from '@/lib/services/deviceTracking'
+import { isBiometricEnabled, clearBiometricCredentials } from '@/lib/capacitor/biometric'
+import { isNative } from '@/lib/capacitor/native-features'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -64,6 +66,14 @@ export default function SecurityPage() {
   const [removingAll, setRemovingAll] = useState(false)
   const [confirmRemoveAll, setConfirmRemoveAll] = useState(false)
   const [migrationPending, setMigrationPending] = useState(false)
+
+  // Biometric state
+  const [biometricEnabled, setBiometricEnabled] = useState(false)
+  const [showingNativeOnly] = useState(isNative())
+
+  useEffect(() => {
+    setBiometricEnabled(isBiometricEnabled())
+  }, [])
 
   // Read the device token from localStorage to send in the header
   // so the server can identify which device is "current"
@@ -186,6 +196,41 @@ export default function SecurityPage() {
           <p className="text-amber-400/70">
             The device tracking database table is pending a migration. Once deployed, recognised devices will appear here.
           </p>
+        </div>
+      )}
+
+      {/* Biometric login card — native app only */}
+      {showingNativeOnly && (
+        <div className="bg-card rounded-2xl border border-border overflow-hidden">
+          <div className="px-5 py-4 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
+              <Fingerprint className="w-5 h-5 text-purple-400" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-sm font-bold text-foreground">Biometric Login</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {biometricEnabled
+                  ? 'Fingerprint / Face ID login is enabled for this device'
+                  : 'Enable fingerprint or Face ID to skip the password on login'}
+              </p>
+            </div>
+            {biometricEnabled && (
+              <button
+                onClick={() => {
+                  clearBiometricCredentials()
+                  setBiometricEnabled(false)
+                }}
+                className="text-xs text-destructive hover:text-destructive/80 font-medium border border-destructive/30 rounded-lg px-3 py-1.5 transition-colors"
+              >
+                Disable
+              </button>
+            )}
+            {!biometricEnabled && (
+              <span className="text-xs text-muted-foreground/50 italic">
+                Log out and back in to enable
+              </span>
+            )}
+          </div>
         </div>
       )}
 
