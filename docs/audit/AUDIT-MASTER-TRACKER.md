@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 
-**Version:** 6.66 (Phase 1 final reconciliation: script v2, full ledger, prisma status, R3+backfill proposals — cancellation fix, expiry messaging, wallet credit expiry, ledger gaps)
-**Last Updated:** 2026-11-10 (v6.66)
+**Version:** 6.67 (Stage 1B registration verification complete: Vitest 165/165, HTTP+DB runtime tests exit 0, 11/11 Playwright browser tests; migration deferred)
+**Last Updated:** 2026-11-13 (v6.67)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -724,7 +724,9 @@ These items were raised during the audit and verified source-safe. Recorded here
 |---|---|---|---|---|
 | WLA-002 | Provider-settlement semantics for SaaS mode | ARCHITECTURAL | **OPEN — PAYMENT MODEL OPTIONS UNDER RESEARCH** — v1-v11 NOT ACCEPTED (see ADR appendix A). Terminology separated: DIRECT = direct charges on provider connected accounts (technical integration); Option A/B/C = commercial revenue models. **Option A** (SaaS subscription only; `fees_collector: "stripe"`; no Connect platform fees; providers pay Stripe processing directly; DriveBook earns subscription + may investigate Stripe revenue-share programme, subject to qualification). **Option B** (2.5% combined fee; `fees_collector: "application"`; A$2/month + payout fees confirmed; v11 margin didn't account for these). **Option C** (provider chooses; research focus: whether both `fees_collector` configs can coexist under one AU Connect platform agreement — not merely whether each is individually valid). **Written Stripe confirmation required** on 6 items: AU platform eligibility, both pricing arrangements coexisting, full Dashboard access, Express account migration, existing provider account connection, revenue-share eligibility. Product owner recommends Option A as initial baseline. SaaS subscription separated from payment-processing decision. v11 technical analysis retained as research. No fee model committed. DIRECT blocked. PLATFORM unchanged. | N/A | Evidence: `docs/audit/WLA-002-SETTLEMENT-DECISION.md`. Pending research. |
 | WLA-004 | `application_fee_amount` set without connected-account context | P2 | SOURCE ANALYSIS COMPLETE — runtime verification pending | Stripe test-mode verification requires connected account (not yet approved). Analysis: `docs/audit/WLA-004-SOURCE-ANALYSIS.md`. |
-| WLA-005 | Wallet balance is user-wide, not provider-attributed | ARCHITECTURAL | **OPEN — SOURCE FIX-VERIFIED (payout security); AWAITING runtime verification + FIFO Phase 2 + admin UI** — 8 sub-items implemented across multiple commits. Independent reviewer second-pass 2026-11-09: all 7 source-level payout security requirements PASS (see matrix below). Remaining open items: runtime payout verification not performed; FIFO Phase 2 (credit-lot allocation) deferred; admin UI for walletCreditValidityMonths not wired. Hardening note: check-out non-promotable denylist should eventually be replaced with an explicit allowlist of valid pre-completion statuses (low priority, not a security failure). **(1)** Public cancel issues wallet CREDIT for wallet-funded bookings (931128f2). **(2)** Expiry messaging unified to 12 months via walletCreditValidityMonths in PlatformSettings across 14 files. **(3)** WalletTransaction.expiresAt written on both package webhook CREDIT paths + plain top-up confirmation; enforced in getWalletBalanceTx, getWalletBalance, econcileWalletBalance, create-bulk, escheduleBooking, wallet/route, admin wallet API, and wallet-add route. **(4)** 7 missing FinancialLedger flows wired. **(5)** Payout lifecycle hardened (1dc24757): all 4 payout paths now require status IN (SETTLED,COMPLETED) + checkOutTime IS NOT NULL + source != offline + buffer from checkOutTime (not endTime) + getPayoutBufferHours() from single PlatformSettings source of truth — three consistency gaps fixed at e4f62851. **(6)** Schema migration for expiresAt + walletCreditValidityMonths applied to production DB via dev-migrate endpoint (deleted post-run). **(7)** FIFO Phase 1 documented (packages only). **(8)** Top-up misleading error fixed (34abdcf0). **Payment-gate fix** (4d5a19d9): check-in now rejects PENDING_PAYMENT/isPaid=false bookings (HTTP 402); check-out now refuses to create a COMPLETED transaction when isPaid=false — creates FAILED reconciliation record instead; confirmBooking() now sets isPaid=true atomically with wallet debit. **Source fix-verified requirements (2026-11-09, independent reviewer 2nd pass): buffer from checkOutTime PASS; offline exclusion PASS; unpaid check-in PASS; unpaid check-out PASS; wallet debit+isPaid atomic PASS; cancelled booking PASS; failed/refunded tx protected PASS. Remaining open: runtime payout verification NOT PERFORMED; FIFO Phase 2 (credit-lot allocation) deferred; admin UI for walletCreditValidityMonths not wired; tx denylist hardening (low priority). Previously noted non-blocking gaps: ledger calls non-atomic by design; package face value vs actual payment accounting (Q2–Q4); cross-provider spending cross-referenced. **Operational note:** cron/process-all candidate queries do not pre-exclude already-paid transactions (unlike preview-all); payout builder deduplication prevents financial impact; alignment deferred. | 931128f2 9d92d604 1dc24757 e4f62851 4d5a19d9 | Evidence: docs/audit/WLA-005-WALLET-OWNERSHIP-DECISION.md. Awaiting FIX-VERIFIED. |
+| WLA-005 | Wallet balance is user-wide, not provider-attributed | ARCHITECTURAL | **OPEN — SOURCE FIX-VERIFIED (payout security); AWAITING runtime verification + FIFO Phase 2 + admin UI** — 8 sub-items implemented across multiple commits. Independent reviewer second-pass 2026-11-09: all 7 source-level payout security requirements PASS (see matrix below). Remaining open items: runtime payout verification not performed; FIFO Phase 2 (credit-lot allocation) deferred; admin UI for walletCreditValidityMonths not wired. Hardening note: check-out non-promotable denylist should eventually be replaced with an explicit allowlist of valid pre-completion statuses (low priority, not a security failure). **(1)** Public cancel issues wallet CREDIT for wallet-funded bookings (931128f2). **(2)** Expiry messaging unified to 12 months via walletCreditValidityMonths in PlatformSettings across 14 files. **(3)** WalletTransaction.expiresAt written on both package webhook CREDIT paths + plain top-up confirmation; enforced in getWalletBalanceTx, getWalletBalance, 
+econcileWalletBalance, create-bulk, 
+escheduleBooking, wallet/route, admin wallet API, and wallet-add route. **(4)** 7 missing FinancialLedger flows wired. **(5)** Payout lifecycle hardened (1dc24757): all 4 payout paths now require status IN (SETTLED,COMPLETED) + checkOutTime IS NOT NULL + source != offline + buffer from checkOutTime (not endTime) + getPayoutBufferHours() from single PlatformSettings source of truth — three consistency gaps fixed at e4f62851. **(6)** Schema migration for expiresAt + walletCreditValidityMonths applied to production DB via dev-migrate endpoint (deleted post-run). **(7)** FIFO Phase 1 documented (packages only). **(8)** Top-up misleading error fixed (34abdcf0). **Payment-gate fix** (4d5a19d9): check-in now rejects PENDING_PAYMENT/isPaid=false bookings (HTTP 402); check-out now refuses to create a COMPLETED transaction when isPaid=false — creates FAILED reconciliation record instead; confirmBooking() now sets isPaid=true atomically with wallet debit. **Source fix-verified requirements (2026-11-09, independent reviewer 2nd pass): buffer from checkOutTime PASS; offline exclusion PASS; unpaid check-in PASS; unpaid check-out PASS; wallet debit+isPaid atomic PASS; cancelled booking PASS; failed/refunded tx protected PASS. Remaining open: runtime payout verification NOT PERFORMED; FIFO Phase 2 (credit-lot allocation) deferred; admin UI for walletCreditValidityMonths not wired; tx denylist hardening (low priority). Previously noted non-blocking gaps: ledger calls non-atomic by design; package face value vs actual payment accounting (Q2–Q4); cross-provider spending cross-referenced. **Operational note:** cron/process-all candidate queries do not pre-exclude already-paid transactions (unlike preview-all); payout builder deduplication prevents financial impact; alignment deferred. | 931128f2 9d92d604 1dc24757 e4f62851 4d5a19d9 | Evidence: docs/audit/WLA-005-WALLET-OWNERSHIP-DECISION.md. Awaiting FIX-VERIFIED. |
 | WLA-007 | Domain ownership concurrency across Provider and BusinessDomain records | P1 | **✅ FIX-VERIFIED** (Provider-table scope) — Index applied to test DB + production DB; pg_indexes confirmed both; 3 test cases (6 DOM checks) pass exit 0; route handler P2002 → HTTP 409. Production project: `ikhqphbbilrocsghjyda` (confirmed by user + DNS + codebase). **Scope note:** Partial unique index protects Provider.customDomain only. BusinessDomain.host has its own `@unique` constraint (schema-level). No cross-table constraint prevents Provider.customDomain = BusinessDomain.host. Risk is low: no runtime API creates BusinessDomain records (only migration script `scripts/migrate-business-config.ts`). Cross-table gap documented; not blocking FIX-VERIFIED under Provider scope. | `4b7c2014` | 3 test cases (6 DOM checks: DOM-01 index guard; DOM-02..05 concurrent P2002 single verified owner; DOM-06 route handler HTTP 409) | **Test DB 2026-11-01**: index applied, 3/3 pass exit 0. **Production DB 2026-11-02**: duplicate check 0 rows; `CREATE INDEX` applied; pg_indexes confirmed `WHERE ("domainVerified" = true)`. See `docs/audit/WLA-007-DEPLOYMENT-EVIDENCE.md` §6. SEC-CRED-01: production password not rotated (see SEC-CRED-01 row below). |
 | SEC-CRED-01 | Database password and Stripe webhook secret exposed in public Git history | **CRITICAL** | **🔴 ACTIVE — CRITICAL — ROTATION DEFERRED** — Supabase database password and Stripe webhook signing secret committed to public GitHub repo in 7+ files. Password confirmed still valid 2026-11-02 (used to apply WLA-007 index). Secrets redacted from tracked files (commit `69d3e7f9`). **Owner decision:** rotation deferred to end of audit cycle; user states no real customer data in production. **Reviewer qualification:** deferral reduces risk only if production contains no real customer data, financial records, or sensitive PII; valid credentials still allow unauthorised access regardless. **Required before closure:** 1. Rotate Supabase DB password. 2. Rotate Stripe webhook secret. 3. Update Vercel/Railway env vars. 4. Verify old credentials fail. 5. Review access logs. 6. Address historical Git exposure (BFG/filter-repo). Do not paste replacement credentials into Git, chat, or audit documents. | `69d3e7f9` (redaction) | N/A | Evidence: `docs/audit/SEC-CRED-01_DATABASE_CREDENTIAL_EXPOSURE.md`, `docs/audit/SEC-CRED-01_REMEDIATION_COMPLETE.md`. Production project: `ikhqphbbilrocsghjyda` (Supabase, ap-southeast-1). Credentials from `.env.production.bak` still work — confirms password not rotated. |
 | WLA-008 | Cross-provider tenant isolation not demonstrated across all routes | P1 | **✅ FIX-VERIFIED → CLOSED** — Implementation complete; PostgreSQL verification complete; reviewer accepted FIX-VERIFIED at `aa36a4cc` (2026-10-31). Formal closure: lifecycle FINDING → VERIFIED → FIX → FIX-VERIFIED → CLOSED. | `aa36a4cc` | 14 tests (12 DB-backed + 2 source), VITEST_EXIT:0, 2026-10-31T21:56. Reviewer: "WLA-008 has met the substantive technical verification requirements." |
@@ -882,3 +884,94 @@ Reviewer has not independently rerun these test suites. Behavioral HTTP testing 
 **Migration review finding:** Migration SQL at `20261109000001_add_provider_industry_and_discovery` is additive only (nullable column + new table). Safe to apply. No existing data modified. See report §Migration SQL Review.
 
 **DB access constraint:** Neither Supabase endpoint reachable from audit machine. Full classification query must be run from deployment environment (Supabase SQL Editor, CI pipeline, or deployment host). The affected-window query completed before the connection closed, confirming zero window providers.
+
+---
+
+## Section 11 — Stage 1B: Provider Registration Architecture
+
+**Version:** v1 (2026-11-13)
+**Status:** FIX-VERIFIED at source, API, database and browser levels. Production migration deferred.
+**Scope:** Registration flow business-model selection, organisation type, commercial agreement fields, SaaS lifecycle, provider discovery separation, age declaration removal, Playwright browser tests.
+
+### 11.1 — Registration Implementation
+
+| Item | Status | Commits | Evidence |
+|---|---|---|---|
+| `ageDeclaration` removed from provider registration | FIX-VERIFIED | `99174967` | AGE-1–6 tests |
+| `organisationType` nullable in schema + migration (no DEFAULT) | FIX-VERIFIED | `99174967` | MIG-1 test; migration.sql |
+| New registrations always receive explicit `organisationType` | FIX-VERIFIED | `99174967` | MIG-2 test; route.ts |
+| Classification script v2 — REVIEW group for SAAS+null-industry | FIX-VERIFIED | `99174967` | MIG-3–5 tests; classification.cjs |
+| `apply-phase2-migration.cjs` corrected + DRIFT-1–5 guards | FIX-VERIFIED | `e17eece5` | DRIFT-1–5 tests |
+| SaaS `User.termsAcceptedAt/Version` write restricted to Marketplace | FIX-VERIFIED | `f5f40a7e` | OWN-1–4 tests |
+| `_testSaasPublished` injection for lifecycle tests | FIX-VERIFIED | `52fe73da` | SaaS-PUB-1–7 tests |
+| Env-var override for test isolation (`SAAS_TERMS_PUBLISHED_OVERRIDE`) | FIX-VERIFIED | `5e39f581` | SP-3DB, SP-5 |
+| SaaS Terms UI lifecycle (page imports constants, conditional checkbox) | FIX-VERIFIED | `3f174df2` | SAAS-UI-1–10 tests |
+| `/saas-terms` preview page | FIX-VERIFIED | `3f174df2` | SAAS-UI-6–7 tests; app/saas-terms/page.tsx |
+| Fail-closed version guard (`SAAS_TERMS_VERSION_MISSING`) | FIX-VERIFIED | `c8000038` | VG-1–7 tests |
+| Payment-service gate (3 routes, DIRECT → 503) | FIX-VERIFIED — pre-existing | — | PG-1–5 tests; WLA-001/003 |
+
+### 11.2 — Test coverage (Vitest)
+
+| Suite | Tests | Status |
+|---|---|---|
+| `reg-phase2-architecture.test.ts` | 129 | ✅ 165/165 total, exit 0 |
+| `reg-business-model-selection.test.ts` | 36 | ✅ 165/165 total, exit 0 |
+| Covers: FIX-1–7, AGE-1–6, MIG-1–5, DRIFT-1–5, IVF-M1–5, IVF-S1–4, IVF-SP1–4, IVF-O1–6, IVF-P1–4, IVF-DS1–5, IVF-D1–3, SAAS-UI-1–10, VG-1–7, PG-1–5 | | |
+
+### 11.3 — HTTP and database verification
+
+| Test run | Script | Tests | Server | DB | Result |
+|---|---|---|---|---|---|
+| Unpublished SaaS + DB persistence (RT-1–10 + RT-1DB/4DB/5DB) | `runtime-verify-registration.cjs` | 10 HTTP + 30 DB assertions | localhost:3002 | Supabase production | Exit 0 — all passed |
+| Published SaaS lifecycle (SP-1–5 + SP-3DB) | `runtime-verify-saas-published.cjs` | 7 tests + 11 DB assertions | localhost:3005 (published constants) | Supabase production | Exit 0 — all passed |
+
+**DB assertions verified per registration type:**
+
+| Type | Key DB fields verified |
+|---|---|
+| Marketplace (RT-1DB) | commercialAgreementType=MARKETPLACE_TERMS, status=ACCEPTED, version=2.0, acceptedAt set, privacyVersion=2.0, privacyAcceptedAt set, orgType=INDIVIDUAL_INSTRUCTOR, businessModel=MARKETPLACE, paymentMode=PLATFORM, User.termsAcceptedAt set, User.termsVersion=2.0 |
+| SaaS unpublished (RT-4DB) | commercialAgreementType=SAAS_TERMS, status=PENDING, version=null, acceptedAt=null, privacyVersion=2.0, privacyAcceptedAt set, orgType=INDIVIDUAL_INSTRUCTOR, businessModel=SAAS, paymentMode=DIRECT, User.termsAcceptedAt=null, User.termsVersion=null |
+| Non-driving SaaS (RT-5DB) | Same as RT-4DB plus orgType=SOLE_TRADER, industry=plumber — privacy set independently of commercial agreement |
+| Published SaaS (SP-3DB) | SAAS_TERMS, ACCEPTED, version=1.0, acceptedAt set, privacyVersion=2.0, privacyAcceptedAt set, orgType=INDIVIDUAL_INSTRUCTOR, SAAS, DIRECT, User.termsAcceptedAt=null (SaaS isolation maintained), User.termsVersion=null |
+
+### 11.4 — Browser verification (Playwright / Chromium)
+
+| Test | What is verified | Result |
+|---|---|---|
+| BW-1 | Marketplace checkbox visible; submit gated by both terms and privacy | ✅ |
+| BW-2 | SaaS shows "being finalised" notice; no Instructor Terms checkbox; privacy alone enables submit | ✅ |
+| BW-3 | Non-driving structure selector present; model selector absent; SaaS notice shown | ✅ |
+| BW-4 | Driving School option is aria-disabled, scoped to container; Independent instructor NOT aria-disabled | ✅ |
+| BW-5 | Instructor Terms alone does not enable submit — privacy is independently required | ✅ |
+| BW-6 | Independent instructor pre-selected with violet border (not just visible) | ✅ |
+| BW-7 | Marketplace form submits businessModel=MARKETPLACE, termsAccepted=true, privacyAccepted=true, saasTermsAccepted absent; redirects to /login | ✅ |
+| BW-8 | SaaS form submits businessModel=SAAS, no termsAccepted, no saasTermsAccepted, privacyAccepted=true; redirects to /login | ✅ |
+| BW-9 | Plumber submits businessType=plumber, organisationType=SOLE_TRADER, no termsAccepted, no saasTermsAccepted; redirects to /login | ✅ |
+| BW-10 | Clicking Driving School option (force=true) does not change selected organisation type | ✅ |
+| BW-11 | Published SaaS checkbox visible; submit disabled without it; saasTermsAccepted=true in payload; redirects to /login (auto-skips if server unpublished) | ✅ |
+
+**Browser test commits:** `968c1609` (initial 6), `488bc054` (strengthened + BW-7–9), `33bdc4b6` (BW-10–11)
+**Vercel status:** Success on all three commits (confirmed by independent review).
+
+### 11.5 — Migration status (DEFERRED — no real data)
+
+| Item | Status | Notes |
+|---|---|---|
+| Migration SQL (`migration.sql`) | Correct — nullable TEXT, no DEFAULT | organisationType=NULL for existing rows; documented and intentional |
+| Classification script (`migration-phase2-classification.cjs`) | Ready — read-only | Classifies existing providers into INDIVIDUAL_INSTRUCTOR / SOLE_TRADER / REVIEW groups |
+| Production migration execution | **DEFERRED** | No real provider registrations in production; schema columns required before code deployment |
+| Migration history issues (40 unrecorded, 1 failed) | Pre-existing, separate scope | Tracked in Section 10; must be resolved before `prisma migrate deploy` |
+| Pre-launch migration sequence | **Required before launch** | 1. Clean staging DB → apply full chain → verify schema. 2. Run registration HTTP tests against staging. 3. Reconcile production migration ledger (Section 10). 4. DBA approves and applies. |
+
+**Key point:** No real customer data means no backfill or data-preservation risk. It does not remove the schema compatibility requirement. Code that writes `organisationType` to `Provider` will fail if those columns don't exist in the deployed database. **Do not deploy registration code without applying the migration first.**
+
+### 11.6 — Outstanding (non-registration)
+
+| Item | Status |
+|---|---|
+| Existing-provider `organisationType` classification (REVIEW group) | Awaiting DBA review — not blocking registration launch |
+| Existing SaaS provider acceptance flow (providers registered before SaaS Terms published) | Separate acceptance flow not yet implemented — documented in registration-constants.ts |
+| SaaS Terms legal content (finalised wording) | Preview page exists at /saas-terms; content TBD |
+| Browser tests require manual server startup (NODE_OPTIONS OOM constraint on Windows) | Known limitation; documented in playwright.config.ts |
+| Vercel deployment against production DB | Not independently verified |
+
