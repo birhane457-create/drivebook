@@ -953,17 +953,57 @@ Reviewer has not independently rerun these test suites. Behavioral HTTP testing 
 **Browser test commits:** `968c1609` (initial 6), `488bc054` (strengthened + BW-7–9), `33bdc4b6` (BW-10–11)
 **Vercel status:** Success on all three commits (confirmed by independent review).
 
-### 11.5 — Migration status (DEFERRED — no real data)
+### 11.5 — Migration status (schema prerequisite satisfied; migration-history integrity outstanding)
 
-| Item | Status | Notes |
+**Corrected assessment (v6.67-1, 2026-11-13):**
+
+The required Phase 2 registration columns are already present in production, so no additional Phase 2 column-creation migration is required before registration deployment. The production schema differs from the intended Prisma definition for `organisationType` (NOT NULL DEFAULT 'SOLE_TRADER' rather than nullable with no default). This does not block the current registration API if all relevant write paths explicitly provide the field. Production migration-history reconciliation remains outstanding and must be resolved before relying on Prisma migration deployment for future schema changes.
+
+**Provider creation path audit (all paths):**
+
+| Path | Sets `organisationType`? | Risk |
 |---|---|---|
-| Migration SQL (`migration.sql`) | Correct — nullable TEXT, no DEFAULT | organisationType=NULL for existing rows; documented and intentional |
-| Classification script (`migration-phase2-classification.cjs`) | Ready — read-only | Classifies existing providers into INDIVIDUAL_INSTRUCTOR / SOLE_TRADER / REVIEW groups |
-| Production migration execution | **DEFERRED** | No real provider registrations in production; schema columns required before code deployment |
-| Migration history issues (40 unrecorded, 1 failed) | Pre-existing, separate scope | Tracked in Section 10; must be resolved before `prisma migrate deploy` |
-| Pre-launch migration sequence | **Required before launch** | 1. Clean staging DB → apply full chain → verify schema. 2. Run registration HTTP tests against staging. 3. Reconcile production migration ledger (Section 10). 4. DBA approves and applies. |
+| `app/api/register/route.ts` (user-facing registration) | ✅ Yes — always from `deriveRegistrationFields()` | None |
+| `prisma/seed.ts` (seed data) | ❌ No — receives `SOLE_TRADER` default | Test/seed only — not production API |
+| `scripts/register-test-users.ts` (test script) | ❌ No — receives `SOLE_TRADER` default | Test script only — not production API |
 
-**Key point:** No real customer data means no backfill or data-preservation risk. It does not remove the schema compatibility requirement. Code that writes `organisationType` to `Provider` will fail if those columns don't exist in the deployed database. **Do not deploy registration code without applying the migration first.**
+Only the user-facing registration API creates Provider records in production. It always supplies `organisationType` explicitly. The DEFAULT is not used by any production path.
+
+**Existing Provider records (13 total, all test accounts):**
+
+| Type | Count | `organisationType` source |
+|---|---|---|
+| Audit test fixtures (`audit05_dir_*`) | 7 | DB default `SOLE_TRADER` |
+| Branding audit fixture (`V07 FV2 NoBiz`) | 1 | DB default `SOLE_TRADER` |
+| Phase 3B branding tests (`@example.com`) | 3 | DB default `SOLE_TRADER` |
+| Owner personal test registrations (`@gmail.com`) | 2 | DB default `SOLE_TRADER` |
+
+All 13 records have `organisationType=SOLE_TRADER` from the DB default. None were classified by the registration API. These are test records and should not be treated as evidence that the classification logic is correct. They are disposable.
+
+**Schema drift summary:**
+
+| Item | Production | Intended (Prisma) | Impact |
+|---|---|---|---|
+| `organisationType` nullable | NOT NULL | Nullable (`String?`) | No impact on registration API (always supplies value) |
+| `organisationType` default | `'SOLE_TRADER'` | None | Only affects paths that omit the field (seed/test scripts) |
+| Other 6 Phase 2 columns | Match Prisma definition | Match | None |
+
+**Migration ledger (3 recorded, ~40 unrecorded via `db push`):**
+
+| Migration | Status |
+|---|---|
+| `20261109000001_add_provider_industry_and_discovery` | ✅ Applied |
+| `20260116000000_sub_06_a_unique_constraints` | ⚠ NOT FINISHED (pre-existing) |
+| `20261007222011_brand_v11_provider_customslug_unique` | ✅ Applied |
+| ~40 other migrations | Applied via `db push`, not in `_prisma_migrations` ledger |
+
+**Pre-launch migration sequence (unchanged):**
+1. Establish a clean, isolated staging database.
+2. Apply the complete migration history to it.
+3. Verify the resulting schema against the Prisma schema.
+4. Run the registration HTTP and browser tests against staging.
+5. Reconcile the production migration ledger (Section 10: 40 unrecorded + 1 failed).
+6. DBA approves and applies before opening registration to real users.
 
 ### 11.6 — Outstanding (non-registration)
 
