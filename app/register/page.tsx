@@ -72,24 +72,21 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [privacyAccepted, setPrivacyAccepted] = useState(false)
-  // SaaS Terms acceptance — only relevant when SAAS_TERMS_PUBLISHED is true.
-  // The checkbox is not rendered while terms are unpublished, so this stays false.
+  // SaaS Terms — kept for when SaaS path is re-enabled
   const [saasTermsAccepted, setSaasTermsAccepted] = useState(false)
+  void saasTermsAccepted; void setSaasTermsAccepted
 
-  // Business model selection — only for driving instructors.
-  // Other trades are always SaaS (the API enforces this server-side).
-  const [selectedModel, setSelectedModel] = useState<'MARKETPLACE' | 'SAAS' | null>(null)
+  // Business model — pre-set to MARKETPLACE; SaaS disabled until payment gateway active
+  // TODO: restore setter call in SaaS button when re-enabling
+  const [selectedModel, setSelectedModel] = useState<'MARKETPLACE' | 'SAAS' | null>('MARKETPLACE')
+  void setSelectedModel
 
-  // Organisation type — only for driving instructors.
-  // INDIVIDUAL_INSTRUCTOR is the default and the only currently enabled option.
-  // DRIVING_SCHOOL is designed but disabled (shown as coming soon).
-  // Non-driving providers select their business structure separately.
+  // Organisation type — driving instructors only, always INDIVIDUAL_INSTRUCTOR for now
   const [selectedOrgType, setSelectedOrgType] = useState<'INDIVIDUAL_INSTRUCTOR'>('INDIVIDUAL_INSTRUCTOR')
 
-  // Business structure — for non-driving providers only.
-  // SOLE_TRADER: operating as a sole trader (default).
-  // REGISTERED_BUSINESS: operating through a registered company or business entity.
+  // Business structure — for non-driving providers only (path disabled until payment gate)
   const [selectedStructure, setSelectedStructure] = useState<'SOLE_TRADER' | 'REGISTERED_BUSINESS'>('SOLE_TRADER')
+  void selectedStructure; void setSelectedStructure
 
   // Get business type from URL params, default to driving
   const businessType = searchParams.get('businessType') || 'driving'
@@ -199,70 +196,19 @@ export default function RegisterPage() {
         {/* Card */}
         <div className="bg-card/80 backdrop-blur-xl rounded-2xl border border-border shadow-2xl shadow-violet-900/20 p-6 sm:p-8">
 
-          {/* Business model selection — driving instructors only */}
+          {/* Business model — Marketplace only (SaaS disabled until payment gateway active) */}
           {isDriving && (
-            <div className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">How would you like to use DriveBook?</h2>
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => setSelectedModel('MARKETPLACE')}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                    selectedModel === 'MARKETPLACE'
-                      ? 'border-violet-500 bg-violet-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 ${
-                      selectedModel === 'MARKETPLACE' ? 'border-violet-500 bg-violet-500' : 'border-gray-300'
-                    }`}>
-                      {selectedModel === 'MARKETPLACE' && (
-                        <svg className="w-3 h-3 text-white mx-auto mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900">DriveBook Marketplace</p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        Students discover and book driving lessons through DriveBook. DriveBook manages payments and pays you weekly.
-                      </p>
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedModel('SAAS')}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                    selectedModel === 'SAAS'
-                      ? 'border-violet-500 bg-violet-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 ${
-                      selectedModel === 'SAAS' ? 'border-violet-500 bg-violet-500' : 'border-gray-300'
-                    }`}>
-                      {selectedModel === 'SAAS' && (
-                        <svg className="w-3 h-3 text-white mx-auto mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900">DriveBook SaaS</p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        You bring your own students. Use DriveBook for booking, scheduling, and business management.
-                      </p>
-                      <p className="text-xs text-amber-600 mt-1.5 font-medium">
-                        Direct payments are not yet available. You can use all non-payment features now.
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              </div>
+            <div className="mb-6 p-4 rounded-xl bg-violet-50 border border-violet-200">
+              <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-1">Registration type</p>
+              <p className="text-sm font-semibold text-gray-900">DriveBook Marketplace</p>
+              <p className="text-xs text-gray-600 mt-1">
+                Students discover and book lessons through DriveBook. Payments are managed by the platform and paid to you weekly.
+              </p>
+              {/* SaaS option — commented out until payment gateway is active
+              <button onClick={() => setSelectedModel('SAAS')} ...>
+                DriveBook SaaS — you bring your own students
+              </button>
+              */}
             </div>
           )}
 
@@ -312,69 +258,14 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* Business structure — non-driving providers only */}
+          {/* Business structure — non-driving providers only
+              Commented out: other trades path is disabled until payment gateway is active.
           {!isDriving && (
             <div className="mb-6">
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">What is your business structure?</h2>
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => setSelectedStructure('SOLE_TRADER')}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                    selectedStructure === 'SOLE_TRADER'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center ${
-                      selectedStructure === 'SOLE_TRADER' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
-                    }`}>
-                      {selectedStructure === 'SOLE_TRADER' && (
-                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900">Sole trader</p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        You operate as an individual under your own name or registered trading name.
-                      </p>
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setSelectedStructure('REGISTERED_BUSINESS')}
-                  className={`w-full text-left p-4 rounded-xl border-2 transition-all ${
-                    selectedStructure === 'REGISTERED_BUSINESS'
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center ${
-                      selectedStructure === 'REGISTERED_BUSINESS' ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
-                    }`}>
-                      {selectedStructure === 'REGISTERED_BUSINESS' && (
-                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-900">Registered company or business</p>
-                      <p className="text-xs text-gray-600 mt-1">
-                        You operate through a registered company, trust or partnership with its own ABN or ACN.
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              </div>
+              ...
             </div>
           )}
+          */}
 
           {/* What happens next */}
           <div className="mb-6 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 space-y-1.5">
@@ -461,36 +352,11 @@ export default function RegisterPage() {
                 </label>
               )}
 
-              {/* SaaS notice / acceptance — rendered for all SaaS paths */}
+              {/* SaaS terms notice — commented out until SaaS path is re-enabled
               {((isDriving && selectedModel === 'SAAS') || !isDriving) && (
-                SAAS_TERMS_PUBLISHED ? (
-                  /* SaaS Terms are published — show the acceptance checkbox */
-                  <label className="flex items-start gap-3 cursor-pointer group">
-                    <div className="mt-0.5 shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={saasTermsAccepted}
-                        onChange={e => setSaasTermsAccepted(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 bg-white accent-violet-600 cursor-pointer"
-                      />
-                    </div>
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors leading-relaxed">
-                      I agree to the{' '}
-                      <Link href={SAAS_TERMS_URL} target="_blank" rel="noopener noreferrer"
-                        className="text-violet-600 hover:text-violet-700 font-medium underline underline-offset-2">
-                        DriveBook SaaS Terms
-                      </Link>
-                    </span>
-                  </label>
-                ) : (
-                  /* SaaS Terms not yet published — inform the provider */
-                  <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                    <p className="text-xs text-amber-800">
-                      <strong>Service agreement:</strong> DriveBook SaaS Terms are being finalised. You will be notified when they are published and asked to accept them before commercial services are activated. Your account and all non-commercial features are available immediately after registration.
-                    </p>
-                  </div>
-                )
+                SAAS_TERMS_PUBLISHED ? ( ... ) : ( ... )
               )}
+              */}
 
               {/* Privacy policy — always required, all providers */}
               <label className="flex items-start gap-3 cursor-pointer group">
@@ -514,7 +380,12 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={loading || !privacyAccepted || (isDriving && !selectedModel) || (isDriving && selectedModel === 'MARKETPLACE' && !termsAccepted) || (SAAS_TERMS_PUBLISHED && (isDriving ? selectedModel === 'SAAS' : true) && !saasTermsAccepted)}
+              disabled={
+                loading ||
+                !privacyAccepted ||
+                (isDriving && selectedModel === 'MARKETPLACE' && !termsAccepted)
+                // SaaS conditions removed — SaaS path disabled until payment gateway active
+              }
               className={[
                 'w-full py-3 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2',
                 'bg-gradient-to-r from-violet-600 to-purple-600 text-white',
