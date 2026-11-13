@@ -2,10 +2,14 @@
  * Browser-level registration verification.
  *
  * Tests the actual rendered registration page via Playwright + Chromium.
- * The dev server is started automatically by playwright.config.ts webServer.
- *
- * Run:
+ * The dev server must be started manually before running tests:
+ *   set NODE_OPTIONS=--max-old-space-size=8192
+ *   node node_modules\next\dist\bin\next dev -p 3010
+ * Then run:
  *   node node_modules/@playwright/test/cli.js test --config playwright.config.ts
+ *
+ * webServer auto-start is disabled in the config because the Next.js webpack
+ * worker requires a larger heap that cannot be inherited via webServer env.
  */
 
 import { test, expect, Page } from '@playwright/test'
@@ -254,5 +258,100 @@ test.describe('Registration submission — Non-driving', () => {
     expect(capturedBody!.privacyAccepted).toBe(true)
     expect(capturedBody!.termsAccepted).toBeUndefined()
     expect(capturedBody!.saasTermsAccepted).toBeUndefined()
+  })
+})
+
+// ── BW-10: Driving School cannot be selected ────────────────────────────────
+
+test.describe('Registration page — Driving School interaction prevention', () => {
+  test('BW-10 | Clicking Driving School option does not change selected organisation type', async ({ page }) => {
+    await page.goto('/register?businessType=driving')
+    await selectSaas(page)
+
+    // Independent instructor must be the active selection (violet border)
+    const instructorCard = page.locator('.border-violet-500').filter({ hasText: /Independent instructor/i })
+    await expect(instructorCard).toBeVisible()
+
+    // Attempt to click the Driving School option
+    const schoolOption = page.locator('[aria-disabled="true"]').filter({ hasText: /Driving school/i })
+    await expect(schoolOption).toBeVisible()
+
+    // Click the school option — it should have no effect
+    await schoolOption.click({ force: true })
+
+    // Wait a moment for any state change that might have occurred
+    await page.waitForTimeout(500)
+
+    // Independent instructor must STILL be the selected option
+    await expect(instructorCard).toBeVisible()
+
+    // Driving School must NOT have the selected border style
+    const schoolSelected = page.locator('.border-violet-500').filter({ hasText: /Driving school/i })
+    await expect(schoolSelected).toHaveCount(0)
+  })
+})
+
+// ── BW-11: Published SaaS browser flow ───────────────────────────────────────
+//
+// Requires the dev server running with SaaS Terms published. Start the server with:
+//   set NODE_OPTIONS=--max-old-space-size=8192
+//   set SAAS_TERMS_PUBLISHED_OVERRIDE=true
+//   set SAAS_TERMS_VERSION_OVERRIDE=1.0
+//   node node_modules\next\dist\bin\next dev -p 3010
+//
+// This test will SKIP automatically if the published checkbox is not found.
+
+test.describe('Registration page — Published SaaS Terms', () => {
+  test('BW-11 | Published SaaS shows checkbox, requires acceptance, submits with saasTermsAccepted', async ({ page }) => {
+    test.setTimeout(60000)
+
+    await page.goto('/register?businessType=driving')
+    await selectSaas(page)
+
+    // When SaaS Terms are published, the page should show a SaaS Terms checkbox
+    // (not the "being finalised" notice). If the notice is still showing, the
+    // server is running with unpublished terms — skip this test.
+    const saasNotice = page.getByText(/SaaS Terms are being finalised/i)
+    if (await saasNotice.isVisible({ timeout: 2000 }).catch(() => false)) {
+      test.skip(true, 'SaaS Terms are not published on this server — run with SAAS_TERMS_PUBLISHED_OVERRIDE=true')
+      return
+    }
+
+    // SaaS Terms acceptance checkbox must be visible
+    const saasTermsLabel = page.getByText(/I agree to the.*DriveBook SaaS Terms/i)
+    await expect(saasTermsLabel).toBeVisible()
+
+    // Submit should be disabled (neither privacy nor SaaS terms accepted yet)
+    const submitBtn = page.getByRole('button', { name: /Create account/i })
+    await expect(submitBtn).toBeDisabled()
+
+    // Accept privacy only — still disabled (SaaS terms not accepted)
+    await page.locator('input[type="checkbox"]').last().check()
+    await expect(submitBtn).toBeDisabled()
+
+    // Accept SaaS Terms — now enabled
+    await page.locator('input[type="checkbox"]').first().check()
+    await expect(submitBtn).toBeEnabled()
+
+    // Fill form and submit
+    await fillForm(page)
+
+    let capturedBody: Record<string, unknown> | null = null
+    await page.route('**/api/register', async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>
+      capturedBody = body
+      await route.continue()
+    })
+
+    await submitBtn.click()
+    await page.waitForURL(/\/login/, { timeout: 55000 })
+
+    // Verify request payload includes saasTermsAccepted=true
+    expect(capturedBody).not.toBeNull()
+    expect(capturedBody!.businessType).toBe('driving')
+    expect(capturedBody!.businessModel).toBe('SAAS')
+    expect(capturedBody!.saasTermsAccepted).toBe(true)
+    expect(capturedBody!.privacyAccepted).toBe(true)
+    expect(capturedBody!.termsAccepted).toBeUndefined()  // Marketplace terms not sent
   })
 })
