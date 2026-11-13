@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DriveBook</string>
+    <string name="title_activity_main">DriveBook</string>
+    <string name="package_name">com.drivebook.app</string>
+    <string name="custom_url_scheme">com.drivebook.app</string>
+</resources>
