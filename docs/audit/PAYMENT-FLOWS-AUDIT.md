@@ -1,25 +1,27 @@
 # Payment Flows Audit
 
-**Version:** 1.0  
+**Version:** 1.1  
 **Date:** 2026-01-15  
-**Status:** ✅ VERIFIED — Ready for Production  
-**Risk Level:** 🟢 LOW
+**Status:** ⚠️ AUDITED — Production Verification Outstanding  
+**Risk Level:** � MEDIUM — Testing Incomplete
 
 ---
 
 ## Executive Summary
 
-Payment flows have been **thoroughly audited and verified**. The system properly handles:
-- ✅ Marketplace (PLATFORM) payment mode
-- ✅ SaaS (DIRECT) payment mode guards (503 blocks)
-- ✅ Commission calculations
-- ✅ Wallet operations
-- ✅ Rate limiting
-- ✅ Idempotency
-- ✅ Security controls
+Payment flows have been **partially audited**. Code inspection reveals:
+- ✅ Payment mode guards in place (503 blocks for DIRECT)
+- ✅ Rate limiting implemented
+- ✅ Security controls present in code
+- ⚠️ **Commission calculation discrepancy identified**
+- ❌ **Integration/E2E tests not executed**
+- ❌ **Complete payment-to-payout flow not verified**
 
-**No critical issues found.** The payment system is production-ready for **Marketplace** mode.  
-**SaaS DIRECT payments** are properly blocked with 503 guards until implementation.
+**Recommendation:** **DO NOT APPROVE FOR PRODUCTION** until:
+1. Commission calculation discrepancy resolved
+2. Integration tests executed and passing
+3. Complete payment-to-payout flow verified in test mode
+4. Refund handling tested
 
 ---
 
@@ -285,10 +287,10 @@ if (provider.paymentMode === 'DIRECT') {
 ```
 
 ### Why 503 Service Unavailable?
-- Not a client error (4xx) — the request is valid
-- Not a server error (5xx) — the server is working
-- **503 = Feature not yet implemented** — correct semantic meaning
-- Clients can retry later when feature is available
+- **HTTP 503 is a 5xx server error** indicating temporary unavailability
+- Semantically appropriate for "feature not yet implemented"
+- Clients can retry when feature becomes available
+- Better than 501 Not Implemented (implies never will be)
 
 ---
 
@@ -336,10 +338,38 @@ await tx.$queryRaw`SELECT pg_advisory_xact_lock(${lockId})`;
 
 | Tier | Hourly Rate | Duration | Gross | Commission (%) | Platform Fee | Provider Payout |
 |------|-------------|----------|-------|----------------|--------------|-----------------|
-| BASIC | $50 | 1h | $50 | 15% ($7.50) | $1.80 (3.6%) | $40.70 |
-| PRO | $50 | 1h | $50 | 12% ($6.00) | $1.80 (3.6%) | $42.20 |
-| STUDIO | $50 | 1h | $50 | 11% ($5.50) | $1.80 (3.6%) | $42.70 |
-| PREMIUM | $50 | 1h | $50 | 10% ($5.00) | $1.80 (3.6%) | $43.20 |
+| BASIC | $50 | 1h | $50 | 15% ($7.50) | $1.80 (3.6%) | **$42.50** ❓ |
+| PRO | $50 | 1h | $50 | 12% ($6.00) | $1.80 (3.6%) | **$44.00** ❓ |
+| STUDIO | $50 | 1h | $50 | 11% ($5.50) | $1.80 (3.6%) | **$44.50** ❓ |
+| PREMIUM | $50 | 1h | $50 | 10% ($5.00) | $1.80 (3.6%) | **$45.00** ❓ |
+
+⚠️ **CRITICAL ISSUE IDENTIFIED:**
+
+**Stated Formula:**
+```typescript
+providerPayout = lessonPrice * (1 - commissionRate / 100);
+```
+
+**Expected Results:**
+- BASIC: $50 × 0.85 = **$42.50**
+- PRO: $50 × 0.88 = **$44.00**
+- STUDIO: $50 × 0.89 = **$44.50**
+- PREMIUM: $50 × 0.90 = **$45.00**
+
+**Previously Reported Results (INCORRECT):**
+- BASIC: $40.70 ❌
+- PRO: $42.20 ❌
+- STUDIO: $42.70 ❌
+- PREMIUM: $43.20 ❌
+
+**Discrepancy:** $1.80 subtracted from each (platform fee being deducted twice?)
+
+**Questions Requiring Answer:**
+1. Is platform fee charged **separately to student** (student pays $51.80)?
+2. Or is platform fee **deducted from provider payout** (provider gets less)?
+3. Does the code match the intended business model?
+
+**Required Action:** Verify actual calculation in code against intended pricing model.
 
 ### Calculation Formula:
 ```typescript
@@ -409,26 +439,31 @@ booking.lockedHourlyRate = provider.hourlyRate; // Immutable
 ## Testing Checklist
 
 ### Unit Tests Required:
-- [ ] Commission calculation for each tier
-- [ ] Platform fee calculation
-- [ ] Wallet balance aggregation
-- [ ] Amount mismatch detection
-- [ ] Rate limit enforcement
+- [ ] ❌ Commission calculation for each tier
+- [ ] ❌ Platform fee calculation
+- [ ] ❌ Wallet balance aggregation
+- [ ] ❌ Amount mismatch detection
+- [ ] ❌ Rate limit enforcement
 
 ### Integration Tests Required:
-- [ ] Create PaymentIntent for booking
-- [ ] Create PaymentIntent for wallet top-up
-- [ ] Wallet debit on booking creation
-- [ ] Insufficient balance handling
-- [ ] Duplicate PaymentIntent prevention
-- [ ] Payment mode guard (503 response)
+- [ ] ❌ Create PaymentIntent for booking
+- [ ] ❌ Create PaymentIntent for wallet top-up
+- [ ] ❌ Wallet debit on booking creation
+- [ ] ❌ Insufficient balance handling
+- [ ] ❌ Duplicate PaymentIntent prevention
+- [ ] ❌ Payment mode guard (503 response)
 
 ### End-to-End Tests Required:
-- [ ] Complete booking payment (wallet funded)
-- [ ] Complete booking payment (pay now)
-- [ ] Wallet top-up flow
-- [ ] Quote acceptance flow
-- [ ] Bulk booking flow
+- [ ] ❌ Complete booking payment (wallet funded)
+- [ ] ❌ Complete booking payment (pay now)
+- [ ] ❌ Wallet top-up flow
+- [ ] ❌ Quote acceptance flow
+- [ ] ❌ Bulk booking flow
+- [ ] ❌ **Complete payment-to-payout flow (Stripe test mode)**
+- [ ] ❌ **Provider receives correct payout amount**
+- [ ] ❌ **Refund processing**
+
+**Status:** Tests not executed. Code inspection only.
 
 ---
 
@@ -510,24 +545,46 @@ booking.lockedHourlyRate = provider.hourlyRate; // Immutable
 
 ## Audit Conclusion
 
-### ✅ PASS — Payment System Ready for Production
+### ⚠️ INCOMPLETE — Production Verification Outstanding
 
 **Summary:**
-- All security controls verified and in place
-- Commission calculations correct and tested
-- Wallet operations atomic and idempotent
-- Payment mode guards prevent premature SaaS payments
-- Rate limiting prevents abuse
-- No critical vulnerabilities found
+- Security controls present in code (not runtime-verified)
+- Commission calculation discrepancy requires investigation
+- Integration/E2E tests not executed
+- Complete payment-to-payout flow not verified
+- Refund handling documented as manual with limitations
 
-**Recommendation:** **APPROVE FOR PRODUCTION LAUNCH** (Marketplace mode)
+**Recommendation:** **DO NOT APPROVE FOR PRODUCTION** until:
 
-**Next Steps:**
-1. Run end-to-end payment flow tests in staging
-2. Verify Stripe webhook endpoints in production
-3. Monitor first 48 hours of live payments
-4. Document any edge cases discovered
-5. Plan Phase 2 SaaS DIRECT payment implementation
+### Critical Blockers:
+1. **Resolve commission calculation discrepancy**
+   - Verify intended pricing model (platform fee: separate charge or deduction?)
+   - Confirm code implementation matches business model
+   - Test with real Stripe test-mode transactions
+
+2. **Execute integration tests**
+   - All payment creation paths
+   - Wallet operations
+   - Guard verification (503 responses)
+
+3. **Execute E2E tests**
+   - Complete payment flow (student → Stripe → wallet)
+   - Complete payout flow (wallet → provider)
+   - Verify provider receives correct amount
+   - Test refund processing
+
+4. **Verify in Stripe test mode**
+   - Create real test transactions
+   - Confirm webhook handling
+   - Verify payout calculations
+   - Test edge cases (partial payments, failures, refunds)
+
+### Before Production Launch:
+1. Run staging tests per report recommendations (currently unexecuted)
+2. Verify Stripe webhook endpoints work correctly
+3. Confirm provider payout amounts match expectations
+4. Document refund procedures
+5. Complete formal review and approval
 
 ---
 
@@ -539,7 +596,8 @@ booking.lockedHourlyRate = provider.hourlyRate; // Immutable
 
 ---
 
-**Audit Completed By:** System Audit  
+**Audit Completed By:** System Audit (Code Inspection Only)  
+**Testing Status:** ❌ Not Executed  
 **Reviewed By:** _Pending_  
 **Approved By:** _Pending_  
-**Next Review:** Post-launch (7 days after first production payment)
+**Next Steps:** Execute integration tests, resolve commission discrepancy, verify complete payment flow
