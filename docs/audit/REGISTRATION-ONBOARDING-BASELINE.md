@@ -364,6 +364,48 @@ Capabilities are distinguished by implementation status (implemented vs planned)
 | Provider creation path audit (all 3 paths inspected) | VERIFIED | `0055133a` | Source inspection of `app/api/register/route.ts`, `prisma/seed.ts`, `scripts/register-test-users.ts` (reported) |
 | Tracker Section 11 + corrected migration assessment | EXISTS | `0055133a`, `d2bcd12c` | Documentation |
 | Registration onboarding baseline document | EXISTS | `df857100` | This document (v1.0) |
+| Database migration Tokyo → Sydney | VERIFIED | Session 2026-01-15 | Schema pushed, all migrations applied |
+| Dashboard Decimal serialization fix | VERIFIED | `7a9ebebe` | Removed Prisma Decimal warnings in Client Components |
+| Voice line schema alignment | VERIFIED | `917f8a0a` | Moved voiceLine fields to DrivingProviderProfile |
+| OTP email delivery fix | VERIFIED | `32b0f7af` | Awaited email send to prevent serverless freeze |
+| Email verification UX improvements | VERIFIED | `eac8165e` | Code in subject, digit boxes, paste button, prod-safe URLs |
+
+### Current Cycle: Pre-Launch Readiness (Phases 3-6)
+
+#### Phase 3: Core Functionality Audit ← **CURRENT PHASE**
+
+| Item | Status | Priority | Notes |
+|---|---|---|---|
+| Dashboard loading & data display | ✅ VERIFIED | High | Fixed redirect loop, Decimal warnings resolved |
+| Booking creation/management | ⏳ PENDING | High | Next to audit |
+| Client management | ⏳ PENDING | High | |
+| Payment flows | ⏳ PENDING | Critical | Includes PLATFORM mode verification, DIRECT 503 guards |
+| Subscription management | ⏳ PENDING | High | |
+| Calendar sync | ⏳ PENDING | Medium | Google Calendar integration |
+
+#### Phase 4: API Route Audit
+
+| Item | Status | Priority | Notes |
+|---|---|---|---|
+| Check all `/api` routes for schema mismatches | ⏳ PENDING | High | Systematic review of all API endpoints |
+| Fix any remaining Prisma validation errors | ⏳ PENDING | High | |
+| Test webhooks (Stripe, Twilio) | ⏳ PENDING | Critical | Payment + voice line webhooks |
+
+#### Phase 5: Admin Panel
+
+| Item | Status | Priority | Notes |
+|---|---|---|---|
+| Verify admin routes work | ⏳ PENDING | High | RBAC permissions audit |
+| Test provider approval flow | ⏳ PENDING | Critical | Marketplace provider onboarding |
+| Check financial/payout management | ⏳ PENDING | High | Ledger, transactions, reconciliation |
+
+#### Phase 6: Final Testing
+
+| Item | Status | Priority | Notes |
+|---|---|---|---|
+| End-to-end user flows | ⏳ PENDING | Critical | Register → Book → Pay → Complete |
+| Mobile app compatibility | ⏳ PENDING | High | Capacitor app testing |
+| Production deployment checklist | ⏳ PENDING | Critical | Final pre-launch verification |
 
 ### Future work (ordered by dependency)
 
