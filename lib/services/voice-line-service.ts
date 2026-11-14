@@ -12,15 +12,11 @@
  * Plans that get a dedicated line: PRO | STUDIO | BUSINESS
  * Plans that use the general DriveBook line: BASIC | TRIAL
  *
- * NOTE: voiceLine / voiceLineStatus / voiceLineSid are legacy fields that were on
- * the old Instructor model. They don't exist on the generic Provider model schema.
- * Queries here use `(prisma as any).provider` to bypass TypeScript until these
- * fields are either added to the Provider schema or moved to an extension table.
+ * voiceLine / voiceLineStatus / voiceLineSid live on DrivingProviderProfile
+ * (driving-specific extension table), not on Provider directly.
  */
 
 import { prisma } from '@/lib/prisma'
-
-const p = prisma as any  // voice fields not on Provider schema yet — suppress TS errors
 
 export const DEDICATED_LINE_TIERS = ['PRO', 'STUDIO', 'PREMIUM']
 
@@ -28,19 +24,40 @@ export function isDedicatedLineTier(tier: string): boolean {
   return DEDICATED_LINE_TIERS.includes(tier.toUpperCase())
 }
 
+// Helper: get voiceLine fields from DrivingProviderProfile
+async function getVoiceProfile(providerId: string) {
+  return prisma.drivingProviderProfile.findUnique({
+    where: { providerId },
+    select: { voiceLine: true, voiceLineSid: true, voiceLineStatus: true },
+  })
+}
+
+// Helper: upsert voiceLine fields on DrivingProviderProfile
+async function setVoiceProfile(
+  providerId: string,
+  data: { voiceLine?: string | null; voiceLineSid?: string | null; voiceLineStatus?: string }
+) {
+  return prisma.drivingProviderProfile.upsert({
+    where: { providerId },
+    update: data,
+    create: { providerId, voiceLineStatus: 'NONE', ...data },
+  })
+}
+
 export async function assignVoiceLine(
   providerId: string,
   options: { adminUserId?: string; areaCode?: string } = {}
 ): Promise<{ phoneNumber: string; sid: string; friendlyName: string | null }> {
-  const instructor = await p.provider.findUnique({
+  const provider = await prisma.provider.findUnique({
     where: { id: providerId },
-    select: { id: true, name: true, voiceLine: true, voiceLineStatus: true },
+    select: { id: true, name: true },
   })
+  if (!provider) throw new Error(`Provider ${providerId} not found`)
 
-  if (!instructor) throw new Error(`Instructor ${providerId} not found`)
-  if (instructor.voiceLine) {
+  const profile = await getVoiceProfile(providerId)
+  if (profile?.voiceLine) {
     throw new Error(
-      `Instructor ${instructor.name} already has a voice line: ${instructor.voiceLine}. Release it first.`
+      `Provider ${provider.name} already has a voice line: ${profile.voiceLine}. Release it first.`
     )
   }
 
@@ -67,7 +84,7 @@ export async function assignVoiceLine(
 
   const now = new Date()
 
-  await prisma.$transaction([
+  await Promise.all([
     prisma.twilioPhoneNumber.update({
       where: { id: number.id },
       data: {
@@ -77,13 +94,10 @@ export async function assignVoiceLine(
         assignedBy: options.adminUserId ?? null,
       },
     }),
-    p.provider.update({
-      where: { id: providerId },
-      data: {
-        voiceLine: number.phoneNumber,
-        voiceLineSid: number.sid,
-        voiceLineStatus: 'ACTIVE',
-      },
+    setVoiceProfile(providerId, {
+      voiceLine: number.phoneNumber,
+      voiceLineSid: number.sid,
+      voiceLineStatus: 'ACTIVE',
     }),
   ])
 
@@ -94,17 +108,12 @@ export async function releaseVoiceLine(
   providerId: string,
   options: { adminUserId?: string } = {}
 ): Promise<void> {
-  const instructor = await p.provider.findUnique({
-    where: { id: providerId },
-    select: { id: true, name: true, voiceLine: true, voiceLineSid: true },
-  })
-
-  if (!instructor) throw new Error(`Instructor ${providerId} not found`)
-  if (!instructor.voiceLine) return
+  const profile = await getVoiceProfile(providerId)
+  if (!profile?.voiceLine) return
 
   const now = new Date()
 
-  await prisma.$transaction([
+  await Promise.all([
     prisma.twilioPhoneNumber.updateMany({
       where: { assignedTo: providerId },
       data: {
@@ -115,31 +124,22 @@ export async function releaseVoiceLine(
         releasedBy: options.adminUserId ?? null,
       },
     }),
-    p.provider.update({
-      where: { id: providerId },
-      data: { voiceLine: null, voiceLineSid: null, voiceLineStatus: 'NONE' },
+    setVoiceProfile(providerId, {
+      voiceLine: null,
+      voiceLineSid: null,
+      voiceLineStatus: 'NONE',
     }),
   ])
 }
 
 export async function suspendVoiceLine(providerId: string): Promise<void> {
-  await p.provider.update({
-    where: { id: providerId },
-    data: { voiceLineStatus: 'SUSPENDED' },
-  })
+  await setVoiceProfile(providerId, { voiceLineStatus: 'SUSPENDED' })
 }
 
 export async function reactivateVoiceLine(providerId: string): Promise<void> {
-  const instructor = await p.provider.findUnique({
-    where: { id: providerId },
-    select: { voiceLine: true },
-  })
-  if (!instructor?.voiceLine) throw new Error('No voice line to reactivate')
-
-  await p.provider.update({
-    where: { id: providerId },
-    data: { voiceLineStatus: 'ACTIVE' },
-  })
+  const profile = await getVoiceProfile(providerId)
+  if (!profile?.voiceLine) throw new Error('No voice line to reactivate')
+  await setVoiceProfile(providerId, { voiceLineStatus: 'ACTIVE' })
 }
 
 export async function getPoolStats() {
