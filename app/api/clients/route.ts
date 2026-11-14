@@ -35,6 +35,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: subCheck.message, requiresSubscription: true }, { status: 403 })
     }
 
+    // Approval gate — provider must be APPROVED before creating clients
+    // Pending providers can explore and complete their profile, but cannot begin normal operations
+    const provider = await prisma.provider.findUnique({
+      where: { id: session!.user!.providerId },
+      select: { approvalStatus: true, isActive: true }
+    })
+    if (
+      !provider ||
+      provider.approvalStatus !== 'APPROVED' ||
+      provider.isActive !== true
+    ) {
+      return NextResponse.json({
+        error: provider?.isActive === false
+          ? 'Your account has been deactivated. Contact support for assistance.'
+          : 'Your account is pending approval. You can create clients once an admin approves your application.',
+        requiresApproval: provider?.approvalStatus !== 'APPROVED',
+        requiresActivation: provider?.isActive === false,
+      }, { status: 403 })
+    }
+
     const body = await req.json()
     const data = clientSchema.parse(body)
 

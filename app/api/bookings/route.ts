@@ -179,10 +179,17 @@ export async function POST(req: NextRequest) {
       where: { id: providerId },
       select: { approvalStatus: true, isActive: true }
     })
-    if (!instructorApproval || instructorApproval.approvalStatus !== 'APPROVED') {
+    if (
+      !instructorApproval ||
+      instructorApproval.approvalStatus !== 'APPROVED' ||
+      instructorApproval.isActive !== true
+    ) {
       return NextResponse.json({
-        error: 'Your account is pending approval. You can create bookings once an admin approves your application.',
-        requiresApproval: true,
+        error: instructorApproval?.isActive === false
+          ? 'Your account has been deactivated. Contact support for assistance.'
+          : 'Your account is pending approval. You can create bookings once an admin approves your application.',
+        requiresApproval: instructorApproval?.approvalStatus !== 'APPROVED',
+        requiresActivation: instructorApproval?.isActive === false,
       }, { status: 403 })
     }
 

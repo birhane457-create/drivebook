@@ -41,11 +41,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: subCheck.message, requiresSubscription: true }, { status: 403 });
     }
 
-    // Approval gate — must be APPROVED to create bookings
-    if (instructor.approvalStatus !== 'APPROVED') {
+    // Approval and active status gate — must be APPROVED and ACTIVE to create bookings
+    if (
+      instructor.approvalStatus !== 'APPROVED' ||
+      instructor.isActive !== true
+    ) {
       return NextResponse.json({
-        error: 'Your account is pending approval. You can create bookings once an admin approves your application.',
-        requiresApproval: true,
+        error: instructor.isActive === false
+          ? 'Your account has been deactivated. Contact support for assistance.'
+          : 'Your account is pending approval. You can create bookings once an admin approves your application.',
+        requiresApproval: instructor.approvalStatus !== 'APPROVED',
+        requiresActivation: instructor.isActive === false,
       }, { status: 403 });
     }
 
