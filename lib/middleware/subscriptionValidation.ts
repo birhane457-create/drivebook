@@ -34,6 +34,8 @@ export async function checkSubscriptionAccess(userId: string): Promise<Subscript
       select: {
         subscriptionStatus: true,
         trialEndsAt: true,
+        businessModel: true,     // Added for SaaS bypass
+        paymentMode: true,       // Added for SaaS bypass
       },
     });
 
@@ -42,9 +44,15 @@ export async function checkSubscriptionAccess(userId: string): Promise<Subscript
       return { valid: true, readOnly: false };
     }
 
-    const { subscriptionStatus, trialEndsAt } = instructor;
+    const { subscriptionStatus, trialEndsAt, businessModel, paymentMode } = instructor;
 
-    // Active trial — check expiry
+    // TEMPORARY FIX: SaaS providers bypass subscription checks
+    // Full FREE/PREMIUM tier system to be implemented per SUBSCRIPTION-MANAGEMENT-AUDIT.md
+    if (businessModel === 'SAAS' || paymentMode === 'DIRECT') {
+      return { valid: true, readOnly: false };
+    }
+
+    // Active trial — check expiry (MARKETPLACE only)
     if (subscriptionStatus === 'TRIAL') {
       const trialExpired = trialEndsAt && new Date(trialEndsAt) < new Date();
       if (!trialExpired) {
