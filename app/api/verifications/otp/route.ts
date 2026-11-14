@@ -147,18 +147,10 @@ export async function POST(req: NextRequest) {
     }
     // No user found — OTP not stored, confirm will fail gracefully (prevents enumeration)
 
-    // Respond immediately — email/SMS sent in background so we don't block for ~8s
-    // This eliminates the DoS vector: each request now completes in <300ms
-    const responsePayload = NextResponse.json({
-      success: true,
-      verificationId,
-      expiresAt: otpExpiry.toISOString(),
-      message: `Verification code sent to ${data.phone || data.email}`,
-    });
-
-    // Fire-and-forget delivery — errors logged but never bubble up to caller
+    // Send email/SMS — must await to ensure delivery completes before serverless freeze
+    // Vercel freezes execution immediately after response is sent; fire-and-forget fails
     if (data.email && user) {
-      emailService.sendGenericEmail({
+      await emailService.sendGenericEmail({
         from: 'DriveBook Account Verification <verification@drivebook.com.au>',
         to: data.email,
         subject: `${otp} is your DriveBook verification code`,
@@ -184,7 +176,7 @@ export async function POST(req: NextRequest) {
         `,
       }).catch((err: any) => console.error('[OTP] Email delivery failed:', err));
     } else if (data.phone) {
-      import('@/lib/services/sms').then(({ smsService }) =>
+      await import('@/lib/services/sms').then(({ smsService }) =>
         smsService.sendSMS({
           to: data.phone!,
           message: `DriveBook verification code: ${otp}. Expires in 5 minutes.`,
@@ -192,7 +184,12 @@ export async function POST(req: NextRequest) {
       ).catch((err: any) => console.error('[OTP] SMS delivery failed:', err));
     }
 
-    return responsePayload;
+    return NextResponse.json({
+      success: true,
+      verificationId,
+      expiresAt: otpExpiry.toISOString(),
+      message: `Verification code sent to ${data.phone || data.email}`,
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.errors }, { status: 400 });
