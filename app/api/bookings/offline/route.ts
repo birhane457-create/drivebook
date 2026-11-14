@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     // PRO+ gate
     const instructor = await prisma.provider.findUnique({
       where: { id: session!.user!.providerId },
-      select: { subscriptionTier: true, hourlyRate: true, approvalStatus: true, timezone: true, state: true },
+      select: { subscriptionTier: true, hourlyRate: true, approvalStatus: true, isActive: true, timezone: true, state: true },
     });
     if (!instructor) return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
 

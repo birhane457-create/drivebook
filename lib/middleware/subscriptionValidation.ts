@@ -40,8 +40,15 @@ export async function checkSubscriptionAccess(userId: string): Promise<Subscript
     });
 
     if (!instructor) {
-      // No instructor record — fail open, let page-level auth handle it
-      return { valid: true, readOnly: false };
+      // CRITICAL FIX: Fail closed for missing Provider record
+      // Deny write operations when Provider record cannot be found
+      // This prevents unrestricted access if the database relationship is broken
+      return { 
+        valid: true, 
+        readOnly: true,
+        reason: 'Provider record not found. Read-only access granted for data retrieval.',
+        status: 'PROVIDER_MISSING'
+      };
     }
 
     const { subscriptionStatus, trialEndsAt, businessModel, paymentMode } = instructor;
