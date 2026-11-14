@@ -45,7 +45,10 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    const verifyUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${token}`
+    const baseUrl = process.env.NEXTAUTH_URL?.startsWith('http')
+      ? process.env.NEXTAUTH_URL.replace(/\/$/, '')
+      : `https://${process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'drivebook.com.au'}`
+    const verifyUrl = `${baseUrl}/api/auth/verify-email?token=${token}`
 
     await emailService.sendGenericEmail({
       from: 'DriveBook Account Verification <verification@drivebook.com.au>',
@@ -64,8 +67,9 @@ export async function POST(req: NextRequest) {
         <p style="color:#6b7280;font-size:13px;">
           This link expires in 24 hours. If you didn't create a DriveBook account, ignore this email.
         </p>
-        <p style="color:#9ca3af;font-size:12px;">
-          Or copy this link: ${verifyUrl}
+        <p style="color:#9ca3af;font-size:12px;margin-top:12px;">
+          Button not working? Copy and paste this link into your browser:<br/>
+          <span style="display:inline-block;margin-top:6px;padding:8px 12px;background:#f3f4f6;border-radius:4px;font-family:monospace;font-size:11px;color:#374151;word-break:break-all;">${verifyUrl}</span>
         </p>
       `,
     })

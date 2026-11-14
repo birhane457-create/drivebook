@@ -161,17 +161,22 @@ export async function POST(req: NextRequest) {
       emailService.sendGenericEmail({
         from: 'DriveBook Account Verification <verification@drivebook.com.au>',
         to: data.email,
-        subject: 'Your DriveBook verification code',
+        subject: `${otp} is your DriveBook verification code`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;padding:24px">
             <h2 style="margin:0 0 8px;font-size:18px;color:#0f172a">Your verification code</h2>
             <p style="margin:0 0 20px;color:#475569;font-size:14px">
               Enter this code on the DriveBook login screen. It expires in 5 minutes.
             </p>
-            <div style="background:#f1f5f9;border-radius:10px;padding:20px;text-align:center;margin-bottom:20px">
-              <span style="font-size:36px;font-weight:bold;letter-spacing:12px;color:#0f172a">${otp}</span>
+            <div style="background:#f1f5f9;border-radius:10px;padding:24px;text-align:center;margin-bottom:20px">
+              ${otp.split('').map(d =>
+                `<span style="display:inline-block;width:40px;height:48px;line-height:48px;background:#fff;border:2px solid #e2e8f0;border-radius:8px;font-size:28px;font-weight:bold;color:#0f172a;text-align:center;margin:0 3px">${d}</span>`
+              ).join('')}
             </div>
-            <p style="margin:0;color:#94a3b8;font-size:12px">
+            <p style="margin:0 0 8px;color:#64748b;font-size:13px;text-align:center">
+              Or copy the full code: <strong style="color:#0f172a;letter-spacing:4px">${otp}</strong>
+            </p>
+            <p style="margin:16px 0 0;color:#94a3b8;font-size:12px">
               If you didn't request this code, someone may be attempting to access your account.
               You can safely ignore this email — your account remains secure.
             </p>
