@@ -43,6 +43,90 @@ const SERIALIZABLE_TX = {
 
 export const dynamic = 'force-dynamic'
 
+// GET /api/bookings — list provider's bookings with pagination
+export async function GET(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.providerId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const providerId = session.user.providerId
+
+    const { searchParams } = new URL(req.url)
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
+    const status = searchParams.get('status')
+    const cursor = searchParams.get('cursor') // Booking ID for cursor-based pagination
+    
+    // Page size: allow 20, 30, 50, 100 — default 30, cap at 100
+    const requestedLimit = parseInt(searchParams.get('limit') || '30', 10)
+    const allowedLimits = [20, 30, 50, 100]
+    const limit = allowedLimits.includes(requestedLimit) 
+      ? requestedLimit 
+      : allowedLimits.reduce((prev, curr) => 
+          Math.abs(curr - requestedLimit) < Math.abs(prev - requestedLimit) ? curr : prev
+        )
+
+    const where: Prisma.BookingWhereInput = {
+      providerId,
+      ...(from && { startTime: { gte: new Date(from) } }),
+      ...(to && { endTime: { lte: new Date(to) } }),
+      ...(status && { status }),
+    }
+
+    // Cursor-based pagination for efficient large datasets
+    const bookings = await prisma.booking.findMany({
+      where,
+      take: limit + 1, // Fetch one extra to check if there's a next page
+      ...(cursor && { 
+        cursor: { id: cursor },
+        skip: 1, // Skip the cursor itself
+      }),
+      orderBy: { startTime: 'desc' },
+      include: {
+        customer: {
+          select: {
+            name: true,
+            phone: true,
+            email: true,
+          },
+        },
+      },
+    })
+
+    // Check if there are more results
+    const hasMore = bookings.length > limit
+    const results = hasMore ? bookings.slice(0, limit) : bookings
+    const nextCursor = hasMore ? results[results.length - 1].id : null
+
+    // Serialize Decimal fields to numbers for JSON
+    const serialized = results.map((b) => ({
+      ...b,
+      price: toNumber(b.price),
+      platformFee: toNumber(b.platformFee),
+      providerPayout: toNumber(b.providerPayout),
+      commissionRate: toNumber(b.commissionRate),
+      lockedHourlyRate: toNumber(b.lockedHourlyRate),
+      offlineAmountPaid: b.offlineAmountPaid ? toNumber(b.offlineAmountPaid) : null,
+    }))
+
+    return NextResponse.json({
+      bookings: serialized,
+      pagination: {
+        limit,
+        hasMore,
+        nextCursor,
+      },
+    })
+  } catch (error) {
+    logger.error('Failed to fetch bookings', { error })
+    return NextResponse.json(
+      { error: 'Failed to fetch bookings' },
+      { status: 500 }
+    )
+  }
+}
+
 const bookingSchema = z.object({
   customerId: z.string(),
   startTime: z.string().datetime(),
