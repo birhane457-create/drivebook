@@ -1,0 +1,10 @@
+# Vercel Environment Variables Verification
+Last checked: 2026-01-15
+
+Required env vars for production:
+- DATABASE_URL (PostgreSQL connection string with pgbouncer)
+- DIRECT_URL (PostgreSQL direct connection for migrations)
+- NEXTAUTH_URL (https://drivebook.com.au)
+- NEXTAUTH_SECRET
+
+This file triggers a redeploy to apply updated environment variables.
