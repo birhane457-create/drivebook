@@ -48,8 +48,17 @@ export async function checkSubscriptionAccess(userId: string): Promise<Subscript
 
     // TEMPORARY FIX: SaaS providers bypass subscription checks
     // Full FREE/PREMIUM tier system to be implemented per SUBSCRIPTION-MANAGEMENT-AUDIT.md
-    if (businessModel === 'SAAS' || paymentMode === 'DIRECT') {
+    // CRITICAL: Must validate consistent businessModel + paymentMode combination
+    if (businessModel === 'SAAS' && paymentMode === 'DIRECT') {
+      // Validated SaaS provider with direct payments
       return { valid: true, readOnly: false };
+    }
+    
+    // Guard against inconsistent state (e.g., MARKETPLACE with DIRECT payment)
+    if (businessModel === 'MARKETPLACE' && paymentMode === 'DIRECT') {
+      console.error('[SUBSCRIPTION] Inconsistent state: MARKETPLACE provider with DIRECT payment', { userId });
+      // Fail safe: require valid subscription for inconsistent state
+      // Fall through to normal subscription checks
     }
 
     // Active trial — check expiry (MARKETPLACE only)
@@ -86,9 +95,15 @@ export async function checkSubscriptionAccess(userId: string): Promise<Subscript
       status: subscriptionStatus,
     };
   } catch (error) {
-    console.error('Subscription check error:', error);
-    // Fail open — never block on a DB error
-    return { valid: true, readOnly: false };
+    console.error('[SUBSCRIPTION] Database error during subscription check:', error);
+    // CRITICAL FIX: Fail closed on DB error - grant read-only access, not full access
+    // This prevents unrestricted write access when database is unreachable
+    return {
+      valid: true,
+      readOnly: true,
+      reason: 'Unable to verify subscription status. Please try again in a moment.',
+      status: 'DB_ERROR',
+    };
   }
 }
 
