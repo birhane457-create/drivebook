@@ -16,10 +16,11 @@ export async function GET(req: NextRequest) {
 
   const [stats, numbers] = await Promise.all([
     getPoolStats(),
-    (prisma as any).twilioPhoneNumber.findMany({
+    prisma.twilioPhoneNumber.findMany({
       orderBy: { createdAt: 'asc' },
-      include: { provider: {
-          select: { id: true, name: true, subscriptionTier: true, voiceLineStatus: true },
+      include: {
+        provider: {
+          select: { id: true, name: true, subscriptionTier: true },
         },
       },
     }),
