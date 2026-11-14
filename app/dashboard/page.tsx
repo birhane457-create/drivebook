@@ -258,15 +258,6 @@ export default async function DashboardPage() {
 
   // Terminology
   const businessId = `biz_${resolvedProviderId}`
-  const terminology = await prisma.businessTerminology.findUnique({
-    where: { businessId },
-    select: { booking: true, bookings: true, customer: true, customers: true, service: true },
-  }).catch(() => null)
-
-  const termBooking   = terminology?.booking   ?? (isDriving ? 'Lesson'   : 'Booking')
-  const termBookings  = terminology?.bookings  ?? (isDriving ? 'Lessons'  : 'Bookings')
-  const termCustomer  = terminology?.customer  ?? (isDriving ? 'Student'  : 'Client')
-  const termCustomers = terminology?.customers ?? (isDriving ? 'Students' : 'Clients')
 
   // Timezone
   const {
@@ -302,18 +293,10 @@ export default async function DashboardPage() {
   const daysElapsedThisMonth = now.getDate()
   const daysInLastMonth = endOfLastMonth.getDate()
 
-  // Correct upcoming bookings using tz-aware today boundary
-  const upcomingBookings = await prisma.booking.findMany({
-    where: { providerId: resolvedProviderId, status: 'CONFIRMED', startTime: { gt: endOfToday } },
-    take: 5,
-    orderBy: { startTime: 'asc' },
-    include: { customer: true },
-  }).catch(() => [])
-
-  ;(instructor as any).bookings = upcomingBookings
-
-  // Supplementary queries — all guarded individually
+  // All supplementary queries in one parallel batch — terminology + upcoming + stats
   const [
+    terminology,
+    upcomingBookings,
     totalRevenue,
     lastMonthRevenue,
     clientsWithPackages,
@@ -321,6 +304,18 @@ export default async function DashboardPage() {
     totalClientCount,
     todayBookings,
   ] = await Promise.all([
+    prisma.businessTerminology.findUnique({
+      where: { businessId },
+      select: { booking: true, bookings: true, customer: true, customers: true, service: true },
+    }).catch(() => null),
+
+    prisma.booking.findMany({
+      where: { providerId: resolvedProviderId, status: 'CONFIRMED', startTime: { gt: endOfToday } },
+      take: 5,
+      orderBy: { startTime: 'asc' },
+      include: { customer: true },
+    }).catch(() => []),
+
     prisma.booking.aggregate({
       where: { providerId: resolvedProviderId, status: 'COMPLETED', startTime: { gte: startOfMonth, lte: endOfMonth } },
       _sum: { price: true },
@@ -389,6 +384,15 @@ export default async function DashboardPage() {
       orderBy: { startTime: 'asc' },
     }).catch(() => []),
   ])
+
+  // Terminology derived from query result
+  const termBooking   = terminology?.booking   ?? (isDriving ? 'Lesson'   : 'Booking')
+  const termBookings  = terminology?.bookings  ?? (isDriving ? 'Lessons'  : 'Bookings')
+  const termCustomer  = terminology?.customer  ?? (isDriving ? 'Student'  : 'Client')
+  const termCustomers = terminology?.customers ?? (isDriving ? 'Students' : 'Clients')
+
+  // Update instructor bookings with tz-corrected upcoming list
+  ;(instructor as any).bookings = upcomingBookings
 
   const todayWorkspaceBookings = todayBookings.map((b: any) => ({
     id:            b.id,
@@ -748,7 +752,7 @@ export default async function DashboardPage() {
                           {pkg.customer?.name ?? termCustomer}
                         </p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          📦 {pkg.packageHoursRemaining}h unused · ${packageValue.toFixed(0)}
+                          📦 {Number(pkg.packageHoursRemaining)}h unused · ${packageValue.toFixed(0)}
                           {isInactive && <span className="ml-1.5 text-destructive">· Inactive {daysSinceUpdate}d</span>}
                         </p>
                       </Link>
