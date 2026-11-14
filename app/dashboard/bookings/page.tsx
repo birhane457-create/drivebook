@@ -107,11 +107,10 @@ export default function BookingsPage() {
 
   const fetchBookings = async () => {
     try {
-      // Fetch with a generous window — client-side filter handles the rest.
-      // Past 90 days + future 60 days covers all realistic use without unbounded queries.
+      // Fetch with pagination — default 30 results
       const from = new Date(Date.now() - 90 * 86400000).toISOString()
       const to   = new Date(Date.now() + 60 * 86400000).toISOString()
-      const res = await fetch(`/api/bookings?from=${from}&to=${to}&limit=400`)
+      const res = await fetch(`/api/bookings?from=${from}&to=${to}&limit=30`)
       if (res.status === 401) {
         showToast('error', 'Your session has expired. Please refresh the page.')
         setLoading(false)
@@ -123,7 +122,9 @@ export default function BookingsPage() {
         return
       }
       const data = await res.json()
-      setBookings(data)
+      // Handle both old format (array) and new format (object with bookings + pagination)
+      const bookingsList = Array.isArray(data) ? data : data.bookings || []
+      setBookings(bookingsList)
     } catch (error) {
       console.error('Failed to fetch bookings:', error)
       showToast('error', 'Failed to load bookings. Please try again.')
