@@ -158,6 +158,7 @@ export async function GET(req: NextRequest) {
     //   b) they were manually added by this provider (preferredProviderId set at creation,
     //      before any bookings exist)
     const providerFilter = {
+      deletedAt: null, // Exclude soft-deleted clients by default
       OR: [
         { preferredProviderId: session!.user!.providerId },
         { bookings: { some: { providerId: session!.user!.providerId } } },

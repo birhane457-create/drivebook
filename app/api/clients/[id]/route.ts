@@ -110,24 +110,91 @@ export async function DELETE(
     // Verify client belongs to instructor
     const existingClient = await prisma.customer.findUnique({
       where: { id: params.id },
-      select: { preferredProviderId: true, notes: true }
+      select: { 
+        preferredProviderId: true, 
+        userId: true,
+        email: true,
+        bookings: {
+          select: { id: true },
+          take: 1,
+        },
+      }
     })
 
     if (!existingClient || existingClient.preferredProviderId !== session!.user!.providerId) {
       return NextResponse.json({ error: 'Client not found' }, { status: 404 })
     }
 
-    // FIXED: Soft delete instead of hard delete (GDPR - keep audit trail)
-    // Mark as deleted but don't actually delete
-    await prisma.customer.update({
-      where: { id: params.id },
-      data: {
-        // Add deletedAt field to schema if needed
-        notes: `[DELETED] ${existingClient.notes || ''}`
-      }
+    // IMPORTANT: Never hard delete customers with user accounts or bookings
+    // Soft delete preserves referential integrity for:
+    // - Financial records (bookings, transactions, wallet)
+    // - Audit trails (who did what when)
+    // - User account data (if they log in, their data is intact)
+    const hasBookings = existingClient.bookings.length > 0
+    const hasUserAccount = !!existingClient.userId
+
+    if (hasUserAccount) {
+      // User has an account — they own their data
+      // Provider can only hide them from their client list
+      await prisma.customer.update({
+        where: { id: params.id },
+        data: {
+          deletedAt: new Date(),
+          deletedBy: session!.user!.providerId,
+          status: 'DELETED', // Hide from provider's client list
+        }
+      })
+
+      await logDataAccess(
+        prisma,
+        session!.user!.providerId,
+        'provider',
+        'CLIENT',
+        [params.id],
+        'DELETE',
+        req.headers.get('x-forwarded-for')
+      )
+
+      return NextResponse.json({ 
+        success: true,
+        message: 'Client hidden from your list. Their account and data remain intact.',
+        softDelete: true,
+      })
+    }
+
+    if (hasBookings) {
+      // No user account but has bookings — soft delete to preserve financial records
+      await prisma.customer.update({
+        where: { id: params.id },
+        data: {
+          deletedAt: new Date(),
+          deletedBy: session!.user!.providerId,
+          status: 'DELETED',
+        }
+      })
+
+      await logDataAccess(
+        prisma,
+        session!.user!.providerId,
+        'provider',
+        'CLIENT',
+        [params.id],
+        'DELETE',
+        req.headers.get('x-forwarded-for')
+      )
+
+      return NextResponse.json({ 
+        success: true,
+        message: 'Client deleted. Booking history preserved for records.',
+        softDelete: true,
+      })
+    }
+
+    // No user account, no bookings — safe to hard delete
+    await prisma.customer.delete({
+      where: { id: params.id }
     })
 
-    // FIXED: Log deletion for GDPR compliance
     await logDataAccess(
       prisma,
       session!.user!.providerId,
@@ -138,7 +205,11 @@ export async function DELETE(
       req.headers.get('x-forwarded-for')
     )
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ 
+      success: true,
+      message: 'Client permanently deleted.',
+      softDelete: false,
+    })
   } catch (error) {
     console.error('Delete client error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

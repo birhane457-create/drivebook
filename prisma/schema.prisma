@@ -50,13 +50,23 @@ model Customer {
   defaultPickupLat     Float?
   defaultPickupLng     Float?
   notes                String?
+  // Status: ACTIVE (default), SUSPENDED (provider blocked them), DELETED (soft delete)
+  // MARKETPLACE: always ACTIVE (no suspension needed)
+  // SAAS: can be ACTIVE or SUSPENDED (provider controls access)
   status               String           @default("ACTIVE")
+  // Soft delete timestamp — never hard delete customers with bookings/transactions
+  // Preserves referential integrity for financial records and audit trails
+  deletedAt            DateTime?
+  deletedBy            String?          // Provider ID who deleted the client
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
   bookings             Booking[]
   user                 User?            @relation(fields: [userId], references: [id])
   pdaTestBookings      PDATestBooking[]
   quotes               Quote[]
+  
+  @@index([preferredProviderId, deletedAt])
+  @@index([email, deletedAt])
 }
 
 /// Generic service provider â€” works for any business type.
