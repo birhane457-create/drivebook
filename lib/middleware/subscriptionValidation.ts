@@ -6,7 +6,9 @@
  * - TRIAL expired / CANCELLED / EXPIRED / PAST_DUE → READ-ONLY access
  *   Instructors can view all their historical data but cannot create or modify anything.
  *   This is required by Australian Privacy Act principles — data must remain accessible.
- * - No instructor record → fail open (let other middleware handle)
+ * - No instructor record → FAIL CLOSED (read-only access)
+ *   Preserves ability to view historical data if Provider record is missing,
+ *   but denies write operations to prevent unrestricted access if database relationship is broken.
  *
  * "Read-only" means:
  *   ✅ GET all dashboard pages (bookings, clients, earnings, analytics, documents)
