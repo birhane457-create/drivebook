@@ -248,7 +248,10 @@ export async function POST(req: NextRequest) {
     // Send welcome email
     try {
       if (provider) {
-        const verifyUrl = `${process.env.NEXTAUTH_URL}/api/auth/verify-email?token=${verificationToken}`
+        const baseUrl = process.env.NEXTAUTH_URL?.startsWith('http')
+          ? process.env.NEXTAUTH_URL.replace(/\/$/, '')
+          : `https://${process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'drivebook.com.au'}`
+        const verifyUrl = `${baseUrl}/api/auth/verify-email?token=${verificationToken}`
         const businessTypeName = data.businessType === 'driving' ? 'driving instructor' 
           : data.businessType === 'plumber' ? 'plumber'
           : data.businessType === 'electrician' ? 'electrician'
@@ -290,6 +293,10 @@ export async function POST(req: NextRequest) {
                     <a href="${verifyUrl}" class="button">Verify Email →</a>
                   </div>
                   <p style="margin: 10px 0 0 0; font-size: 13px; color: #6b7280;">This link expires in 24 hours.</p>
+                  <p style="margin: 12px 0 0 0; font-size: 12px; color: #9ca3af;">
+                    Button not working? Copy and paste this link into your browser:<br/>
+                    <span style="display: inline-block; margin-top: 6px; padding: 8px 12px; background: #f3f4f6; border-radius: 4px; font-family: monospace; font-size: 11px; color: #374151; word-break: break-all;">${verifyUrl}</span>
+                  </p>
                 </div>
                 
                 <div class="info-box">
@@ -312,7 +319,7 @@ export async function POST(req: NextRequest) {
                 </ul>
                 
                 <div style="text-align: center;">
-                  <a href="${process.env.NEXTAUTH_URL}/setup" class="button">Complete Your Profile</a>
+                  <a href="${baseUrl}/setup" class="button">Complete Your Profile</a>
                 </div>
                 
                 <p>We'll notify you as soon as your account is approved!</p>

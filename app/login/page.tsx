@@ -50,6 +50,7 @@ function OtpModal({ email, verificationId, redirectTo }: OtpModalProps) {
   const [resending, setResending] = useState(false)
   const [resendMsg, setResendMsg] = useState('')
   const [currentVId, setCurrentVId] = useState(verificationId)
+  const [copied, setCopied]       = useState(false)
 
   const maskedEmail = email.replace(/^(.{1,2})(.*)(@.*)$/, (_, a, b, c) =>
     a + b.replace(/./g, '*') + c
@@ -124,6 +125,20 @@ function OtpModal({ email, verificationId, redirectTo }: OtpModalProps) {
             placeholder="000000"
             className="w-full text-center text-2xl font-bold tracking-[0.5em] px-4 py-3 rounded-xl bg-secondary border-2 border-border text-foreground placeholder-white/20 focus:outline-none focus:border-sky-500 transition-colors"
           />
+          {/* Paste from clipboard — helpful on mobile after copying from email */}
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const text = await navigator.clipboard.readText()
+                const digits = text.replace(/\D/g, '').slice(0, 6)
+                if (digits.length === 6) { setCode(digits); setCopied(true); setTimeout(() => setCopied(false), 2000) }
+              } catch { /* clipboard access denied — user can type manually */ }
+            }}
+            className="w-full py-2 rounded-xl text-xs text-foreground/50 hover:text-foreground/80 border border-dashed border-border hover:border-sky-500/40 transition-colors flex items-center justify-center gap-1.5"
+          >
+            {copied ? '✓ Code pasted' : '📋 Paste code from clipboard'}
+          </button>
           <button type="submit" disabled={loading || code.length !== 6}
             className="w-full py-3 rounded-xl font-semibold text-foreground bg-primary hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2">
             {loading
