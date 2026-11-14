@@ -394,6 +394,11 @@ export default async function DashboardPage() {
   // Update instructor bookings with tz-corrected upcoming list
   ;(instructor as any).bookings = upcomingBookings
 
+  // Serialize all Prisma objects before passing to Client Components.
+  // JSON round-trip converts Decimal → number, Date → ISO string.
+  const serializedInstructor = JSON.parse(JSON.stringify(instructorWithExtensions ?? instructor)) as any
+  const serializedPackages   = JSON.parse(JSON.stringify(clientsWithPackages)) as any[]
+
   const todayWorkspaceBookings = todayBookings.map((b: any) => ({
     id:            b.id,
     startTime:     b.startTime,
@@ -533,9 +538,9 @@ export default async function DashboardPage() {
 
       {/* ── Profile completeness ─────────────────────────────────────────── */}
       <ProfileCompletenessCard instructor={{
-        ...instructorWithExtensions,
-        withholdingTaxRate: instructorWithExtensions.withholdingTaxRate != null
-          ? Number(instructorWithExtensions.withholdingTaxRate)
+        ...serializedInstructor,
+        withholdingTaxRate: serializedInstructor.withholdingTaxRate != null
+          ? Number(serializedInstructor.withholdingTaxRate)
           : null,
         businessType,
       }} />
@@ -627,7 +632,7 @@ export default async function DashboardPage() {
         />
         <StatCard
           title="Upcoming"
-          value={instructor.bookings.length}
+          value={serializedInstructor.bookings.length}
           icon={Calendar}
           sub={`${termBookings.toLowerCase()} after today`}
           href="/dashboard/bookings"
@@ -653,9 +658,9 @@ export default async function DashboardPage() {
               <div>
                 <h2 className="text-sm font-semibold text-foreground">
                   Upcoming {termBookings}
-                  {instructor.bookings.length > 0 && (
+                  {serializedInstructor.bookings.length > 0 && (
                     <span className="ml-2 text-xs font-normal text-muted-foreground">
-                      ({instructor.bookings.length})
+                      ({serializedInstructor.bookings.length})
                     </span>
                   )}
                 </h2>
@@ -666,7 +671,7 @@ export default async function DashboardPage() {
               </Link>
             </div>
 
-            {instructor.bookings.length === 0 ? (
+            {serializedInstructor.bookings.length === 0 ? (
               <div className="px-5 py-10 text-center">
                 <Clock className="h-10 w-10 mx-auto mb-2 text-muted-foreground/20" />
                 <p className="text-sm text-muted-foreground">No upcoming {termBookings.toLowerCase()}</p>
@@ -676,7 +681,7 @@ export default async function DashboardPage() {
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {instructor.bookings.map((booking: any, index: number) => (
+                {serializedInstructor.bookings.map((booking: any, index: number) => (
                   <Link
                     key={booking.id}
                     href={`/dashboard/bookings/${booking.id}`}
@@ -732,12 +737,12 @@ export default async function DashboardPage() {
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {(clientsWithPackages as any[]).map((pkg: any) => {
+                {(serializedPackages as any[]).map((pkg: any) => {
                   const daysSinceUpdate = Math.floor(
                     (now.getTime() - new Date(pkg.updatedAt).getTime()) / (1000 * 60 * 60 * 24),
                   )
                   const isInactive   = daysSinceUpdate > 14
-                  const packageValue = (pkg.packageHoursRemaining || 0) * instructor.hourlyRate
+                  const packageValue = (pkg.packageHoursRemaining || 0) * Number(instructor.hourlyRate || 0)
                   return (
                     <div
                       key={pkg.id}
