@@ -55,7 +55,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const from = searchParams.get('from')
     const to = searchParams.get('to')
-    const status = searchParams.get('status')
+    const statusParam = searchParams.get('status')
+    const sourceFilter = searchParams.get('source') // 'platform' | 'offline' | null (all)
     const cursor = searchParams.get('cursor') // Booking ID for cursor-based pagination
     
     // Page size: allow 20, 30, 50, 100 — default 30, cap at 100
@@ -67,11 +68,20 @@ export async function GET(req: NextRequest) {
           Math.abs(curr - requestedLimit) < Math.abs(prev - requestedLimit) ? curr : prev
         )
 
+    // Status filter — validated against allowlist
+    const VALID_STATUSES = ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NO_SHOW', 'EXPIRED'] as const
+    const defaultStatuses: string[] = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']
+    const statuses = statusParam
+      ? statusParam.split(',').map(s => s.trim()).filter((s): s is string => VALID_STATUSES.includes(s as any))
+      : defaultStatuses
+
     const where: Prisma.BookingWhereInput = {
       providerId,
+      status: { in: statuses },
+      deletedAt: null, // Exclude soft-deleted bookings
       ...(from && { startTime: { gte: new Date(from) } }),
       ...(to && { endTime: { lte: new Date(to) } }),
-      ...(status && { status }),
+      ...(sourceFilter && { source: sourceFilter }),
     }
 
     // Cursor-based pagination for efficient large datasets
@@ -99,7 +109,7 @@ export async function GET(req: NextRequest) {
     const results = hasMore ? bookings.slice(0, limit) : bookings
     const nextCursor = hasMore ? results[results.length - 1].id : null
 
-    // Serialize Decimal fields to numbers for JSON
+    // Serialize Decimal fields to numbers for JSON + normalize customer data
     const serialized = results.map((b) => ({
       ...b,
       price: toNumber(b.price),
@@ -108,6 +118,9 @@ export async function GET(req: NextRequest) {
       commissionRate: toNumber(b.commissionRate),
       lockedHourlyRate: toNumber(b.lockedHourlyRate),
       offlineAmountPaid: b.offlineAmountPaid ? toNumber(b.offlineAmountPaid) : null,
+      // Normalize: merge customerPhone from booking or client relation
+      customerName: b.customerName ?? b.customer?.name ?? null,
+      customerPhone: b.customerPhone ?? b.customer?.phone ?? null,
     }))
 
     return NextResponse.json({
@@ -910,76 +923,6 @@ export async function POST(req: NextRequest) {
     logger.error('Create booking error', {
       error: error instanceof Error ? error.message : String(error),
       providerId: session?.user?.providerId,
-    })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-export async function GET(req: NextRequest) {
-  try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.providerId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { searchParams } = new URL(req.url)
-    const sourceFilter = searchParams.get('source') // 'platform' | 'offline' | null (all)
-    const fromParam    = searchParams.get('from')   // ISO date string
-    const toParam      = searchParams.get('to')     // ISO date string
-    const statusParam  = searchParams.get('status') // comma-separated status values
-    const limitParam   = searchParams.get('limit')  // integer
-    // Hard cap at 500; default to 200 — guard against negative/NaN
-    const rawLimit = parseInt(limitParam ?? '200', 10)
-    const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(500, rawLimit)) : 200
-
-    // Status filter — validated against allowlist
-    const VALID_STATUSES = ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED', 'COMPLETED', 'CANCELLED', 'NO_SHOW', 'EXPIRED'] as const
-    const defaultStatuses: string[] = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED']
-    const statuses = statusParam
-      ? statusParam.split(',').map(s => s.trim()).filter((s): s is string => VALID_STATUSES.includes(s as any))
-      : defaultStatuses
-
-    const bookings = await prisma.booking.findMany({
-      where: {
-        providerId: session!.user!.providerId,
-        status: { in: statuses },
-        deletedAt: null,
-        ...(fromParam || toParam ? {
-          startTime: {
-            ...(fromParam ? { gte: new Date(fromParam) } : {}),
-            ...(toParam   ? { lte: new Date(toParam) }  : {}),
-          },
-        } : {}),
-        ...(sourceFilter ? { source: sourceFilter } : {}),
-      } as any,
-      select: {
-        id:            true,
-        startTime:     true,
-        endTime:       true,
-        duration:      true,
-        status:        true,
-        customerName:    true,
-        customerPhone:   true,
-        pickupAddress: true,
-        price:         true,
-        customer: { select: { name: true, phone: true },
-        },
-      },
-      orderBy: { startTime: 'asc' },
-      take: limit,
-    })
-
-    // Normalise: merge customerPhone from booking or client relation
-    const normalised = bookings.map((b: any) => ({
-      ...b,
-      customerName:  b.customerName  ?? b.customer?.name  ?? null,
-      customerPhone: b.customerPhone ?? b.customer?.phone ?? null,
-    }))
-
-    return NextResponse.json(normalised)
-  } catch (error) {
-    logger.error('Fetch bookings error', {
-      error: error instanceof Error ? error.message : String(error),
     })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
