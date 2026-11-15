@@ -65,18 +65,26 @@ describe('PH4-CRON-01: slot-cleanup auth (source verification)', () => {
     expect(src).toContain("Unauthorized")
   })
 
-  it('slot-cleanup route denies requests without auth', async () => {
-    // Dynamically import after source verification
+  it('slot-cleanup route denies requests without CRON_SECRET', async () => {
     const { GET } = await import('@/app/api/cron/slot-cleanup/route')
     const req = new NextRequest('http://localhost/api/cron/slot-cleanup')
-    // No x-vercel-cron header, no CRON_SECRET
     delete process.env.CRON_SECRET
     const res = await GET(req)
     expect(res.status).toBe(401)
   })
 
-  it('slot-cleanup route allows x-vercel-cron header', async () => {
-    // Mock the cleanup job so we don't need a real DB
+  it('slot-cleanup route denies x-vercel-cron header without CRON_SECRET — header alone is not proof of Vercel origin', async () => {
+    const { GET } = await import('@/app/api/cron/slot-cleanup/route')
+    const req = new NextRequest('http://localhost/api/cron/slot-cleanup', {
+      headers: { 'x-vercel-cron': '1' }  // any caller can send this header
+    })
+    delete process.env.CRON_SECRET
+    const res = await GET(req)
+    // Must still be 401 — x-vercel-cron alone does not authenticate
+    expect(res.status).toBe(401)
+  })
+
+  it('slot-cleanup route allows valid CRON_SECRET Bearer token', async () => {
     vi.mock('@/lib/jobs/slotReservationCleanup', () => ({
       cleanupExpiredSlotReservations: vi.fn().mockResolvedValue({ deletedCount: 0, timestamp: new Date() })
     }))
@@ -84,13 +92,14 @@ describe('PH4-CRON-01: slot-cleanup auth (source verification)', () => {
       pingCronHealth: vi.fn().mockResolvedValue(undefined),
       failCronHealth: vi.fn().mockResolvedValue(undefined),
     }))
-
+    process.env.CRON_SECRET = 'test-cron-secret-abc123'
     const { GET } = await import('@/app/api/cron/slot-cleanup/route')
     const req = new NextRequest('http://localhost/api/cron/slot-cleanup', {
-      headers: { 'x-vercel-cron': '1' }
+      headers: { 'authorization': 'Bearer test-cron-secret-abc123' }
     })
     const res = await GET(req)
     expect(res.status).toBe(200)
+    delete process.env.CRON_SECRET
   })
 })
 
@@ -163,7 +172,7 @@ describe('PH4-PAY-01: create-intent rate limiter', () => {
 
 // ── PH4-PAY-02: Stripe module-level instantiation ────────────────────────────
 
-describe('PH4-PAY-02: Stripe instantiation in checkout route', () => {
+describe('PH4-PAY-02: Stripe instantiation in checkout and billing-portal routes', () => {
   it('subscriptions/checkout does not use require() inside handler', async () => {
     const { readFileSync } = await import('fs')
     const { resolve } = await import('path')
@@ -171,10 +180,76 @@ describe('PH4-PAY-02: Stripe instantiation in checkout route', () => {
       resolve(process.cwd(), 'app/api/subscriptions/checkout/route.ts'),
       'utf-8'
     )
-    // require() inside handler removed
     expect(src).not.toContain("require('stripe')")
-    // Module-level import present
     expect(src).toContain("import Stripe from 'stripe'")
     expect(src).toContain("new Stripe(")
+  })
+
+  it('billing-portal does not use require() inside handler', async () => {
+    const { readFileSync } = await import('fs')
+    const { resolve } = await import('path')
+    const src = readFileSync(
+      resolve(process.cwd(), 'app/api/instructor/subscription/billing-portal/route.ts'),
+      'utf-8'
+    )
+    expect(src).not.toContain("require('stripe')")
+    expect(src).not.toContain("require('@/lib/config/subscriptions')")
+    expect(src).toContain("import Stripe from 'stripe'")
+  })
+})
+
+// ── PH4-SUB-CHK-01: Billing portal return URL ────────────────────────────────
+
+describe('PH4-SUB-CHK-01: billing-portal return URL uses getAppUrl()', () => {
+  it('billing-portal does not use NEXTAUTH_URL for baseReturnUrl', async () => {
+    const { readFileSync } = await import('fs')
+    const { resolve } = await import('path')
+    const src = readFileSync(
+      resolve(process.cwd(), 'app/api/instructor/subscription/billing-portal/route.ts'),
+      'utf-8'
+    )
+    // No fallback to NEXTAUTH_URL for return URL construction
+    expect(src).not.toContain('NEXTAUTH_URL}/dashboard')
+    // Uses getAppUrl() as fallback
+    expect(src).toContain('getAppUrl()')
+    // Open redirect protection: validates same-origin
+    expect(src).toContain('same origin')
+  })
+})
+
+// ── PH4-PAY-01: Production fail-closed when Redis unconfigured ───────────────
+
+describe('PH4-PAY-01: ratelimit production fail-closed', () => {
+  it('ratelimit.ts denies in production when Redis not configured', async () => {
+    const { readFileSync } = await import('fs')
+    const { resolve } = await import('path')
+    const src = readFileSync(
+      resolve(process.cwd(), 'lib/ratelimit.ts'),
+      'utf-8'
+    )
+    // Production fail-closed branch present
+    expect(src).toContain("process.env.NODE_ENV === 'production'")
+    expect(src).toContain("success: false")
+    // In-memory fallback restricted to non-production
+    expect(src).toContain("Development/test only")
+  })
+})
+
+// ── PH4-ADM-02: Bootstrap race fixed ─────────────────────────────────────────
+
+describe('PH4-ADM-02: Bootstrap atomic guard', () => {
+  it('admin/register uses SERIALIZABLE transaction', async () => {
+    const { readFileSync } = await import('fs')
+    const { resolve } = await import('path')
+    const src = readFileSync(
+      resolve(process.cwd(), 'app/api/admin/register/route.ts'),
+      'utf-8'
+    )
+    // Atomic transaction wraps check+create
+    expect(src).toContain("prisma.$transaction")
+    expect(src).toContain("Serializable")
+    // Returns 404 on existing admin (not 400)
+    expect(src).toContain('status: 404')
+    expect(src).not.toContain("Admin account already exists")
   })
 })

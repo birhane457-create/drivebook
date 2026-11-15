@@ -13,10 +13,17 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getAppUrl } from '@/lib/utils/appUrl';
+import { getStripePriceId } from '@/lib/config/subscriptions';
+
+// Module-level Stripe instance — not re-instantiated per request
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-01-28.clover' as any })
+  : null;
 
 export const dynamic = 'force-dynamic';
 
@@ -28,11 +35,30 @@ export async function POST(req: NextRequest) {
     }
 
     const { return_url, targetTier } = await req.json().catch(() => ({}));
+
+    // Validate return_url if supplied — must be same origin to prevent open redirect.
+    // If absent or invalid, fall back to the canonical app URL.
+    const appUrl = getAppUrl();
+    let validatedReturnUrl: string;
+    if (return_url && typeof return_url === 'string') {
+      try {
+        const supplied = new URL(return_url);
+        const canonical = new URL(appUrl);
+        // Accept only same origin (scheme + host + port must match)
+        validatedReturnUrl = supplied.origin === canonical.origin
+          ? return_url
+          : `${appUrl}/dashboard/subscription`;
+      } catch {
+        validatedReturnUrl = `${appUrl}/dashboard/subscription`;
+      }
+    } else {
+      validatedReturnUrl = `${appUrl}/dashboard/subscription`;
+    }
+
     // Append portal_return=true so the subscription page knows to sync from Stripe
-    const baseReturnUrl = return_url || `${process.env.NEXTAUTH_URL}/dashboard/subscription`;
-    const returnUrl = baseReturnUrl.includes('?')
-      ? `${baseReturnUrl}&portal_return=true`
-      : `${baseReturnUrl}?portal_return=true`;
+    const returnUrl = validatedReturnUrl.includes('?')
+      ? `${validatedReturnUrl}&portal_return=true`
+      : `${validatedReturnUrl}?portal_return=true`;
 
     const user = await prisma.user.findUnique({
       where: { email: session!.user!.email },
@@ -53,10 +79,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    const Stripe = require('stripe');
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: '2026-01-28.clover',
-    });
+    if (!stripe) {
+      return NextResponse.json({ error: 'Payment service not configured' }, { status: 503 });
+    }
 
     const activeSubscription = user.provider?.subscriptions[0];
 
@@ -90,7 +115,6 @@ export async function POST(req: NextRequest) {
     const tier = (targetTier && ['BASIC','PRO','STUDIO','PREMIUM'].includes(targetTier))
       ? targetTier
       : (user.provider?.subscriptionTier || 'BASIC');
-    const { getStripePriceId } = require('@/lib/config/subscriptions');
     const priceId = getStripePriceId(tier, 'monthly');
 
     // Get or create Stripe customer

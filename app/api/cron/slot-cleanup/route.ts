@@ -3,9 +3,12 @@
  *
  * Endpoint: /api/cron/slot-cleanup
  * Schedule: Every 10 minutes (vercel.json)
- * Auth:     Vercel Crons authenticate via x-vercel-cron header automatically.
- *           CRON_SECRET Bearer check intentionally removed — it blocked Vercel from
- *           calling this endpoint (Vercel does not send Authorization headers on crons).
+ * Auth:     Bearer CRON_SECRET only.
+ *           CRON_SECRET must be set in Vercel environment variables.
+ *           The x-vercel-cron header is not used for authentication —
+ *           any HTTP caller can send it. Vercel cron invocations send the
+ *           Authorization: Bearer <CRON_SECRET> header when CRON_SECRET
+ *           is configured in the project settings.
  *
  * Removes expired SlotReservation rows to prevent table bloat.
  * SlotReservations expire after 10 minutes (set at creation via expiresAt).
@@ -21,13 +24,14 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
-    // Auth: Vercel Crons send x-vercel-cron header; external schedulers use CRON_SECRET Bearer.
-    // The original CRON_SECRET-only check was removed because Vercel does not send Authorization
-    // headers on cron invocations — but x-vercel-cron is a separate header that IS sent.
-    const isVercelCron = req.headers.get('x-vercel-cron') === '1';
+    // Auth: CRON_SECRET Bearer token only.
+    // The x-vercel-cron header is NOT used for authentication — it can be sent by any
+    // HTTP caller and does not establish that the request came from Vercel infrastructure.
+    // Vercel's own guidance requires validating the Authorization: Bearer <CRON_SECRET>
+    // header. Configure CRON_SECRET in Vercel environment variables and vercel.json cron
+    // config picks it up automatically for all cron invocations.
     const authHeader = req.headers.get('authorization');
-    const hasCronSecret = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
-    if (!isVercelCron && !hasCronSecret) {
+    if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

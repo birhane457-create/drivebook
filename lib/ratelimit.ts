@@ -92,13 +92,29 @@ const inMemoryLimiter = new InMemoryRateLimiter();
  */
 function createRateLimiter(requests: number, window: string) {
   if (!redis) {
-    // Suppress warnings during Next.js build phase to avoid noisy stderr
+    // CRITICAL: Never use in-memory rate limiting in production — not safe across
+    // multiple serverless instances. Fail closed by returning a limiter that always
+    // denies when Redis is not configured.
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[RATELIMIT] CRITICAL: Upstash Redis not configured in production. All rate-limited endpoints will return 429 until Redis is configured.');
+      const windowMs = parseWindow(window);
+      return {
+        limit: async (_identifier: string) => ({
+          success: false as const,
+          limit: requests,
+          remaining: 0,
+          reset: Date.now() + windowMs,
+          error: 'Rate limiting unavailable — Redis not configured',
+        })
+      };
+    }
+
+    // Development/test only: use in-memory fallback with warning
     const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build';
     if (!isBuildPhase && process.env.NODE_ENV !== 'test') {
       console.warn('⚠️  Upstash Redis not configured. Using in-memory rate limiting (NOT production-safe!)');
       console.warn('   Add UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN to .env');
     }
-    // Return in-memory limiter
     const windowMs = parseWindow(window);
     return {
       limit: async (identifier: string) => {
