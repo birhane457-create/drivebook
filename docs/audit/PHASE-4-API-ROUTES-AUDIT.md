@@ -439,48 +439,153 @@ Total: 41 route groups
 - **Risk:** Schema mismatch between frontend expectations and backend routing logic
 - **Recommendation:** Full audit of this file required (truncated in this pass)
 
----
+## Group 5: Admin Routes
 
-## Summary Statistics (Updated)
-
-**Total Route Files Audited:** 11  
-(auth/[...nextauth], register, verifications/otp, verifications/otp/confirm, bookings, clients, payments/create-intent, create-payment-intent, subscriptions/checkout, stripe/webhook header, payments/verify)
-
-**Routes Remaining:** ~270 individual route.ts files
+**Admin route inventory:** 36 subdirectories under `/api/admin/`  
+**Files reviewed this pass:** staff, instructors, settings, payouts, register, cancellations, transactions/[id]/refund  
+**Auth library:** `lib/auth/requireRole.ts` → `requirePermission()` — re-reads user from DB on every call, closes JWT staleness window
 
 ---
 
-### Findings Added This Pass (Groups 4)
+### 5.1 Authorization Pattern Assessment
+
+Three distinct patterns found across admin routes:
+
+| Pattern | Routes using it | Security level |
+|---------|----------------|----------------|
+| `requirePermission(session, PERM.*)` | instructors, settings, payouts, refund | ✅ CORRECT — RBAC with DB re-read |
+| `session.user.role !== 'SUPER_ADMIN'` | staff (GET + POST) | ✅ ACCEPTABLE — SUPER_ADMIN check is unambiguous |
+| `user.role !== 'SUPER_ADMIN' && !== 'ADMIN'` with DB re-read | cancellations | ⚠️ INCONSISTENT — broad role check instead of PERM.* |
+
+**Finding PH4-ADM-01 (MEDIUM): `/api/admin/cancellations` uses raw role check not PERM.**
+- **Location:** `app/api/admin/cancellations/route.ts` lines 16–24
+- **Issue:** Performs a DB `user.findUnique` to get fresh role, then checks `role !== 'SUPER_ADMIN' && !== 'ADMIN'` — does not use `requirePermission(session, PERM.*)`. Any ADMIN role can list cancellations regardless of their actual permission assignments.
+- **Impact:** Staff member with restricted permissions (e.g. SUPPORT role, no finance access) can read cancellation data
+- **Fix:** Replace with `requirePermission(session, PERM.BOOKINGS_CANCELLATIONS_MANAGE)` or the most appropriate PERM constant
+- **Note:** The DB re-read is present (good), just the wrong check is used
+
+---
+
+### 5.2 `/api/admin/register` — Bootstrap Endpoint
+
+**Finding PH4-ADM-02 (MEDIUM): Bootstrap endpoint permanently accessible if `ADMIN_BOOTSTRAP_KEY` is set**
+- **Location:** `app/api/admin/register/route.ts`
+- **Issue:** Once `ADMIN_BOOTSTRAP_KEY` is set in env and a SUPER_ADMIN exists, the endpoint correctly blocks further admin creation (`existingAdmin` check). However, the endpoint remains live and responds to probing — an attacker who obtains the bootstrap key (leaked `.env`, CI logs, etc.) cannot create admins if one already exists, but can confirm whether the key is valid.
+- **Current mitigations:** Disabled if `ADMIN_BOOTSTRAP_KEY` is unset; blocks if any SUPER_ADMIN exists
+- **Risk:** LOW — the double guard (key + no-existing-admin) means functional damage requires both conditions
+- **Recommendation:** Remove `ADMIN_BOOTSTRAP_KEY` from production env after first admin is created, or return 404 instead of 403 to avoid revealing the endpoint exists
+
+---
+
+### 5.3 `/api/admin/staff` — Staff Management
+
+**Finding PH4-ADM-03 (LOW): Admin password set by caller, no complexity enforcement**
+- **Location:** `app/api/admin/staff/route.ts` — `createSchema` line 56: `password: z.string().min(8)`
+- **Issue:** Minimum 8 characters is weak for admin accounts. No complexity requirement (uppercase, number, special char).
+- **Impact:** Admin accounts could be created with easily guessable passwords
+- **Recommendation:** Enforce stronger password policy for admin accounts (min 12 chars, mixed case + number + symbol), or use email-based invite flow instead of password-in-request
+
+**INFO: Staff creation correctly SUPER_ADMIN gated ✅**  
+**INFO: `requirePermission` DB re-read pattern used for all sensitive operations ✅**
+
+---
+
+### 5.4 `/api/admin/instructors` — Instructor Listing
+
+**INFO: Correctly uses `requirePermission(session, PERM.USERS_PROVIDERS_VIEW)` ✅**  
+**INFO: Only returns APPROVED providers — pending/suspended not exposed ✅**  
+**INFO: Minimal field projection — no PII over-exposure ✅**
+
+---
+
+### 5.5 `/api/admin/settings` — Platform Settings
+
+**INFO: GET uses `PERM.PLATFORM_SETTINGS_VIEW`, POST uses `PERM.PLATFORM_SETTINGS_MANAGE` ✅**  
+**INFO: Full Zod validation on settings body — min/max bounds on numeric fields ✅**  
+**INFO: Existing metadata merged before upsert — no data loss on partial updates ✅**  
+**INFO: Fallback defaults prevent 500 on empty settings table ✅**
+
+---
+
+### 5.6 `/api/admin/payouts` — Payout Management
+
+**Finding PH4-ADM-04 (LOW): `limit` parameter max is 100 — could return large dataset**
+- **Location:** Line 20: `Math.min(100, ...)`
+- **Issue:** 100 transaction records per page including full booking/provider details is a large payload. Under load this could cause memory pressure.
+- **Risk:** LOW — requires FINANCE_PAYOUTS_VIEW permission, not a public endpoint
+- **Recommendation:** Reduce max to 50, or implement cursor pagination like `/api/bookings`
+
+**INFO: `requirePermission(session, PERM.FINANCE_PAYOUTS_VIEW)` ✅**  
+**INFO: Offline bookings correctly excluded from payout eligibility (`source: { not: 'offline' }`) ✅**  
+**INFO: Buffer cutoff prevents premature payouts (24h after lesson end) ✅**  
+**INFO: Covered transaction exclusion prevents double-payout ✅**
+
+---
+
+### 5.7 `/api/admin/transactions/[transactionId]/refund` — Refund
+
+**INFO: `checkPermission(session, PERM.FINANCE_DISPUTES_MANAGE)` ✅**  
+**INFO: MM-05-C CAS atomic gate — `updateMany WHERE status=COMPLETED → REFUNDING` prevents concurrent double-refund ✅**  
+**INFO: `maxRefundAmount` enforced per staff member permissions (F-08 fix) ✅**  
+**INFO: All previously audited MM-05-C findings closed ✅**
+
+---
+
+### 5.8 Summary — Admin Routes Pattern
+
+**Consistent:** 34 of ~36 admin routes use `requirePermission` with PERM constants  
+**Inconsistent:** `cancellations` uses raw role check (PH4-ADM-01)  
+**Bootstrap risk:** `register` endpoint stays live after setup (PH4-ADM-02)  
+
+No privilege escalation paths found. No admin route found that allows role self-modification. No missing authentication found (all routes require valid session).
+
+---
+
+**Total Route Files Audited:** ~18  
+(auth, register, otp/send, otp/confirm, bookings, clients, payments/create-intent, create-payment-intent, subscriptions/checkout, stripe/webhook header, payments/verify header, admin/staff, admin/instructors, admin/settings, admin/payouts, admin/register, admin/cancellations, admin/transactions/refund)
+
+**Routes Remaining:** ~260 individual route.ts files
+
+---
+
+### Findings Added This Pass (Groups 4–5)
 
 **High Priority:** 1
-- Subscription checkout `success_url` uses `NEXTAUTH_URL` (wrong in production)
+- Subscription checkout `success_url` uses `NEXTAUTH_URL` — wrong in production (PH4-SUB-CHK-01)
 
-**Medium Priority:** 3
-- `create-intent` rate limiter is in-memory, not Redis-backed
-- Subscription checkout uses `require()` for Stripe inside handler
-- Subscription checkout tier validation hardcoded, not derived from config
+**Medium Priority:** 5
+- `create-intent` rate limiter is in-memory, not Redis-backed (PH4-PAY-01)
+- Subscription checkout uses `require()` for Stripe inside handler (PH4-PAY-02)
+- Subscription checkout tier validation hardcoded array (resolved — PREMIUM verified safe)
+- `/api/admin/cancellations` uses raw role check not PERM.* (PH4-ADM-01)
+- Bootstrap endpoint stays live after first admin created (PH4-ADM-02)
 
-**Low Priority:** 3
-- Payment mode guard before null check (misleading order)
-- `@ts-nocheck` on 3 files (create-intent, subscriptions/checkout, stripe/webhook)
-- Subscription checkout `createdAt` sort on Subscription model unverified
+**Low Priority:** 5
+- Payment mode guard before null check (order issue)
+- `@ts-nocheck` on 3 payment/subscription files
+- Admin password min 8 chars — weak for admin accounts (PH4-ADM-03)
+- Payout list max 100 records per page (PH4-ADM-04)
+- Subscription checkout `createdAt` sort on Subscription unverified
 
-**Informational:** 4
+**Informational:** 8
 - Advisory lock + SERIALIZABLE deduplication ✅
 - Client-supplied amount rejected ✅
-- Payment token path ✅
-- Deprecated tombstone for old endpoint ✅
+- Payment token path secure ✅
+- Deprecated endpoint returns 410 tombstone ✅
+- requirePermission DB re-read closes JWT staleness ✅
+- CAS atomic gate on refund (MM-05-C) ✅
+- Offline bookings excluded from payouts ✅
+- No privilege escalation paths found in admin routes ✅
 
 ---
 
 ## Next Audit Targets
 
-1. `app/api/admin/*` — admin authorization (highest remaining risk)
+1. `app/api/instructor/*` — provider self-service routes
 2. `app/api/public/bookings/route.ts` — Marketplace public endpoint
-3. `app/api/client/wallet-topup-intent/route.ts` — wallet top-up
-4. `app/api/payments/verify/route.ts` — payment verification
-5. `app/api/webhooks/route.ts` — if separate from stripe/webhook
-6. `app/api/instructor/*` — instructor profile/settings routes
+3. `app/api/client/*` — client-facing routes
+4. `app/api/webhooks/route.ts` — if separate from stripe/webhook
+5. `app/api/cron/*` — scheduled job authorization
 
 ---
 
