@@ -1058,16 +1058,16 @@ Findings identified from Phase 4 route audit of `app/api/verifications/otp/route
 | PH4-OTP-02 | `OTP_HASH_SECRET` missing silently uses hardcoded fallback in production | HIGH | CONFIRMED — `process.env.OTP_HASH_SECRET \|\| 'dev-otp-secret-change-in-prod'` with no env enforcement | VERIFIED — source inspection; hardcoded fallback present in both send and confirm routes | `c0d74ad7` | ✅ Vercel SUCCESS c0d74ad7 | ✅ FIX-VERIFIED at source/build |
 | PH4-OTP-03 | Redis not configured (`isUpstashConfigured=false`) still falls through to in-memory in production | HIGH | CONFIRMED — previous fix only handled `catch` path; `!isUpstashConfigured` branch had no production guard | VERIFIED — source inspection by independent reviewer after c0d74ad7 | `c1bd5c6d` | ✅ Vercel SUCCESS c1bd5c6d | ✅ FIX-VERIFIED at source/build |
 
-**Production verification outstanding:**
+**Production verification:**
 
 | Check | Status |
 |---|---|
-| `OTP_HASH_SECRET` exists in Vercel production environment | ⏳ PENDING — cannot verify from repository |
-| `UPSTASH_REDIS_REST_URL` configured and not placeholder | ⏳ PENDING |
-| `UPSTASH_REDIS_REST_TOKEN` configured | ⏳ PENDING |
-| Normal OTP flow (send + confirm) works end-to-end | ⏳ PENDING |
-| Rate limiting enforced globally (not per-instance) | ⏳ PENDING |
-| Redis failure behavior (staging test) | ⏳ PENDING — staging only; do not modify production credentials |
+| `OTP_HASH_SECRET` exists in Vercel production environment | ✅ CONFIRMED — added by project owner 2026-11-14; root cause of absent OTP codes confirmed |
+| `UPSTASH_REDIS_REST_URL` configured and not placeholder | ✅ CONFIRMED — present All Environments, value `https://united-reptile-79502.upstash.io` |
+| `UPSTASH_REDIS_REST_TOKEN` configured | ✅ CONFIRMED — present All Environments; Vercel "Needs Attention" flag is advisory (recommends marking as sensitive secret), not a missing-value error |
+| Redeploy to pick up `OTP_HASH_SECRET` | ⏳ PENDING — trigger redeploy after adding variable |
+| Normal OTP flow (send + confirm) works end-to-end | ⏳ PENDING — test after redeploy |
+| Rate limiting enforced globally (not per-instance) | ⏳ PENDING — verify after redeploy |
 | Automated OTP security test suite | ⏳ NOT CREATED — recommended before closing |
 
 **Evidence documents:** `docs/audit/OTP-SECURITY-FIXES.md`, `docs/audit/OTP-SECURITY-CORRECTION.md`
