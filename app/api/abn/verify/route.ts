@@ -1,14 +1,16 @@
 /**
  * ABN Verification — Layer 2: ABR API
  *
- * Validates ABN checksum (Layer 1) then calls the Australian Business Register
- * to confirm the ABN is active and returns the entity name for ownership matching.
+ * Called by authenticated instructors completing payout settings
+ * (/dashboard/settings/payout). Not used during public registration.
  *
- * Requires ABR_GUID in .env — register free at:
- * https://abr.business.gov.au/Tools/WebServices
+ * PH4-ABN-01 FIX: Requires provider session and enforces per-provider rate limit.
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
 import { isValidABNFormat, isNameMatch, NAME_MATCH_AUTO_APPROVE_THRESHOLD, NAME_MATCH_REVIEW_THRESHOLD } from '@/lib/utils/abn-validation';
+import { abnVerifyRateLimit, checkRateLimitStrict } from '@/lib/ratelimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +18,25 @@ const ABR_GUID = process.env.ABR_GUID ?? '';
 const ABR_URL = 'https://abr.business.gov.au/abrxmlsearch/AbrXmlSearch.asmx/SearchByABNv202001';
 
 export async function POST(req: NextRequest) {
+  // Provider session required — ABN verification is an authenticated instructor action
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ valid: false, error: 'Unauthorized' }, { status: 401 });
+  }
+  if (session.user.role !== 'provider') {
+    return NextResponse.json({ valid: false, error: 'Forbidden' }, { status: 403 });
+  }
+
+  // Per-provider rate limit
+  const rateLimitKey = `abn-verify:${session.user.id}`;
+  const rateResult = await checkRateLimitStrict(abnVerifyRateLimit, rateLimitKey);
+  if (!rateResult.success) {
+    return NextResponse.json(
+      { valid: false, error: 'Too many verification requests. Please try again later.' },
+      { status: 429 }
+    );
+  }
+
   const { abn, instructorName } = await req.json();
   if (!abn) return NextResponse.json({ valid: false, error: 'ABN required' }, { status: 400 });
 

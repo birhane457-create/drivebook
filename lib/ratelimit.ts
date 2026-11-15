@@ -159,6 +159,13 @@ export const bookingRateLimit = createRateLimiter(10, '1 m');
  * 5 generations per hour per instructor
  */
 /**
+ * ABN Verification Rate Limit
+ * Per-provider limit to prevent ABR API abuse.
+ * 10 verifications per hour per provider.
+ */
+export const abnVerifyRateLimit = createRateLimiter(10, '1 h');
+
+/**
  * Public Booking IP Rate Limit
  * Independent IP-level limit for the unauthenticated public booking endpoint.
  * 20 booking attempts per hour per IP address, across all email addresses and providers.
