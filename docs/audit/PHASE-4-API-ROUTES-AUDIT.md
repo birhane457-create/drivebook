@@ -985,3 +985,72 @@ Two accepted auth methods across cron routes:
 Verify `CRON_SECRET` is configured in Vercel production environment. If missing, all CRON_SECRET-gated cron routes allow unauthenticated calls (the guard is `!process.env.CRON_SECRET || ...` which short-circuits to `false || false = false`, passing through).
 
 ---
+
+---
+
+## Group 9: Client Routes
+
+**Files reviewed:** wallet-add, wallet-topup-intent, wallet/route, transactions, bookings/[id], quotes/request, schedule-package-hours, profile  
+**Total client route files:** 27
+
+---
+
+### 9.1 Financial Routes
+
+**INFO: wallet-add verifies PaymentIntent via Stripe before crediting wallet (P0 fix applied) OK**
+**INFO: wallet-topup-intent enforces platform-configured min/max (MM-03 fix applied) OK**
+**INFO: Both routes use Upstash-backed walletRateLimit OK**
+
+**PH4-CLT-01 (LOW): wallet/route.ts missing CLIENT role gate**
+- wallet-topup-intent has role check; wallet/route does not
+- Wallet scoped to session userId — no cross-user IDOR risk
+- Inconsistency in defensive posture
+
+**PH4-CLT-02 (LOW): transactions/route.ts missing CLIENT role gate**
+- Same pattern — authenticated but no role guard
+- Transactions scoped to session user's wallet
+
+---
+
+### 9.2 Booking Routes — client/bookings/[id]
+
+**INFO: Ownership enforced via customerId in clientIds OK**
+**INFO: Cross-user IDOR not possible — clientIds scoped to session user OK**
+
+---
+
+### 9.3 Quote Routes — quotes/request
+
+**INFO: customerId from session not body — no IDOR on customer OK**
+**INFO: Full Zod validation OK**
+
+**PH4-CLT-04 (LOW): No rate limit on quote request creation**
+- Requires authenticated CLIENT session — risk is low
+
+---
+
+### 9.4 Package Scheduling — schedule-package-hours
+
+**Note:** @ts-nocheck present (PH4-CLT-05 LOW)
+
+**INFO: Ownership verified — bookingId + userId both required OK**
+
+**PH4-CLT-03 (LOW): hoursToSchedule no numeric bounds validation**
+- Only checked for falsy — no min/max guard
+
+---
+
+### 9.5 Client Routes Summary
+
+**No HIGH or MEDIUM findings in the 8 client routes reviewed.**
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| PH4-CLT-01 | LOW | wallet/route missing CLIENT role gate |
+| PH4-CLT-02 | LOW | transactions/route missing CLIENT role gate |
+| PH4-CLT-03 | LOW | schedule-package-hours: hoursToSchedule no bounds |
+| PH4-CLT-04 | LOW | quote request: no rate limit |
+| PH4-CLT-05 | LOW | @ts-nocheck in schedule-package-hours |
+
+All 5 findings are LOW severity. No code changes required at this time.
+
