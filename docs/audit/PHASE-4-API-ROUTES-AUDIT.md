@@ -738,11 +738,177 @@ No privilege escalation paths found. No admin route found that allows role self-
 
 ---
 
----
+## Group 10: Webhooks
+
+**Files counted:** 3  
+**Files inspected:** 3 (all)
+
+### 10.1 /api/webhooks/stripe — Legacy proxy
+
+**INFO:** Correctly proxies raw body and headers to canonical `/api/stripe/webhook` ✅  
+Canonical handler performs signature verification — no duplication needed here.
+
+**LOW: Internal `fetch` to canonical handler has no timeout (PH4-WH-02)**  
+Cascading hang is unlikely in practice. LOW.
+
+### 10.2 /api/webhooks/whatsapp
+
+**Finding PH4-WH-01 (MEDIUM): Signature verification bypassed when `WHATSAPP_APP_SECRET` not configured**  
+- Location: POST handler — falls through to `req.json()` without signature check when env var is absent  
+- No `NODE_ENV` guard — this bypass can apply in production if the env var is not set  
+- Any caller can send arbitrary payloads  
+- Mitigation required: add `NODE_ENV === 'production'` fail-closed, or document that `WHATSAPP_APP_SECRET` is required in production
+
+**INFO:** When configured, uses `crypto.timingSafeEqual` for signature verification ✅  
+**INFO:** Always returns 200 — prevents Meta retry loops ✅  
+**INFO:** No DB writes in current implementation — message handling is TODO stubs ✅
 
 ---
 
-## Summary Statistics
+## Group 11: Availability and Calendar
+
+**Files counted:** 12 (6 availability + 1 calendar/callback + 5 google-calendar)  
+**Files inspected:** 4 (availability/route, check-and-reserve, calendar/callback, voice/availability)
+
+### 11.1 /api/availability — Public slot query
+
+**Finding PH4-AV-01 (MEDIUM): No authentication and no rate limit**  
+- Any unauthenticated caller can enumerate all available time slots for any instructor by providerId  
+- Availability data reveals instructor working patterns  
+- No rate limit — susceptible to scraping  
+- Risk: MEDIUM (data exposure; no booking or financial impact)
+
+**INFO:** Input validated via Zod schema ✅
+
+### 11.2 /api/availability/check-and-reserve
+
+**INFO:** PAY-H-04 fix confirmed present — expired SlotReservation rows deleted before overlap check ✅  
+**INFO:** Instructor timezone resolved from DB, not client-supplied ✅  
+**INFO:** Range overlap logic correct ✅
+
+### 11.3 /api/calendar/callback — Google OAuth
+
+**INFO:** CSRF protection via `verifyOAuthState()` ✅  
+**INFO:** Session mismatch check prevents cross-account token binding ✅
+
+**Finding PH4-CAL-01 (LOW): OAuth callback redirects use `NEXTAUTH_URL` not `getAppUrl()`**  
+- `appUrl()` helper uses `NEXTAUTH_URL` as base — same issue as PH4-SUB-CHK-01  
+- If `NEXTAUTH_URL` is localhost in Vercel, OAuth callback lands on localhost  
+- Batch fix: replace `appUrl()` with `getAppUrl()` from `lib/utils/appUrl.ts`
+
+---
+
+## Group 12: Notifications and Reviews
+
+**Files counted:** 3 (notifications/route, notifications/mark-read, reviews/route)  
+**Files inspected:** 2 (notifications/route, reviews/route)
+
+**INFO:** Notifications scoped to `session.user.id` — no cross-user leakage ✅  
+**INFO:** Soft-fails on DB error — appropriate for non-critical notification feature ✅  
+**INFO:** Reviews use `reviewRateLimit` (10/hour, Upstash-backed) ✅  
+**INFO:** Review ownership verified — booking must belong to session user before POST ✅
+
+---
+
+## Group 13: ABN
+
+**Files counted:** 1  
+**Files inspected:** 1
+
+**Finding PH4-ABN-01 (LOW): No authentication on ABN verify endpoint**  
+- Any caller can submit ABNs for government verification  
+- ABR_GUID is a free public key — cost impact is LOW  
+- Could be abused to enumerate ABN statuses  
+- Batch fix: add session auth gate or at least rate limiting
+
+**INFO:** Checksum validation (Layer 1) always runs ✅  
+**INFO:** ABR HTTP call uses hardcoded government URL ✅  
+**INFO:** Graceful fallback when ABR_GUID not configured ✅
+
+---
+
+## Group 14: Analytics
+
+**Files counted:** 2  
+**Files inspected:** 1 (analytics/route)
+
+**INFO:** Analytics scoped to `session.user.providerId` — no cross-provider leakage ✅  
+**INFO:** Commission rate fetched from DB ✅  
+**INFO:** Date range parameters use safe defaults ✅
+
+---
+
+## Group 15: Health and Debug
+
+**Files counted:** 2  
+**Files inspected:** 2 (all)
+
+**INFO:** `/api/health` returns only commit SHA, timestamp, NODE_ENV — no sensitive config ✅
+
+**Finding PH4-DBG-01 (MEDIUM): `/api/debug/session` exposes full session object without authentication**  
+- Returns `session.user` (id, email, role, providerId, customerId, businessType, paymentModel)  
+- No auth required — any HTTP caller can confirm JWT field structure  
+- Unauthenticated callers see `hasSession: false`; authenticated users see their full session  
+- Should require authentication or be removed/disabled in production  
+- Batch fix: add `if (!session) return 401` gate, or add `NODE_ENV !== 'production'` guard
+
+---
+
+## Group 16: Voice
+
+**Files counted:** 3  
+**Files inspected:** 3 (all)
+
+**INFO:** `voice/availability` uses `withVoiceServiceAuth` middleware ✅  
+**INFO:** `voice/bookings` correctly returns 410 Gone — payment bypass path permanently blocked ✅  
+**INFO:** `voice/instructors/lookup` uses `VOICE_SERVICE_API_KEY` (x-api-key header) ✅  
+**INFO:** Lookup restricted to ACTIVE voice lines — SUSPENDED lines return 404 ✅
+
+---
+
+## Group 17: Upload
+
+**Files counted:** 1  
+**Files inspected:** 1
+
+**INFO:** Session authentication required ✅  
+**INFO:** Role gate: provider, ADMIN, SUPER_ADMIN, STAFF ✅  
+**INFO:** MIME type allowlist — JPEG, PNG, WebP, GIF only ✅  
+**INFO:** Max file size 10 MB enforced ✅  
+**INFO:** Cloudinary folder mapping via allowlist — no path injection possible ✅
+
+---
+
+## Group 18: Mobile
+
+**Files counted:** 1  
+**Files inspected:** 1
+
+**INFO:** JWT verification uses `NEXTAUTH_SECRET` — consistent with other mobile routes ✅  
+**INFO:** Cross-user device token reassignment handled ✅  
+**INFO:** Platform validated against allowlist (android/ios/web) ✅
+
+---
+
+## Phase 4 — All Groups Open Findings
+
+| ID | Group | Severity | Finding |
+|----|-------|----------|---------|
+| PH4-WH-01 | Webhooks | MEDIUM | WhatsApp signature bypass when secret unset |
+| PH4-AV-01 | Availability | MEDIUM | Public availability endpoint: no auth, no rate limit |
+| PH4-DBG-01 | Debug | MEDIUM | `/api/debug/session` exposes session without auth gate |
+| PH4-CAL-01 | Calendar | LOW | OAuth callback uses `NEXTAUTH_URL` not `getAppUrl()` |
+| PH4-CLT-01 | Client | LOW | `wallet/route` missing CLIENT role gate |
+| PH4-CLT-02 | Client | LOW | `transactions/route` missing CLIENT role gate |
+| PH4-CLT-03 | Client | LOW | `schedule-package-hours`: `hoursToSchedule` no bounds |
+| PH4-CLT-04 | Client | LOW | Quote request: no rate limit |
+| PH4-CLT-05 | Client | LOW | `@ts-nocheck` in `schedule-package-hours` |
+| PH4-ABN-01 | ABN | LOW | ABN verify endpoint: no authentication |
+| PH4-WH-02 | Webhooks | LOW | Webhook proxy internal fetch: no timeout |
+
+**3 MEDIUM, 8 LOW — all deferred for batch fix after audit completion.**
+
+---
 
 **Total Routes Audited:** 0/41  
 **Critical Issues:** 0  
