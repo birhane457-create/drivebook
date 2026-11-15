@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { createJobRequest } from '@/lib/services/booking-service'
+import { bookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
 import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
@@ -28,6 +29,13 @@ export async function POST(req: NextRequest) {
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // PH4-CLT-04: Rate limit quote requests per authenticated client
+    const rateLimitId = getRateLimitIdentifier(session.user.id, req.headers.get('x-forwarded-for'), 'quote-request')
+    const rateResult = await checkRateLimitStrict(bookingRateLimit, rateLimitId)
+    if (!rateResult.success) {
+      return NextResponse.json({ error: rateResult.error }, { status: 429 })
     }
 
     const body = await req.json()

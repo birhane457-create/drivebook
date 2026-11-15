@@ -7,13 +7,20 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    
+
+    // Require authentication — this endpoint reveals session field structure.
+    // Unauthenticated callers receive only hasSession: false (no session data),
+    // but the endpoint should not be reachable without a valid session in production.
+    if (!session) {
+      return NextResponse.json({ hasSession: false }, { status: 401 })
+    }
+
     return NextResponse.json({
-      hasSession: !!session,
-      session: session ? {
+      hasSession: true,
+      session: {
         user: session.user,
         expires: session.expires,
-      } : null,
+      },
       timestamp: new Date().toISOString(),
     })
   } catch (error) {

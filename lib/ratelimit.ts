@@ -166,6 +166,13 @@ export const bookingRateLimit = createRateLimiter(10, '1 m');
 export const abnVerifyRateLimit = createRateLimiter(10, '1 h');
 
 /**
+ * Document Upload Rate Limit
+ * Prevents Cloudinary storage/bandwidth abuse via rapid uploads.
+ * 10 uploads per hour per provider.
+ */
+export const documentUploadRateLimit = createRateLimiter(10, '1 h');
+
+/**
  * Public Booking IP Rate Limit
  * Independent IP-level limit for the unauthenticated public booking endpoint.
  * 20 booking attempts per hour per IP address, across all email addresses and providers.

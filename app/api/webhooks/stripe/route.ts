@@ -22,6 +22,11 @@ export async function POST(req: NextRequest) {
     });
 
     const canonicalUrl = new URL('/api/stripe/webhook', req.url);
+    // PH4-WH-02: 30-second timeout prevents indefinite hang if the canonical
+    // handler is slow or unresponsive. Stripe retries failed webhooks, so
+    // a 500 response here is preferable to a silent hang.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30_000);
     const response = await fetch(canonicalUrl.toString(), {
       method: 'POST',
       headers: {
@@ -29,7 +34,9 @@ export async function POST(req: NextRequest) {
         'content-type': 'application/json',
       },
       body,
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     const responseBody = await response.text();
     return new NextResponse(responseBody, {

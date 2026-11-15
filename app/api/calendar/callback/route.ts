@@ -3,17 +3,15 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { googleCalendarService } from '@/lib/services/googleCalendar'
 import { verifyOAuthState } from '@/lib/oauth-state'
+import { getAppUrl } from '@/lib/utils/appUrl'
 
 export const dynamic = 'force-dynamic'
 
-/**
- * Use NEXTAUTH_URL as the redirect base.
- * req.url can be http://0.0.0.0:3000/... in dev (Next.js internal bind address)
- * which browsers cannot resolve. NEXTAUTH_URL is always the correct public origin.
- */
-function appUrl(path: string): string {
-  const base = (process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '')
-  return `${base}${path}`
+// PH4-CAL-01 FIX: Use getAppUrl() which prioritises NEXT_PUBLIC_APP_URL.
+// The previous appUrl() helper used NEXTAUTH_URL which may be http://localhost:3000
+// in production if NEXT_PUBLIC_APP_URL is not set in Vercel.
+function oauthRedirectUrl(path: string): string {
+  return `${getAppUrl().replace(/\/$/, '')}${path}`
 }
 
 export async function GET(req: NextRequest) {
@@ -24,31 +22,31 @@ export async function GET(req: NextRequest) {
     const error = searchParams.get('error')
 
     if (error) {
-      return NextResponse.redirect(appUrl(`/dashboard/settings?error=${error}`))
+      return NextResponse.redirect(oauthRedirectUrl(`/dashboard/settings?error=${error}`))
     }
 
     if (!code || !state) {
-      return NextResponse.redirect(appUrl('/dashboard/settings?error=missing_params'))
+      return NextResponse.redirect(oauthRedirectUrl('/dashboard/settings?error=missing_params'))
     }
 
     const verified = verifyOAuthState(state)
     if (!verified) {
-      return NextResponse.redirect(appUrl('/dashboard/settings?error=invalid_state'))
+      return NextResponse.redirect(oauthRedirectUrl('/dashboard/settings?error=invalid_state'))
     }
 
     const session = await getServerSession(authOptions)
     if (session?.user?.providerId && session!.user!.providerId !== verified.providerId) {
-      return NextResponse.redirect(appUrl('/dashboard/settings?error=session_mismatch'))
+      return NextResponse.redirect(oauthRedirectUrl('/dashboard/settings?error=session_mismatch'))
     }
 
     const providerId = verified.providerId
     const tokens = await googleCalendarService.getTokensFromCode(code)
-    await googleCalendarService.saveTokens(providerId, tokens, true)  // INT-M-03F: explicit enableSync=true (OAuth authorization)
+    await googleCalendarService.saveTokens(providerId, tokens, true)
     await googleCalendarService.syncCalendarEvents(providerId)
 
-    return NextResponse.redirect(appUrl('/dashboard/settings?success=calendar_connected'))
+    return NextResponse.redirect(oauthRedirectUrl('/dashboard/settings?success=calendar_connected'))
   } catch (error) {
     console.error('Google OAuth callback error:', error)
-    return NextResponse.redirect(appUrl('/dashboard/settings?error=auth_failed'))
+    return NextResponse.redirect(oauthRedirectUrl('/dashboard/settings?error=auth_failed'))
   }
 }

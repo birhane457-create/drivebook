@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { cloudinaryService } from '@/lib/services/cloudinary';
 import { validateUpload, DOCUMENT_ALLOWED_TYPES, MAX_DOCUMENT_BYTES } from '@/lib/uploads/validateUpload';
 import { getDrivingProfile } from '@/lib/extensions/driving/providerProfile';
+import { documentUploadRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,13 @@ export async function POST(req: NextRequest) {
 
     if (!session?.user?.providerId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // PH4-INS-03: Rate limit document uploads per provider — prevents Cloudinary cost abuse
+    const rateLimitId = getRateLimitIdentifier(session.user.providerId, req.headers.get('x-forwarded-for'), 'doc-upload')
+    const rateResult = await checkRateLimitStrict(documentUploadRateLimit, rateLimitId)
+    if (!rateResult.success) {
+      return NextResponse.json({ error: 'Too many document uploads. Please try again later.' }, { status: 429 })
     }
 
     const formData = await req.formData();

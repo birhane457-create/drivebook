@@ -16,6 +16,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // PH4-CLT-02: Restrict to CLIENT role — consistent with wallet-topup-intent
+    if (session!.user!.role !== 'CLIENT') {
+      return NextResponse.json(
+        { error: 'Forbidden' },
+        { status: 403 }
+      );
+    }
+
     const user = await prisma.user.findUnique({
       where: { email: session!.user!.email },
       include: {

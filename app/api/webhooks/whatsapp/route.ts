@@ -99,7 +99,13 @@ export async function POST(req: NextRequest) {
       return handleWebhookPayload(payload)
     }
 
-    // No app secret configured — accept without signature check (dev/testing)
+    // No app secret configured — only acceptable in development/test
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('[WhatsApp Webhook] WHATSAPP_APP_SECRET not configured in production — rejecting request')
+      return new NextResponse('Webhook not configured', { status: 503 })
+    }
+    logger.warn('[WhatsApp Webhook] WHATSAPP_APP_SECRET not set — accepting without signature check (development only)')
+    // Parse the unverified body
     const payload = await req.json()
     return handleWebhookPayload(payload)
 

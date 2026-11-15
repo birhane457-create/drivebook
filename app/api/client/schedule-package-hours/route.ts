@@ -1,5 +1,4 @@
-﻿// @ts-nocheck
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -19,9 +18,23 @@ export async function POST(req: NextRequest) {
 
     const { bookingId, providerId, hoursToSchedule } = await req.json();
 
-    if (!bookingId || !providerId || !hoursToSchedule) {
+    // PH4-CLT-03: Validate hoursToSchedule as a finite positive number within range
+    if (!bookingId || !providerId) {
       return NextResponse.json(
         { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+    if (
+      hoursToSchedule === undefined ||
+      hoursToSchedule === null ||
+      typeof hoursToSchedule !== 'number' ||
+      !isFinite(hoursToSchedule) ||
+      hoursToSchedule <= 0 ||
+      hoursToSchedule > 10
+    ) {
+      return NextResponse.json(
+        { error: 'hoursToSchedule must be a positive number between 0 and 10' },
         { status: 400 }
       );
     }
@@ -38,15 +51,19 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify the package booking exists and belongs to this user
-    const packageBooking = await prisma.booking.findFirst({
+    // Booking is owned via Customer record, not userId directly
+    const customerRecord = await prisma.customer.findFirst({
+      where: { userId: user.id },
+      select: { id: true }
+    });
+    const packageBooking = customerRecord ? await prisma.booking.findFirst({
       where: {
         id: bookingId,
-        userId: user.id,
+        customerId: customerRecord.id,
         isPackageBooking: true
       },
-      include: { customer: true
-      }
-    }) as any;
+      include: { customer: true }
+    }) as any : null;
 
     if (!packageBooking) {
       return NextResponse.json(
