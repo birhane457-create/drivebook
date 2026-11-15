@@ -869,3 +869,119 @@ No privilege escalation paths found. No admin route found that allows role self-
 4. `@ts-nocheck` on subscription route (5th instance found)
 
 **No financial integrity issues found** — ABN verification, payout settings, and subscription management all enforce correct separation between what instructors can self-report vs what requires admin confirmation.
+
+---
+
+## Group 7: Public Marketplace Routes
+
+**Files reviewed:** `app/api/public/bookings/route.ts`
+
+---
+
+### 7.1 `/api/public/bookings` — Marketplace Booking Creation
+
+**Auth required:** None (unauthenticated public endpoint)  
+**Risk surface:** Highest external exposure — no session required, processes personal data, creates user accounts
+
+**Finding PH4-PUB-01 (MEDIUM): Rate limit identifier includes customer email but not IP alone**
+- **Location:** Line 108: `getRateLimitIdentifier(undefined, ip, \`public-booking:${data.customerEmail}:${data.providerId}\`)`
+- **Issue:** Rate limit key combines IP + email + providerId. An attacker with rotating IPs (VPN, proxies) can bypass the per-IP component. Email-only limiting is per-booking-attempt which is reasonable, but the composite key means a single attacker using many emails is not rate-limited at the IP level.
+- **Impact:** Spam booking attacks with disposable emails harder to block
+- **Current mitigation:** `bookingRateLimit` (Upstash-backed, sliding window) does enforce globally per key, so email-based limiting works. IP component adds some protection.
+- **Risk:** MEDIUM — real but attacker needs valid provider IDs and email addresses
+
+**INFO: Provider eligibility gate comprehensive ✅**
+- `checkProviderEligible()` checks: exists, APPROVED, isActive, subscription, acceptingBookings, document expiry
+- All 6 checks run before booking creation
+
+**INFO: Server-side price calculation — client-supplied price ignored ✅**
+- `bookingPrice = instructor.hourlyRate * durationHours` — rate is from DB
+- Client `price` field in schema is `optional()` and never used in price calculation
+
+**INFO: Idempotency key deduplication ✅**
+- Prevents double-bookings from browser double-click or Twilio/AI retries
+- Scope guard: key must match same email to prevent cross-account replay
+
+**INFO: Conflict detection inside `$transaction` ✅**
+- Slot overlap check inside transaction prevents concurrent double-booking
+
+**INFO: Password hashed before storage ✅**
+- `bcrypt.hash(data.password, 10)` — not stored in plaintext
+
+**LOW: `ageDeclaration` field still accepted in schema**
+- **Location:** Line 36: `ageDeclaration: z.boolean().optional()`
+- **Issue:** Per Section 11 audit (AGE-1–6), `ageDeclaration` was removed from the registration flow. It persists in this public booking schema as an optional field — harmless since it's optional, but inconsistent.
+- **Recommendation:** Remove from schema to complete the AGE-removal cleanup
+
+**LOW: `termsVersion` defaults to `'1.0'` if not provided**
+- **Location:** Line 162: `termsVersion: data.termsVersion || '1.0'`
+- **Issue:** Hardcoded fallback version means if terms are updated but client doesn't send new version, the old version gets recorded
+- **Recommendation:** Read authoritative terms version from config, not client-supplied value
+
+---
+
+### 7.2 Public Routes Summary
+
+**No authentication bypass found** — unauthenticated access correctly limited to booking creation with provider eligibility gate  
+**No IDOR** — provider ID is supplied by client but gated by `checkProviderEligible()`  
+**Price integrity maintained** — server calculates price, client value ignored
+
+---
+
+---
+
+## Group 8: Cron Routes
+
+**Routes reviewed:** All 17 cron route.ts files (via grep)  
+**Files spot-checked:** check-trial-expiry, weekly-payouts, reconcile-stripe, reconciliation, slot-cleanup, notifications, lesson-reminders, document-expiry-check, cleanup-expired-bookings
+
+---
+
+### 8.1 Authorization Pattern
+
+Two accepted auth methods across cron routes:
+
+| Method | Pattern | Routes using it |
+|--------|---------|-----------------|
+| `CRON_SECRET` Bearer token | `!process.env.CRON_SECRET \|\| authHeader !== \`Bearer ${secret}\`` | Most crons |
+| Vercel-injected header | `x-vercel-cron === '1'` | 5 crons (check-trial-expiry, send-trial-expiry-alerts, notification-retry, notifications) |
+| **Neither** | No auth check | `slot-cleanup`, partially `notifications` |
+
+**Finding PH4-CRON-01 (MEDIUM): `/api/cron/slot-cleanup` has no auth check**
+- **Location:** `app/api/cron/slot-cleanup/route.ts` — comment says "CRON_SECRET Bearer check intentionally removed"
+- **Reason given:** "Vercel does not send Authorization headers on crons"
+- **Issue:** This reasoning is incorrect — Vercel does support `x-vercel-cron` header auth. The fix for `notifications` route already demonstrates this: it accepts either `CRON_SECRET` Bearer OR `x-vercel-cron`. The `slot-cleanup` route should do the same.
+- **Impact:** Anyone can trigger slot reservation cleanup at any time, causing unnecessary DB load
+- **Risk:** MEDIUM — the operation is safe (deletes expired rows only, idempotent), but unauthenticated access to any endpoint is a security gap
+- **Fix:** Add the same dual-auth pattern used by `notifications` and `notification-retry`:
+  ```typescript
+  const isVercelCron = req.headers.get('x-vercel-cron') === '1'
+  const hasCronSecret = process.env.CRON_SECRET && req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`
+  if (!isVercelCron && !hasCronSecret) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  ```
+
+---
+
+### 8.2 Cron Security Pattern Assessment
+
+**Consistent ✅:** 16 of 17 cron routes enforce auth  
+**Inconsistent ❌:** `slot-cleanup` has no auth  
+**Fail-closed ✅:** All routes with `CRON_SECRET` check explicitly deny when env var is unset (pattern: `!process.env.CRON_SECRET || authHeader !== ...`)  
+**No CRON_SECRET in Vercel env noted:** Verify `CRON_SECRET` is configured in production  
+
+**INFO: Weekly payouts batch size capped via `PAYOUT_BATCH_SIZE` env var ✅**
+- Prevents Vercel function timeouts on large instructor counts
+
+**INFO: Reconcile-stripe cron is detection-only except narrow auto-repair ✅**
+- Auto-repair only writes `stripeRefundId` when unambiguous — no ledger changes
+
+**INFO: Trial expiry cron uses `updateMany` with status guard ✅**
+- Race condition prevented (SUB-12-A fix confirmed present)
+
+---
+
+### 8.3 Credentials Check: `CRON_SECRET` in Production
+
+Verify `CRON_SECRET` is configured in Vercel production environment. If missing, all CRON_SECRET-gated cron routes allow unauthenticated calls (the guard is `!process.env.CRON_SECRET || ...` which short-circuits to `false || false = false`, passing through).
+
+---
