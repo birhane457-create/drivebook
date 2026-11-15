@@ -902,25 +902,25 @@ Cascading hang is unlikely in practice. LOW.
 
 ### Source-confirmed open findings
 
-| ID | Group | Severity | Finding | Source confirmed |
-|----|-------|----------|---------|-----------------|
-| PH4-WH-01 | Webhooks | MEDIUM | WhatsApp POST: no fail-closed guard when `WHATSAPP_APP_SECRET` unset | b0556f91 |
-| PH4-AV-01 | Availability | MEDIUM | POST `/api/availability` (voice service path): main app does not validate service credentials — hybrid gateway can be bypassed | b0556f91 |
-| PH4-DBG-01 | Debug | LOW | `/api/debug/session`: no auth gate; unauthenticated callers receive `session: null` only — not cross-user disclosure; should be restricted or removed in production | b0556f91 |
-| PH4-CAL-01 | Calendar | LOW | OAuth callback `appUrl()` uses `NEXTAUTH_URL` not `getAppUrl()` | b0556f91 |
-| PH4-CLT-02 | Client | LOW | `transactions/route`: no CLIENT role gate | b0556f91 |
-| PH4-CLT-03 | Client | LOW | `schedule-package-hours`: `hoursToSchedule` truthy check only, no numeric bounds | b0556f91 |
-| PH4-CLT-04 | Client | LOW | Quote request: no rate limit | b0556f91 |
-| PH4-CLT-05 | Client | LOW | `@ts-nocheck` in `schedule-package-hours` | b0556f91 |
-| PH4-ABN-01 | ABN | LOW | ABN verify: no session auth and no rate limit; used by instructors completing payout settings — requires provider session and per-provider rate limit | b0556f91 |
-| PH4-WH-02 | Webhooks | LOW | Stripe proxy internal `fetch()` has no timeout | b0556f91 |
-| PH4-INS-03 | Instructor | LOW | Document upload: no rate limit on POST `/api/instructor/documents` | b0556f91 |
+| ID | Group | Severity | Finding | Status |
+|----|-------|----------|---------|--------|
+| PH4-WH-01 | Webhooks | MEDIUM | WhatsApp POST: no fail-closed guard when `WHATSAPP_APP_SECRET` unset | OPEN |
+| PH4-AV-01 | Availability | MEDIUM | POST `/api/availability`: main app did not validate voice service credentials | FIX IMPLEMENTED 6e98a6df — awaiting runtime test |
+| PH4-DBG-01 | Debug | LOW | `/api/debug/session`: no auth gate | OPEN |
+| PH4-CAL-01 | Calendar | LOW | OAuth callback `appUrl()` uses `NEXTAUTH_URL` not `getAppUrl()` | OPEN |
+| PH4-CLT-02 | Client | LOW | `transactions/route`: no CLIENT role gate | OPEN |
+| PH4-CLT-03 | Client | LOW | `schedule-package-hours`: `hoursToSchedule` truthy check only, no numeric bounds | OPEN |
+| PH4-CLT-04 | Client | LOW | Quote request: no rate limit | OPEN |
+| PH4-CLT-05 | Client | LOW | `@ts-nocheck` in `schedule-package-hours` | OPEN |
+| PH4-ABN-01 | ABN | LOW | ABN verify: no session auth and no rate limit | FIX IMPLEMENTED 6e98a6df — awaiting runtime test |
+| PH4-WH-02 | Webhooks | LOW | Stripe proxy internal `fetch()` has no timeout | OPEN |
+| PH4-INS-03 | Instructor | LOW | Document upload: no rate limit | OPEN |
 
-**PH4-AV-01 scope:** GET `/api/availability/slots` — public access is intentional for the marketplace booking flow; add rate limiting only. POST `/api/availability` — voice service path; hybrid gateway applies service auth before proxying, but main app handler does not validate forwarded credentials; direct access bypasses the gateway.
+**PH4-AV-01 fix:** POST `/api/availability` now wrapped with `withVoiceServiceAuth`. Accepts `VOICE_SERVICE_API_KEY` (x-api-key or Bearer) or `VAPI_WEBHOOK_SECRET` (x-vapi-secret). GET `/api/availability/slots` unchanged — public access intentional for marketplace booking flow. Remaining verification: real middleware request tests; confirm `VOICE_SERVICE_API_KEY` and `VAPI_WEBHOOK_SECRET` configured in Vercel production.
 
-**PH4-ABN-01 scope:** ABN verification is called from instructor payout settings (`/dashboard/settings/payout`), not from public registration. Correct control is provider session gate + per-provider rate limit. Public access is not required.
+**PH4-ABN-01 fix:** Route now requires `role === 'provider'` session. Returns 401 (no session) or 403 (wrong role) before the rate limit check. Per-provider rate limit `abnVerifyRateLimit` (10/hour) applied after session check. `checkRateLimitStrict` fails closed in production when Redis is unavailable. Remaining verification: real session/rate-limit tests; confirm Redis and session configuration in production.
 
-**2 MEDIUM, 9 LOW — awaiting batch fix.**
+**1 MEDIUM open, 8 LOW open — 2 fixes implemented awaiting runtime verification.**
 
 ### Retired or not carried forward
 
@@ -951,8 +951,8 @@ Cascading hang is unlikely in practice. LOW.
 **Total route.ts files:** 278  
 **Groups covered:** 18 (all)  
 **Files fully inspected:** ~80  
-**Open findings:** 2 MEDIUM, 9 LOW  
-**Findings already fixed in Phase 4:** 10  
+**Open findings:** 1 MEDIUM, 8 LOW  
+**Fixes implemented this audit:** 12 (10 source-verified, 2 awaiting runtime test)  
 **Phase 4 audit:** COMPLETE — batch fix pending
 
 ---
