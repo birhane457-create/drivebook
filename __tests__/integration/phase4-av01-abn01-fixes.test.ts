@@ -81,16 +81,28 @@ describe('PH4-AV-01: authenticateVoiceService() — real middleware', () => {
   })
 
   it('denies when VOICE_SERVICE_API_KEY env var is not configured', async () => {
+    // The module-level constant is captured at import time, so we must reset
+    // the module cache and reimport after removing the env vars.
+    vi.resetModules()
+    const savedKey = process.env.VOICE_SERVICE_API_KEY
+    const savedVapi = process.env.VAPI_WEBHOOK_SECRET
     delete process.env.VOICE_SERVICE_API_KEY
     delete process.env.VAPI_WEBHOOK_SECRET
-    const { authenticateVoiceService } = await import('@/lib/middleware/voiceServiceAuth')
-    const req = new NextRequest('http://localhost/api/availability', {
-      method: 'POST',
-      headers: { 'x-api-key': 'any-key' },
-    })
-    const result = authenticateVoiceService(req)
-    // Key provided but no configured secret to match against — must deny
-    expect(result.authenticated).toBe(false)
+    try {
+      const { authenticateVoiceService } = await import('@/lib/middleware/voiceServiceAuth')
+      const req = new NextRequest('http://localhost/api/availability', {
+        method: 'POST',
+        headers: { 'x-api-key': 'any-key' },
+      })
+      const result = authenticateVoiceService(req)
+      // Key provided but nothing configured to match against — must deny
+      expect(result.authenticated).toBe(false)
+    } finally {
+      // Restore so other tests are unaffected
+      if (savedKey !== undefined) process.env.VOICE_SERVICE_API_KEY = savedKey
+      if (savedVapi !== undefined) process.env.VAPI_WEBHOOK_SECRET = savedVapi
+      vi.resetModules()
+    }
   })
 })
 

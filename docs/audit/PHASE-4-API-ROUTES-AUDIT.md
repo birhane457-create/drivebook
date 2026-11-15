@@ -900,7 +900,7 @@ Cascading hang is unlikely in practice. LOW.
 
 **Accuracy note:** Items marked FIXED below were verified in source by independent review. Items marked as open findings were confirmed in source at the commit referenced.
 
-### Source-confirmed open findings
+### Phase 4 findings and remediation status
 
 | ID | Group | Severity | Finding | Status |
 |----|-------|----------|---------|--------|
