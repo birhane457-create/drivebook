@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -6,46 +5,9 @@ import { stripeService } from '@/lib/services/stripe';
 import { prisma } from '@/lib/prisma';
 import { getCommissionRate } from '@/lib/services/platform-pricing';
 import { getDisplayName } from '@/lib/utils/account';
-import { checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
+import { bookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit';
 
 export const dynamic = 'force-dynamic';
-
-// âœ… SECURITY FIX: Rate limiting configuration
-// 10 requests per minute per user/IP prevents Stripe API abuse
-const createIntentRateLimit = {
-  limit: async (identifier: string) => {
-    // Use in-memory rate limiter with 10 requests per 60 seconds
-    const requests: Map<string, number[]> = (global as any).__createIntentRateLimits || new Map();
-    (global as any).__createIntentRateLimits = requests;
-    
-    const now = Date.now();
-    const windowMs = 60 * 1000; // 60 seconds
-    const windowStart = now - windowMs;
-    const maxRequests = 10;
-    
-    const existing = requests.get(identifier) || [];
-    const recentRequests = existing.filter(time => time > windowStart);
-    
-    if (recentRequests.length >= maxRequests) {
-      return {
-        success: false,
-        limit: maxRequests,
-        remaining: 0,
-        reset: Math.min(...recentRequests) + windowMs,
-      };
-    }
-    
-    recentRequests.push(now);
-    requests.set(identifier, recentRequests);
-    
-    return {
-      success: true,
-      limit: maxRequests,
-      remaining: maxRequests - recentRequests.length,
-      reset: now + windowMs,
-    };
-  }
-};
 
 export async function POST(req: NextRequest) {
   try {
@@ -61,7 +23,7 @@ export async function POST(req: NextRequest) {
     );
     
     const rateLimitResult = await checkRateLimitStrict(
-      createIntentRateLimit, 
+      bookingRateLimit,
       rateLimitId
     );
     

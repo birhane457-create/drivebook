@@ -23,6 +23,8 @@ const schema = z.object({
 
 export async function GET() {
   const session = await getServerSession(authOptions);
+  // Role is stored as lowercase 'provider' in DB and JWT — this casing is correct.
+  // Other routes using uppercase 'PROVIDER' are inconsistent; this one matches the actual value.
   if (!session?.user || session!.user!.role !== 'provider') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

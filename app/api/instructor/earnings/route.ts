@@ -61,9 +61,14 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Explicit role guard — earnings data is provider-only
+    if (session.user.role !== 'provider') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Resolve providerId — prefer JWT value, fall back to userId lookup

@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
     // Only allow if no SUPER_ADMIN exists yet
     const existingAdmin = await prisma.user.findFirst({ where: { role: 'SUPER_ADMIN' } });
     if (existingAdmin) {
-      return NextResponse.json({ error: 'Admin account already exists' }, { status: 400 });
+      // Return 404 — do not reveal endpoint existence after bootstrapping is complete
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });

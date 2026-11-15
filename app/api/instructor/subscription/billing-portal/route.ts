@@ -16,6 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getAppUrl } from '@/lib/utils/appUrl';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: 'subscription',
-      success_url: `${process.env.NEXTAUTH_URL}/dashboard/subscription?success=true&payment_added=true`,
+      success_url: `${getAppUrl()}/dashboard/subscription?success=true&payment_added=true`,
       cancel_url: returnUrl,
       metadata: {
         providerId: user.provider?.id,

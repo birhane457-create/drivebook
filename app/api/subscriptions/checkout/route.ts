@@ -1,9 +1,15 @@
-// @ts-nocheck
 import { NextRequest, NextResponse } from 'next/server';
+import Stripe from 'stripe';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { SUBSCRIPTION_PLANS, getStripePriceId } from '@/lib/config/subscriptions';
+import { getAppUrl } from '@/lib/utils/appUrl';
+
+// Module-level Stripe instance — not re-instantiated per request
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
 
 
 export const dynamic = 'force-dynamic';
@@ -33,33 +39,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     }
 
-    // Check if Stripe is configured
-    if (!process.env.STRIPE_SECRET_KEY) {
-      // If Stripe not configured, just start trial
+    // Stripe is configured — create checkout session
+    if (!stripe) {
+      // Stripe not configured — start trial directly (dev/staging without Stripe keys)
       const plan = SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS];
       const now = new Date();
       const trialEnd = new Date(now.getTime() + plan.trialDays * 24 * 60 * 60 * 1000);
-
       await prisma.provider.update({
         where: { id: user.provider?.id },
         data: {
-          subscriptionTier: tier  as any,
+          subscriptionTier: tier as any,
           subscriptionStatus: 'TRIAL',
-          commissionRate: plan.commissionRate,
-          newStudentBonus: plan.newStudentBonus,
           trialEndsAt: trialEnd,
         },
       });
-
-      return NextResponse.json({
-        success: true,
-        message: `Started ${plan.trialDays}-day free trial`,
-        trialEndsAt: trialEnd,
-      });
+      return NextResponse.json({ success: true, message: `Started ${plan.trialDays}-day free trial`, trialEndsAt: trialEnd });
     }
-
-    // Stripe is configured - create checkout session
-    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
     const priceId = getStripePriceId(tier as any, billingCycle);
 
     // Only give a trial if this instructor has never had one
@@ -79,8 +74,8 @@ export async function POST(req: NextRequest) {
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.NEXTAUTH_URL}/dashboard/subscription?success=true`,
-      cancel_url: `${process.env.NEXTAUTH_URL}/dashboard/subscription?cancelled=true`,
+      success_url: `${getAppUrl()}/dashboard/subscription?success=true`,
+      cancel_url: `${getAppUrl()}/dashboard/subscription?cancelled=true`,
       metadata: {
         providerId: user.provider?.id,
         tier,

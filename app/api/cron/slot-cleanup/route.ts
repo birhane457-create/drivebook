@@ -21,6 +21,16 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
+    // Auth: Vercel Crons send x-vercel-cron header; external schedulers use CRON_SECRET Bearer.
+    // The original CRON_SECRET-only check was removed because Vercel does not send Authorization
+    // headers on cron invocations — but x-vercel-cron is a separate header that IS sent.
+    const isVercelCron = req.headers.get('x-vercel-cron') === '1';
+    const authHeader = req.headers.get('authorization');
+    const hasCronSecret = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
+    if (!isVercelCron && !hasCronSecret) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const result = await cleanupExpiredSlotReservations();
 
     await pingCronHealth('slot-cleanup');

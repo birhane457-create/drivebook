@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { SUBSCRIPTION_PLANS, getTrialEndDate, getStripePriceId } from '@/lib/config/subscriptions';
 import { cancelSubscription } from '@/lib/services/subscription-cancel';
 import { createOrReuseTrialSubscription } from '@/lib/services/subscription-lifecycle';
+import { getAppUrl } from '@/lib/utils/appUrl';
 
 
 export const dynamic = 'force-dynamic';
@@ -154,8 +155,8 @@ export async function POST(req: NextRequest) {
           quantity: 1,
         }],
         mode: 'subscription',
-        success_url: `${process.env.NEXTAUTH_URL}/dashboard/subscription?success=true&payment_added=true`,
-        cancel_url: `${process.env.NEXTAUTH_URL}/dashboard/subscription?cancelled=true`,
+        success_url: `${getAppUrl()}/dashboard/subscription?success=true&payment_added=true`,
+        cancel_url: `${getAppUrl()}/dashboard/subscription?cancelled=true`,
         metadata: {
           providerId: user.provider?.id,
           tier,
