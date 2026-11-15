@@ -20,11 +20,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const startTime = Date.now();
 
-  // ── Auth: CRON_SECRET Bearer token (external) or Vercel Cron header ──────
+  // Auth: CRON_SECRET Bearer token only.
+  // x-vercel-cron header is not used for authentication — any HTTP caller can send it.
   const authHeader = req.headers.get('authorization');
-  const isVercelCron = req.headers.get('x-vercel-cron') === '1';
-  const hasCronSecret = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
-  if (!isVercelCron && !hasCronSecret) {
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

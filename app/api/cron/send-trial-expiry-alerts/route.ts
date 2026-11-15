@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { emailService } from '@/lib/services/email';
 import { pingCronHealth, failCronHealth } from '@/lib/services/cron-health';
@@ -13,15 +13,15 @@ export const dynamic = 'force-dynamic';
  * Purpose: Send trial expiry notifications to instructors
  * Schedule: Daily at 2am UTC (after check-trial-expiry at 1am UTC)
  *
- * Emails sent (all pricing pulled from SUBSCRIPTION_PLANS config â€” never hardcoded):
- *   - 7 days before trial ends  â†’ one-time warning (TRIAL_WARNING_EMAIL_SENT)
- *   - 3 days before trial ends  â†’ one-time reminder (TRIAL_3DAY_WARNING_EMAIL_SENT)
- *   - Within 24h after expiry   â†’ one-time expiry notice (TRIAL_EXPIRED_EMAIL_SENT)
+ * Emails sent (all pricing pulled from SUBSCRIPTION_PLANS config Ã¢â‚¬â€ never hardcoded):
+ *   - 7 days before trial ends  Ã¢â€ â€™ one-time warning (TRIAL_WARNING_EMAIL_SENT)
+ *   - 3 days before trial ends  Ã¢â€ â€™ one-time reminder (TRIAL_3DAY_WARNING_EMAIL_SENT)
+ *   - Within 24h after expiry   Ã¢â€ â€™ one-time expiry notice (TRIAL_EXPIRED_EMAIL_SENT)
  *
  * Deduplication: AuditLog entries prevent duplicate sends per subscription.
  */
 
-/** Build the plan comparison table rows from config â€” no hardcoded prices */
+/** Build the plan comparison table rows from config Ã¢â‚¬â€ no hardcoded prices */
 function buildPlanTableRows(): string {
   const tiers: SubscriptionTier[] = ['BASIC', 'PRO', 'STUDIO', 'PREMIUM'];
   return tiers
@@ -48,7 +48,7 @@ function buildPlanList(): string {
   return tiers
     .map((tier) => {
       const plan = SUBSCRIPTION_PLANS[tier];
-      return `<li><strong>${plan.name} ($${plan.monthlyPrice}/month)</strong> â€” ${plan.commissionRate}% commission</li>`;
+      return `<li><strong>${plan.name} ($${plan.monthlyPrice}/month)</strong> Ã¢â‚¬â€ ${plan.commissionRate}% commission</li>`;
     })
     .join('');
 }
@@ -60,11 +60,10 @@ const HELP_URL = `${BASE_URL}/help`;
 export async function GET(req: NextRequest) {
   const startTime = Date.now();
 
-  // â”€â”€ Auth: CRON_SECRET Bearer token (external) or Vercel Cron header â”€â”€â”€â”€â”€â”€
+  // Auth: CRON_SECRET Bearer token only.
+  // x-vercel-cron header is not used for authentication — any HTTP caller can send it.
   const authHeader = req.headers.get('authorization');
-  const isVercelCron = req.headers.get('x-vercel-cron') === '1';
-  const hasCronSecret = process.env.CRON_SECRET && authHeader === `Bearer ${process.env.CRON_SECRET}`;
-  if (!isVercelCron && !hasCronSecret) {
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -77,7 +76,7 @@ export async function GET(req: NextRequest) {
     let remindersSent = 0;
     let expiryNotifications = 0;
 
-    // â”€â”€ 1. 7-DAY WARNING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Ã¢â€â‚¬Ã¢â€â‚¬ 1. 7-DAY WARNING Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     const upcomingExpiries = await prisma.subscription.findMany({
       where: {
         status: 'TRIAL',
@@ -126,7 +125,7 @@ export async function GET(req: NextRequest) {
                 View Plans &amp; Upgrade
               </a>
             </p>
-            <p>You can add your payment method now â€” you won't be charged until your trial ends.</p>
+            <p>You can add your payment method now Ã¢â‚¬â€ you won't be charged until your trial ends.</p>
             <p>Questions? Visit our <a href="${HELP_URL}">help center</a> or reply to this email.</p>
           `,
         });
@@ -149,7 +148,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // â”€â”€ 2. 3-DAY REMINDER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Ã¢â€â‚¬Ã¢â€â‚¬ 2. 3-DAY REMINDER Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     const threeDayExpiries = await prisma.subscription.findMany({
       where: {
         status: 'TRIAL',
@@ -185,12 +184,12 @@ export async function GET(req: NextRequest) {
         await emailService.sendGenericEmail({
           from: 'DriveBook Payments <payments@drivebook.com.au>',
           to: sub.provider.user.email,
-          subject: `â° ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left on your DriveBook trial`,
+          subject: `Ã¢ÂÂ° ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left on your DriveBook trial`,
           html: `
-            <h2>Last chance â€” trial ending ${daysLeft === 1 ? 'tomorrow' : `in ${daysLeft} days`}</h2>
+            <h2>Last chance Ã¢â‚¬â€ trial ending ${daysLeft === 1 ? 'tomorrow' : `in ${daysLeft} days`}</h2>
             <p>Hi ${sub.provider.name},</p>
             <p>Your <strong>${tierName}</strong> trial ends on <strong>${expiryDateStr}</strong>.</p>
-            <p>After that, your account will switch to <strong>read-only mode</strong> â€” you won't be able to create new bookings or add students until you subscribe.</p>
+            <p>After that, your account will switch to <strong>read-only mode</strong> Ã¢â‚¬â€ you won't be able to create new bookings or add students until you subscribe.</p>
             <p>It takes less than 2 minutes to add a payment method. You won't be charged until your trial ends.</p>
             <p>
               <a href="${SUBSCRIPTION_URL}" style="background-color:#dc2626;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">
@@ -219,7 +218,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // â”€â”€ 3. EXPIRY NOTIFICATION (within 24h after expiry) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Ã¢â€â‚¬Ã¢â€â‚¬ 3. EXPIRY NOTIFICATION (within 24h after expiry) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
     const recentlyExpired = await prisma.subscription.findMany({
       where: {
         status: 'EXPIRED',
@@ -252,16 +251,16 @@ export async function GET(req: NextRequest) {
         await emailService.sendGenericEmail({
           from: 'DriveBook Payments <payments@drivebook.com.au>',
           to: sub.provider.user.email,
-          subject: `Your DriveBook trial ended â€” action required to restore access`,
+          subject: `Your DriveBook trial ended Ã¢â‚¬â€ action required to restore access`,
           html: `
             <h2>Your trial has ended</h2>
             <p>Hi ${sub.provider.name},</p>
             <p>Your free trial ended on <strong>${expiryDateStr}</strong>.</p>
             <p>Your account is now in <strong>read-only mode</strong>. You can still view all your historical data, but:</p>
             <ul>
-              <li>âŒ Cannot create new bookings</li>
-              <li>âŒ Cannot add students</li>
-              <li>âŒ Cannot change settings</li>
+              <li>Ã¢ÂÅ’ Cannot create new bookings</li>
+              <li>Ã¢ÂÅ’ Cannot add students</li>
+              <li>Ã¢ÂÅ’ Cannot change settings</li>
             </ul>
             <p><strong>Choose a plan to restore full access:</strong></p>
             <table style="width:100%;border-collapse:collapse;">
