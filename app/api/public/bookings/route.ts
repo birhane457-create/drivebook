@@ -7,7 +7,7 @@ import { calculateTravelTimeToNextBooking } from '@/lib/services/travelTime'
 import { paymentService } from '@/lib/services/payment'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
-import { bookingRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
+import { bookingRateLimit, publicBookingIpRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
 
 // Maximum Idempotency-Key length accepted (UUID = 36 chars; allow generous headroom)
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128
@@ -101,17 +101,27 @@ export async function POST(req: NextRequest) {
       select: { phone: true },
     }).then(r => r?.phone ?? '')
 
-    // Rate limiting: limit bookings per client/instructor/IP
-    const ip = req.headers.get('x-forwarded-for') || req.ip || 'unknown'
+    // Rate limiting — two independent limits, both must pass:
+    // 1. IP-level: 20 attempts per hour per client IP (across all emails and providers)
+    // 2. Email+provider: existing per-booking-identity limit
+    // The trusted client IP is taken from x-forwarded-for, which Vercel sets from the
+    // real client address. The first value in the header is the client IP on Vercel.
+    const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown'
+
+    const ipRate = await checkRateLimitStrict(publicBookingIpRateLimit, getRateLimitIdentifier(undefined, ip, 'public-booking-ip'))
+    if (!ipRate.success) {
+      return new NextResponse(JSON.stringify({ error: ipRate.error }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json', ...(ipRate.headers || {}) },
+      })
+    }
+
     const identifier = getRateLimitIdentifier(undefined, ip, `public-booking:${data.customerEmail}:${data.providerId}`)
     const rate = await checkRateLimitStrict(bookingRateLimit, identifier)
     if (!rate.success) {
       return new NextResponse(JSON.stringify({ error: rate.error }), {
         status: 429,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(rate.headers || {}),
-        },
+        headers: { 'Content-Type': 'application/json', ...(rate.headers || {}) },
       })
     }
 

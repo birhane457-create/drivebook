@@ -158,6 +158,21 @@ export const bookingRateLimit = createRateLimiter(10, '1 m');
  * Prevents OpenAI cost abuse from spammed bio requests
  * 5 generations per hour per instructor
  */
+/**
+ * Public Booking IP Rate Limit
+ * Independent IP-level limit for the unauthenticated public booking endpoint.
+ * 20 booking attempts per hour per IP address, across all email addresses and providers.
+ * Applied in addition to the per-email+provider limit — both must pass.
+ * Threshold chosen to accommodate shared NAT/corporate networks;
+ * monitor false positives and adjust via UPSTASH analytics before tightening.
+ */
+export const publicBookingIpRateLimit = createRateLimiter(20, '1 h');
+
+/**
+ * Bio Generation Rate Limit
+ * Prevents AI bio generation abuse
+ * 5 generations per hour per instructor
+ */
 export const bioGenerateRateLimit = createRateLimiter(5, '1 h');
 
 /**

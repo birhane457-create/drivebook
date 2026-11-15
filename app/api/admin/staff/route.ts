@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
 const createSchema = z.object({
   email: z.string().email(),
   name: z.string().min(2),
-  password: z.string().min(8),
+  password: z.string().min(12, 'Password must be at least 12 characters'),
   department: z.enum(['ADMIN', 'FINANCE', 'OPERATIONS', 'SUPPORT']),
 })
 
