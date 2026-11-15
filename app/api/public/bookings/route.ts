@@ -7,7 +7,7 @@ import { calculateTravelTimeToNextBooking } from '@/lib/services/travelTime'
 import { paymentService } from '@/lib/services/payment'
 import { z } from 'zod'
 import bcrypt from 'bcryptjs'
-import { bookingRateLimit, publicBookingIpRateLimit, checkRateLimitStrict, getRateLimitIdentifier } from '@/lib/ratelimit'
+import { bookingRateLimit, publicBookingIpRateLimit, checkRateLimitStrict } from '@/lib/ratelimit'
 
 // Maximum Idempotency-Key length accepted (UUID = 36 chars; allow generous headroom)
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128
@@ -38,6 +38,22 @@ const publicBookingSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    // ── Extract trusted client IP immediately ─────────────────────────────────
+    // The first value in x-forwarded-for is set by Vercel's proxy infrastructure
+    // and cannot be prepended by the client on Vercel deployments.
+    const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown'
+
+    // ── IP-level rate limit (runs before JSON parsing and DB lookups) ─────────
+    // 20 booking attempts per hour per IP, across all email addresses and providers.
+    // Protects JSON parsing, schema validation, and idempotency checks from flooding.
+    const ipRate = await checkRateLimitStrict(publicBookingIpRateLimit, `public-booking-ip:${ip}`)
+    if (!ipRate.success) {
+      return new NextResponse(JSON.stringify({ error: ipRate.error }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json', ...(ipRate.headers || {}) },
+      })
+    }
+
     const body = await req.json()
     const data = publicBookingSchema.parse(body)
 
@@ -101,23 +117,12 @@ export async function POST(req: NextRequest) {
       select: { phone: true },
     }).then(r => r?.phone ?? '')
 
-    // Rate limiting — two independent limits, both must pass:
-    // 1. IP-level: 20 attempts per hour per client IP (across all emails and providers)
-    // 2. Email+provider: existing per-booking-identity limit
-    // The trusted client IP is taken from x-forwarded-for, which Vercel sets from the
-    // real client address. The first value in the header is the client IP on Vercel.
-    const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown'
-
-    const ipRate = await checkRateLimitStrict(publicBookingIpRateLimit, getRateLimitIdentifier(undefined, ip, 'public-booking-ip'))
-    if (!ipRate.success) {
-      return new NextResponse(JSON.stringify({ error: ipRate.error }), {
-        status: 429,
-        headers: { 'Content-Type': 'application/json', ...(ipRate.headers || {}) },
-      })
-    }
-
-    const identifier = getRateLimitIdentifier(undefined, ip, `public-booking:${data.customerEmail}:${data.providerId}`)
-    const rate = await checkRateLimitStrict(bookingRateLimit, identifier)
+    // ── Email+provider rate limit ─────────────────────────────────────────────
+    // Per-identity limit: same email + same provider combination globally,
+    // regardless of the IP address. Key deliberately excludes IP so this limit
+    // cannot be bypassed by switching IPs.
+    const emailProviderKey = `public-booking:${data.customerEmail.toLowerCase()}:${data.providerId}`
+    const rate = await checkRateLimitStrict(bookingRateLimit, emailProviderKey)
     if (!rate.success) {
       return new NextResponse(JSON.stringify({ error: rate.error }), {
         status: 429,

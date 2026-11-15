@@ -87,7 +87,6 @@ describe('PH4-PUB-01: Public booking IP-level rate limit', () => {
   it('publicBookingIpRateLimit is exported from lib/ratelimit.ts', async () => {
     const src = readFileSync(resolve(process.cwd(), 'lib/ratelimit.ts'), 'utf-8')
     expect(src).toContain('publicBookingIpRateLimit')
-    // 20 per hour
     expect(src).toContain("createRateLimiter(20, '1 h')")
   })
 
@@ -98,70 +97,108 @@ describe('PH4-PUB-01: Public booking IP-level rate limit', () => {
 
   it('public bookings route retains existing email+provider limit', async () => {
     const src = readFileSync(resolve(process.cwd(), 'app/api/public/bookings/route.ts'), 'utf-8')
-    // Both limiters must be present
     expect(src).toContain('publicBookingIpRateLimit')
     expect(src).toContain('bookingRateLimit')
   })
 
-  it('IP is extracted from x-forwarded-for first value only (trusted proxy header)', async () => {
+  it('IP key does not contain email or providerId', async () => {
     const src = readFileSync(resolve(process.cwd(), 'app/api/public/bookings/route.ts'), 'utf-8')
-    // Takes first value only via split(',')[0] — not the full header
+    // IP key must be a fixed prefix + IP only
+    expect(src).toContain('`public-booking-ip:${ip}`')
+    // IP key must not embed email or providerId
+    expect(src).not.toContain('`public-booking-ip:${ip}:${data.')
+  })
+
+  it('email+provider key does not contain IP address', async () => {
+    const src = readFileSync(resolve(process.cwd(), 'app/api/public/bookings/route.ts'), 'utf-8')
+    // Key uses normalised email + providerId — no IP variable
+    expect(src).toContain('`public-booking:${data.customerEmail.toLowerCase()}:${data.providerId}`')
+    // The email key must not append ip
+    const emailKeyLine = src.split('\n').find(l => l.includes('emailProviderKey'))
+    expect(emailKeyLine).toBeDefined()
+    expect(emailKeyLine).not.toContain('ip')
+  })
+
+  it('IP is extracted from first x-forwarded-for value only (trusted proxy header)', async () => {
+    const src = readFileSync(resolve(process.cwd(), 'app/api/public/bookings/route.ts'), 'utf-8')
     expect(src).toContain("split(',')[0].trim()")
   })
 
-  it('IP limit check runs before email+provider limit check', async () => {
+  it('IP check runs before req.json() — protects body parsing from flooding', async () => {
     const src = readFileSync(resolve(process.cwd(), 'app/api/public/bookings/route.ts'), 'utf-8')
-    // The IP limiter call uses the key 'public-booking-ip'; email limiter uses the email+provider key
-    const ipCallIdx = src.indexOf('public-booking-ip')
-    const emailCallIdx = src.indexOf('public-booking:${data.customerEmail}')
-    expect(ipCallIdx).toBeGreaterThan(-1)
-    expect(emailCallIdx).toBeGreaterThan(-1)
-    // IP limit call must appear before email+provider limit call in source
-    expect(ipCallIdx).toBeLessThan(emailCallIdx)
+    const ipCheckIdx = src.indexOf('publicBookingIpRateLimit')
+    const jsonParseIdx = src.indexOf('req.json()')
+    expect(ipCheckIdx).toBeGreaterThan(-1)
+    expect(jsonParseIdx).toBeGreaterThan(-1)
+    expect(ipCheckIdx).toBeLessThan(jsonParseIdx)
   })
 
-  it('IP rotation across different emails: same IP is limited regardless of email', () => {
-    // Simulates the IP key construction
+  it('email+provider check runs after body is parsed', async () => {
+    const src = readFileSync(resolve(process.cwd(), 'app/api/public/bookings/route.ts'), 'utf-8')
+    const jsonParseIdx = src.indexOf('req.json()')
+    const emailKeyIdx = src.indexOf('emailProviderKey')
+    expect(jsonParseIdx).toBeGreaterThan(-1)
+    expect(emailKeyIdx).toBeGreaterThan(-1)
+    expect(emailKeyIdx).toBeGreaterThan(jsonParseIdx)
+  })
+
+  it('key construction: IP rotation across different emails produces same IP bucket', () => {
+    // Replicates the actual key construction in the route
     const buildIpKey = (ip: string) => `public-booking-ip:${ip}`
-    const buildEmailKey = (ip: string, email: string, providerId: string) =>
-      `public-booking:${email}:${providerId}:${ip}`
+    const buildEmailKey = (email: string, providerId: string) =>
+      `public-booking:${email.toLowerCase()}:${providerId}`
 
     const ip = '1.2.3.4'
     const emails = ['a@test.com', 'b@test.com', 'c@test.com']
     const providerId = 'prov-1'
 
-    // All requests from same IP map to same IP key → same limiter bucket
+    // All requests from same IP → same IP bucket
     const ipKeys = emails.map(() => buildIpKey(ip))
-    expect(ipKeys.every(k => k === ipKeys[0])).toBe(true)
+    expect(ipKeys.every(k => k === `public-booking-ip:${ip}`)).toBe(true)
 
-    // Each email+provider combination maps to different email key → different buckets
-    const emailKeys = emails.map(e => buildEmailKey(ip, e, providerId))
-    const uniqueEmailKeys = new Set(emailKeys)
-    expect(uniqueEmailKeys.size).toBe(emails.length)
+    // Different emails → different email+provider buckets (IP-independent)
+    const emailKeys = emails.map(e => buildEmailKey(e, providerId))
+    expect(new Set(emailKeys).size).toBe(emails.length)
+
+    // Email keys do not contain the IP — switching IP does not create new email bucket
+    emailKeys.forEach(k => expect(k).not.toContain(ip))
   })
 
-  it('same email across different IPs: each IP has its own IP limit bucket', () => {
-    const buildIpKey = (ip: string) => `public-booking-ip:${ip}`
+  it('key construction: same email from different IPs hits same email bucket', () => {
+    const buildEmailKey = (email: string, providerId: string) =>
+      `public-booking:${email.toLowerCase()}:${providerId}`
 
     const ips = ['1.2.3.4', '5.6.7.8', '9.10.11.12']
-    const ipKeys = ips.map(ip => buildIpKey(ip))
-    const uniqueKeys = new Set(ipKeys)
+    const email = 'user@test.com'
+    const providerId = 'prov-1'
 
-    // Different IPs → different IP limit buckets → not affected by each other
-    expect(uniqueKeys.size).toBe(ips.length)
+    // All keys identical regardless of source IP — policy enforced globally
+    const emailKeys = ips.map(() => buildEmailKey(email, providerId))
+    expect(new Set(emailKeys).size).toBe(1)
+    expect(emailKeys[0]).toBe('public-booking:user@test.com:prov-1')
   })
 
-  it('shared IP scenario: multiple users behind same IP share the IP limit', () => {
-    // This is the shared-network trade-off documented in the limiter comment.
-    // The IP limit is intentionally generous (20/hour) to minimise false positives.
+  it('key construction: email is normalised to lowercase', () => {
+    const buildEmailKey = (email: string, providerId: string) =>
+      `public-booking:${email.toLowerCase()}:${providerId}`
+
+    expect(buildEmailKey('User@Test.COM', 'prov-1'))
+      .toBe(buildEmailKey('user@test.com', 'prov-1'))
+  })
+
+  it('shared IP scenario: multiple users behind same IP share the IP bucket by design', () => {
     const buildIpKey = (ip: string) => `public-booking-ip:${ip}`
+    const buildEmailKey = (email: string, providerId: string) =>
+      `public-booking:${email.toLowerCase()}:${providerId}`
 
-    const sharedIp = '203.0.113.1' // RFC 5737 test address
-    const user1Key = buildIpKey(sharedIp)
-    const user2Key = buildIpKey(sharedIp)
+    const sharedIp = '203.0.113.1'
 
-    // Both users behind the shared IP hit the same bucket — by design.
-    // The email+provider limit (second check) still differentiates them.
-    expect(user1Key).toBe(user2Key)
+    // Both users map to the same IP bucket — shared NAT effect is acknowledged
+    expect(buildIpKey(sharedIp)).toBe(buildIpKey(sharedIp))
+
+    // But their email+provider buckets are independent
+    const key1 = buildEmailKey('user1@a.com', 'prov-1')
+    const key2 = buildEmailKey('user2@b.com', 'prov-1')
+    expect(key1).not.toBe(key2)
   })
 })
