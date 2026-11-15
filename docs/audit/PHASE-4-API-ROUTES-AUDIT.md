@@ -13,7 +13,7 @@
 **Note:** The earlier "41 route groups" count referred to directories, not files. Individual `route.ts` files are the correct unit. The initial v1.1 and v1.2 sections below reflect audit work from 2026-11-14 and are preserved as historical record. The active findings table is in the **Phase 4 — All Groups Open Findings** section at the bottom.
 
 **Executive Summary:**  
-Initial audit of 6 critical routes identified 3 CRITICAL issues. Duplicate GET fixed (6f44dc92). OTP security defects fixed across two commits (c0d74ad7, c1bd5c6d). Subscription bypass and DB fail-open fixed (c779522f). Remaining items from this document that are still open: Marketplace 503 status code, transaction timeouts, and the informational/low items below.
+Phase 4 is complete. All 18 route groups covered; 278 route.ts files inventoried; approximately 80 fully inspected. Prior critical fixes: duplicate GET (6f44dc92), OTP security (c0d74ad7–c1bd5c6d), subscription bypass (c779522f), Phase 4 security findings (f31a2f09–018af72d). Carry-forward items from the initial v1.1 pass (Marketplace 503 status code, PH4-REG-01; transaction timeouts, PH4-REG-02) remain LOW priority and are recorded in the Critical Action Items section. Active open findings are in the Phase 4 — All Groups Open Findings table.
 
 ---
 
@@ -904,17 +904,21 @@ Cascading hang is unlikely in practice. LOW.
 
 | ID | Group | Severity | Finding | Source confirmed |
 |----|-------|----------|---------|-----------------|
-| PH4-WH-01 | Webhooks | MEDIUM | WhatsApp POST: no fail-closed when `WHATSAPP_APP_SECRET` unset | b0556f91 |
-| PH4-AV-01 | Availability | MEDIUM | `/api/availability`: no rate limit; public access scope needs threat-model decision | b0556f91 |
-| PH4-DBG-01 | Debug | LOW | `/api/debug/session`: no auth gate; unauthenticated callers receive only `session: null` — not cross-user disclosure; should be restricted or removed in production | b0556f91 |
+| PH4-WH-01 | Webhooks | MEDIUM | WhatsApp POST: no fail-closed guard when `WHATSAPP_APP_SECRET` unset | b0556f91 |
+| PH4-AV-01 | Availability | MEDIUM | POST `/api/availability` (voice service path): main app does not validate service credentials — hybrid gateway can be bypassed | b0556f91 |
+| PH4-DBG-01 | Debug | LOW | `/api/debug/session`: no auth gate; unauthenticated callers receive `session: null` only — not cross-user disclosure; should be restricted or removed in production | b0556f91 |
 | PH4-CAL-01 | Calendar | LOW | OAuth callback `appUrl()` uses `NEXTAUTH_URL` not `getAppUrl()` | b0556f91 |
 | PH4-CLT-02 | Client | LOW | `transactions/route`: no CLIENT role gate | b0556f91 |
 | PH4-CLT-03 | Client | LOW | `schedule-package-hours`: `hoursToSchedule` truthy check only, no numeric bounds | b0556f91 |
 | PH4-CLT-04 | Client | LOW | Quote request: no rate limit | b0556f91 |
 | PH4-CLT-05 | Client | LOW | `@ts-nocheck` in `schedule-package-hours` | b0556f91 |
-| PH4-ABN-01 | ABN | LOW | ABN verify: no session auth (rate limiting may be more appropriate) | b0556f91 |
+| PH4-ABN-01 | ABN | LOW | ABN verify: no session auth and no rate limit; used by instructors completing payout settings — requires provider session and per-provider rate limit | b0556f91 |
 | PH4-WH-02 | Webhooks | LOW | Stripe proxy internal `fetch()` has no timeout | b0556f91 |
-| PH4-INS-01 | Instructor | LOW | Document upload: no rate limit | b0556f91 |
+| PH4-INS-03 | Instructor | LOW | Document upload: no rate limit on POST `/api/instructor/documents` | b0556f91 |
+
+**PH4-AV-01 scope:** GET `/api/availability/slots` — public access is intentional for the marketplace booking flow; add rate limiting only. POST `/api/availability` — voice service path; hybrid gateway applies service auth before proxying, but main app handler does not validate forwarded credentials; direct access bypasses the gateway.
+
+**PH4-ABN-01 scope:** ABN verification is called from instructor payout settings (`/dashboard/settings/payout`), not from public registration. Correct control is provider session gate + per-provider rate limit. Public access is not required.
 
 **2 MEDIUM, 9 LOW — awaiting batch fix.**
 
@@ -938,7 +942,7 @@ Cascading hang is unlikely in practice. LOW.
 | PH4-ADM-02 | 08e87b7a (bootstrap race condition) |
 | PH4-ADM-03 | 81773277 (admin password min 12) |
 | PH4-ADM-04 | 81773277 (payout max 50) |
-| PH4-INS-01 (earnings) | f31a2f09 (earnings role guard) |
+| PH4-INS-01 | Earnings route missing role guard | f31a2f09 |
 
 ---
 
@@ -977,7 +981,7 @@ Cascading hang is unlikely in practice. LOW.
 **INFO: D7 routing — driving docs go to `DrivingProviderProfile`, generic docs to `Provider` ✅**
 - Separation correct; `upsert` on DrivingProviderProfile handles first-upload case
 
-**Finding PH4-INS-01 (LOW): No rate limit on document upload**
+**Finding PH4-INS-03 (LOW): No rate limit on document upload**
 - **Issue:** No rate limiting on POST — provider could spam Cloudinary uploads
 - **Impact:** Cloudinary storage/bandwidth cost amplification
 - **Recommendation:** Add rate limit (e.g. 10 uploads/hour per provider)
@@ -1016,7 +1020,7 @@ Cascading hang is unlikely in practice. LOW.
 
 ### 6.4 `/api/instructor/earnings` — Earnings Report
 
-**Finding PH4-INS-02 (LOW): No explicit role guard on earnings route — FIXED f31a2f09**
+**Finding PH4-INS-01 (LOW): No explicit role guard on earnings route — FIXED f31a2f09**
 - Added `if (session.user.role !== 'provider') return 403` after session check
 - Status: ✅ FIXED
 
@@ -1048,9 +1052,9 @@ Cascading hang is unlikely in practice. LOW.
 **Pattern:** All instructor routes authenticate via session `providerId` or `userId` lookup — no URL parameter IDOR possible across this group.
 
 **Consistent gaps across instructor routes:**
-1. No rate limiting on document upload (PH4-INS-01)
-2. Earnings missing explicit role guard (PH4-INS-01)
-3. Role literal `'provider'` vs `'PROVIDER'` inconsistency (PH4-INS-02)
+1. No rate limiting on document upload (PH4-INS-03) — OPEN
+2. Earnings missing explicit role guard (PH4-INS-01) — FIXED f31a2f09
+3. Role literal `'provider'` casing — matches actual DB value, not a defect (PH4-INS-02 RETIRED)
 4. `@ts-nocheck` on subscription route (5th instance found)
 
 **No financial integrity issues found** — ABN verification, payout settings, and subscription management all enforce correct separation between what instructors can self-report vs what requires admin confirmation.
@@ -1123,13 +1127,15 @@ Cascading hang is unlikely in practice. LOW.
 
 ### 8.1 Authorization Pattern
 
-Two accepted auth methods across cron routes:
+**Historical note (pre-fix state):** Before commits 20a68cc0 and 87764e48, some cron routes accepted `x-vercel-cron: 1` as an alternative to CRON_SECRET Bearer. That bypass was removed. The table below was the state at the time of initial audit and is preserved for context only.
 
-| Method | Pattern | Routes using it |
+~~Two accepted auth methods across cron routes:~~
+
+| ~~Method~~ | ~~Pattern~~ | ~~Routes using it~~ |
 |--------|---------|-----------------|
-| `CRON_SECRET` Bearer token | `!process.env.CRON_SECRET \|\| authHeader !== \`Bearer ${secret}\`` | Most crons |
-| Vercel-injected header | `x-vercel-cron === '1'` | 5 crons (check-trial-expiry, send-trial-expiry-alerts, notification-retry, notifications) |
-| **Neither** | No auth check | `slot-cleanup`, partially `notifications` |
+| ~~`CRON_SECRET` Bearer token~~ | `!process.env.CRON_SECRET \|\| authHeader !== \`Bearer ${secret}\`` | ~~Most crons~~ |
+| ~~Vercel-injected header~~ | `x-vercel-cron === '1'` | ~~5 crons (check-trial-expiry, send-trial-expiry-alerts, notification-retry, notifications)~~ |
+| ~~**Neither**~~ | ~~No auth check~~ | ~~`slot-cleanup`, partially `notifications`~~ |
 
 **Finding PH4-CRON-01 (MEDIUM): `/api/cron/slot-cleanup` had no auth check — FIXED 20a68cc0**
 - Fix: Added `CRON_SECRET` Bearer token check (same pattern as all other cron routes)
