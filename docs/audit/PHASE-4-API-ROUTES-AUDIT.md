@@ -1,13 +1,15 @@
 # Phase 4: API Route Audit
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Date:** 2026-11-14  
-**Status:** PARTIAL (6/41 routes audited, 1 critical fix deployed)  
+**Status:** PARTIAL (6/41 route groups audited — see note on counting below)  
 **Auditor:** Kiro  
 **Approach:** Systematic review, findings documented, critical issues fixed immediately
 
+**Note on route counting:** The 41 route groups listed here map to directories, not individual route.ts files. Continuation of this audit uses individual route.ts files as the unit of count. Carry-forward findings have been reconciled with deployed commits as of c1bd5c6d.
+
 **Executive Summary:**  
-Initial audit of 6 critical routes identified **3 CRITICAL issues**. **Issue #1 (duplicate GET) FIXED** and committed (83172dc9). Remaining critical issues: incorrect HTTP 503 status code and excessive transaction timeouts. **8 HIGH priority** issues documented including synchronous email delivery, ledger reconciliation gaps, and missing device tracking. Build should now succeed.
+Initial audit of 6 critical routes identified 3 CRITICAL issues. Duplicate GET fixed (6f44dc92). OTP security defects fixed across two commits (c0d74ad7, c1bd5c6d). Subscription bypass and DB fail-open fixed (c779522f). Remaining items from this document that are still open: Marketplace 503 status code, transaction timeouts, and the informational/low items below.
 
 ---
 
@@ -492,24 +494,26 @@ Total: 41 route groups
 
 ---
 
-## Critical Action Items (Immediate Fix Required)
+## Critical Action Items — Reconciled Status
 
-1. **✅ FIXED: Duplicate GET in `/api/bookings`** (Commit: 83172dc9)  
-   - Removed duplicate second GET definition (old implementation)
-   - Consolidated features: cursor pagination + status validation + source filter + soft-delete
-   - Build error resolved
-   - Frontend should now receive correct pagination response format
+1. **✅ FIXED: Duplicate GET in `/api/bookings`** (Commit: 6f44dc92)  
+   - Removed duplicate second GET definition  
+   - Consolidated features: cursor pagination + status validation + source filter + soft-delete  
+   - Independently verified on GitHub
 
-2. **Fix Marketplace 503 Response**  
+2. **✅ FIXED: OTP rate limit and secret defects** (Commits: c0d74ad7, c1bd5c6d)  
+   - MEDIUM "In-memory rate limiter fallback not multi-instance safe" → fixed  
+   - LOW "OTP hash secret falls back to dev constant" → fixed  
+   - Additional defect: Redis not-configured also fails closed in production → fixed c1bd5c6d  
+   - Vercel SUCCESS for c1bd5c6d. Production environment variables unverified.
+
+3. **OPEN: Marketplace 503 Response**  
    - Change to 404 + clear message  
-   - Document direct payment flow for SaaS providers
-   - Location: `/api/payments/create-intent` line 215 (approx)
+   - Location: `/api/payments/create-intent`
 
-3. **Reduce Transaction Timeouts**  
-   - Registration: 30s → 10s max  
-   - Bookings: 10s → 5s max  
-   - Add monitoring for timeout rates
-   - Test on high-latency connections first
+4. **OPEN: Transaction Timeouts**  
+   - Registration: 30s → target ≤10s  
+   - Bookings: 10s → target ≤5s
 
 ---
 

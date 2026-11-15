@@ -1015,3 +1015,96 @@ All 13 records have `organisationType=SOLE_TRADER` from the DB default. None wer
 | Browser tests require manual server startup (NODE_OPTIONS OOM constraint on Windows) | Known limitation; documented in playwright.config.ts |
 | Vercel deployment against production DB | Not independently verified |
 
+
+---
+
+## Section 12 — Phase 4: API Route Audit (In Progress)
+
+**Version:** 1.2  
+**Started:** 2026-11-14  
+**Status:** IN PROGRESS — OTP security findings fixed and source-verified; production environment variables unverified; route-by-route audit paused  
+**Audit document:** `docs/audit/PHASE-4-API-ROUTES-AUDIT.md`  
+**Methodology:** Individual route.ts files as the unit of count (not route groups)
+
+---
+
+### 12.1 — Option B: Provider Deactivation and Approval Enforcement
+
+Findings identified during subscription call-site audit and implemented before Phase 4 continuation.
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status |
+|---|---|---|---|---|---|---|---|
+| PH4-SUB-01 | `isActive=false` bypass in POST `/api/bookings` | HIGH | CONFIRMED — approval check present but `isActive` not enforced | VERIFIED — source inspection; `isActive` field selected but not checked in conditional | `298a67bd` → corrected `d6c9971d` | 10/10 tests, exit 0 — `subscription-validation-option-b.test.ts` ✅ Vercel SUCCESS | ✅ FIX-VERIFIED |
+| PH4-SUB-02 | `isActive=false` bypass in POST `/api/bookings/offline` | HIGH | CONFIRMED — `isActive` not in Prisma select; check would always evaluate `undefined !== true` → true | VERIFIED — source: `select` confirmed missing `isActive` | `d6c9971d` (Prisma select corrected) | 10/10 tests (Test 4 specifically validates select includes field), exit 0 ✅ Vercel SUCCESS | ✅ FIX-VERIFIED |
+| PH4-SUB-03 | No approval gate on POST `/api/clients` | MEDIUM | CONFIRMED — subscription check present; approval check absent | VERIFIED — source inspection | `298a67bd` | 10/10 tests, exit 0 ✅ Vercel SUCCESS | ✅ FIX-VERIFIED |
+| PH4-SUB-04 | `checkSubscriptionAccess()` fails open for missing Provider record | MEDIUM | CONFIRMED — `if (!instructor) return { valid: true, readOnly: false }` | VERIFIED — source inspection | `d6c9971d` | 10/10 tests, exit 0 ✅ Vercel SUCCESS | ✅ FIX-VERIFIED |
+
+**Deferred (not part of Option B):**
+
+| ID | Title | Risk | Status | Reason |
+|---|---|---|---|---|
+| PH4-SUB-05 | `checkProviderEligible()` lacks SaaS bypass | MEDIUM | DEFERRED | Function protects both Marketplace and SaaS-operational routes; blanket bypass would compromise Marketplace eligibility checks; requires separate architectural work |
+| PH4-SUB-06 | Offline booking tier check uses exclusion (`tier === 'BASIC'`) not allowlist | LOW | DEFERRED | Low priority; only relevant if FREE tier is introduced |
+
+---
+
+### 12.2 — OTP Security Hardening
+
+Findings identified from Phase 4 route audit of `app/api/verifications/otp/route.ts`.
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status |
+|---|---|---|---|---|---|---|---|
+| PH4-OTP-01 | Redis failure falls through to in-memory rate limiter in production | HIGH | CONFIRMED — `catch` block had no production guard; fell through to per-instance `memRateLimitMap` | VERIFIED — source inspection; catch block confirmed at line 74–77 | `c0d74ad7` | ✅ Vercel SUCCESS c0d74ad7 | ✅ FIX-VERIFIED at source/build |
+| PH4-OTP-02 | `OTP_HASH_SECRET` missing silently uses hardcoded fallback in production | HIGH | CONFIRMED — `process.env.OTP_HASH_SECRET \|\| 'dev-otp-secret-change-in-prod'` with no env enforcement | VERIFIED — source inspection; hardcoded fallback present in both send and confirm routes | `c0d74ad7` | ✅ Vercel SUCCESS c0d74ad7 | ✅ FIX-VERIFIED at source/build |
+| PH4-OTP-03 | Redis not configured (`isUpstashConfigured=false`) still falls through to in-memory in production | HIGH | CONFIRMED — previous fix only handled `catch` path; `!isUpstashConfigured` branch had no production guard | VERIFIED — source inspection by independent reviewer after c0d74ad7 | `c1bd5c6d` | ✅ Vercel SUCCESS c1bd5c6d | ✅ FIX-VERIFIED at source/build |
+
+**Production verification outstanding:**
+
+| Check | Status |
+|---|---|
+| `OTP_HASH_SECRET` exists in Vercel production environment | ⏳ PENDING — cannot verify from repository |
+| `UPSTASH_REDIS_REST_URL` configured and not placeholder | ⏳ PENDING |
+| `UPSTASH_REDIS_REST_TOKEN` configured | ⏳ PENDING |
+| Normal OTP flow (send + confirm) works end-to-end | ⏳ PENDING |
+| Rate limiting enforced globally (not per-instance) | ⏳ PENDING |
+| Redis failure behavior (staging test) | ⏳ PENDING — staging only; do not modify production credentials |
+| Automated OTP security test suite | ⏳ NOT CREATED — recommended before closing |
+
+**Evidence documents:** `docs/audit/OTP-SECURITY-FIXES.md`, `docs/audit/OTP-SECURITY-CORRECTION.md`
+
+---
+
+### 12.3 — Open Findings from Initial Route Audit
+
+Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
+
+| ID | Title | Risk | Status | Location |
+|---|---|---|---|---|
+| PH4-REG-01 | Marketplace 503 response code (should be 404) | MEDIUM | OPEN | `/api/payments/create-intent` |
+| PH4-REG-02 | Registration transaction timeout 30s (target ≤10s) | LOW | OPEN | `app/api/register/route.ts` line 147 |
+| PH4-BK-01 | Booking transaction timeout 10s (target ≤5s) | LOW | OPEN | `app/api/bookings/route.ts` |
+| PH4-AUTH-01 | Session idle timeout: session callback returns `{ user: undefined }` not null | MEDIUM | OPEN — requires investigation | `lib/auth.ts` lines 149–158 |
+| PH4-AUTH-02 | Device tracking imports present but never called | MEDIUM | OPEN | `lib/auth.ts` signIn callback |
+
+**Note:** HIGH findings from the original v1.1 (duplicate GET in bookings, OTP rate limit defects, subscription validation) are now closed above. Remaining items are MEDIUM/LOW.
+
+---
+
+### 12.4 — Phase 4 Continuation Plan
+
+**Prerequisite:** OTP production environment verification (Section 12.2).
+
+**Next audit targets** (individual route.ts files, in priority order):
+1. `app/api/payments/create-intent/route.ts` — full file audit (truncated in v1.1)
+2. `app/api/webhooks/route.ts` — Stripe webhook validation and idempotency
+3. `app/api/admin/*` — admin authorization and privilege escalation
+4. `app/api/subscriptions/checkout/route.ts` — subscription flow
+5. `app/api/public/bookings/route.ts` — public endpoint security (Marketplace-facing)
+
+**SaaS eligibility architectural finding (tracked, not in Phase 4 scope):**  
+`checkProviderEligible()` requires a deliberate separation of Marketplace eligibility from provider-owned SaaS operations before a SaaS bypass can be safely added. This is a product design decision, not a Phase 4 audit item.
+
+---
+
+**Section 12 last updated:** 2026-11-14 (c1bd5c6d)  
+**Master Tracker version:** v6.69

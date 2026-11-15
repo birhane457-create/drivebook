@@ -223,8 +223,8 @@ The following environment variables **MUST** be configured in the Vercel product
 ## Deployment Instructions
 
 ### Current Status
-**Commit c0d74ad7:** ✅ Pushed to GitHub, Vercel SUCCESS  
-**Remaining Defect:** Redis missing/misconfigured detection (being fixed)
+**Commit c1bd5c6d:** ✅ Pushed to GitHub, Vercel SUCCESS  
+**All three security defects resolved**
 
 ### 1. Generate OTP Secret
 ```bash
@@ -330,24 +330,27 @@ UPSTASH_REDIS_REST_TOKEN=your-upstash-token
 
 ---
 
-## Status: Code Complete, Production Verification Required
+## Status: FIX-VERIFIED at source/build level — production verification required
 
-**Code Changes:** ✅ Complete (2 files modified)  
-**Defect Correction:** 🔄 In progress (Redis not-configured detection)  
-**GitHub Commit:** ✅ c0d74ad7 pushed  
-**Vercel Deployment:** ✅ SUCCESS  
-**Environment Config:** ⏳ Pending verification  
-**Testing:** ⏳ Verification checklist pending  
+**Code Changes:** ✅ Complete — 3 commits total  
+**GitHub:** ✅ c1bd5c6d on origin/main  
+**Vercel:** ✅ SUCCESS (c1bd5c6d)  
+**Environment Config:** ⏳ Pending — verify in Vercel dashboard  
+**Live OTP Tests:** ⏳ Pending  
 
-**Blocker:** Production environment variable verification cannot be completed from repository inspection
+| Defect | Commit | Status |
+|--------|--------|--------|
+| Redis operation failure falls through | c0d74ad7 | ✅ Fixed |
+| OTP_HASH_SECRET missing falls through | c0d74ad7 | ✅ Fixed |
+| Redis not configured falls through | c1bd5c6d | ✅ Fixed |
 
----
-
-**Next Steps:**
-1. ✅ Commit c0d74ad7 pushed (DONE)
-2. 🔄 Fix Redis not-configured detection (IN PROGRESS)
-3. ⏳ Verify Vercel production environment variables
-4. ⏳ Deploy corrected version to production
+### Remaining Steps
+1. ✅ All code corrections pushed (c1bd5c6d)
+2. ⏳ Verify `OTP_HASH_SECRET` exists in Vercel production (redacted value is sufficient)
+3. ⏳ Verify `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` configured and not placeholder
+4. ⏳ Run normal OTP flow test (send + confirm)
+5. ⏳ Run rate-limit test (4th request returns 429)
+6. ⏳ Run Redis failure test on **staging only** — do not remove credentials on live service
 5. ⏳ Run verification checklist
 6. ⏳ Monitor for 24 hours
 7. ⏳ Mark as COMPLETE after verification
