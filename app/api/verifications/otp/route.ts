@@ -77,8 +77,17 @@ async function checkOtpRateLimit(key: string): Promise<{ allowed: boolean; retry
 
       return { allowed: true };
     } catch (err) {
-      console.error('[OTP RATE LIMIT] Redis check failed, falling back to in-memory:', err);
-      // Fall through to in-memory
+      console.error('[OTP RATE LIMIT] Redis check failed:', err);
+      // CRITICAL: Fail closed in production to prevent rate limit bypass on multi-instance deployments
+      // In development, fall through to in-memory for local testing
+      if (process.env.NODE_ENV === 'production') {
+        return { 
+          allowed: false, 
+          retryAfter: 60 // Conservative retry — forces client to wait rather than bypass rate limits
+        };
+      }
+      // Development only: fall through to in-memory
+      console.warn('[OTP RATE LIMIT] Development mode: falling back to in-memory limiter');
     }
   }
 
@@ -131,9 +140,20 @@ export async function POST(req: NextRequest) {
 
     // FIX #5: Hash the OTP before storing — plain-text OTP in DB is a data-leak risk.
     // We store HMAC-SHA256(otp, OTP_HASH_SECRET) so a DB read never reveals the code.
-    // Falls back to a per-instance secret if OTP_HASH_SECRET is not set (dev only).
-    const otpSecret = process.env.OTP_HASH_SECRET || 'dev-otp-secret-change-in-prod';
-    const otpHash = crypto.createHmac('sha256', otpSecret).update(otp).digest('hex');
+    // CRITICAL: OTP_HASH_SECRET must be configured in production
+    const otpSecret = process.env.OTP_HASH_SECRET;
+    if (!otpSecret) {
+      console.error('[OTP] CRITICAL: OTP_HASH_SECRET not configured');
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json(
+          { error: 'OTP service temporarily unavailable. Please try again later.' },
+          { status: 503 }
+        );
+      }
+      // Development only: use hardcoded fallback with warning
+      console.warn('[OTP] Development mode: using insecure hardcoded OTP secret');
+    }
+    const otpHash = crypto.createHmac('sha256', otpSecret || 'dev-otp-secret-local-only').update(otp).digest('hex');
 
     // Store hashed OTP — must complete before we respond (confirm needs it in DB)
     if (user) {

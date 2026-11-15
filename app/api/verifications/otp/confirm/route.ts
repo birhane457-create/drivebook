@@ -72,8 +72,20 @@ export async function POST(req: NextRequest) {
 
     // FIX #5: Hash the submitted code with the same secret and compare hashes.
     // Use crypto.timingSafeEqual to prevent timing-based enumeration attacks.
-    const otpSecret = process.env.OTP_HASH_SECRET || 'dev-otp-secret-change-in-prod';
-    const submittedHash = crypto.createHmac('sha256', otpSecret).update(data.code).digest('hex');
+    // CRITICAL: OTP_HASH_SECRET must be configured in production
+    const otpSecret = process.env.OTP_HASH_SECRET;
+    if (!otpSecret) {
+      console.error('[OTP CONFIRM] CRITICAL: OTP_HASH_SECRET not configured');
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json(
+          { error: 'OTP verification temporarily unavailable. Please try again later.' },
+          { status: 503 }
+        );
+      }
+      // Development only: use hardcoded fallback with warning
+      console.warn('[OTP CONFIRM] Development mode: using insecure hardcoded OTP secret');
+    }
+    const submittedHash = crypto.createHmac('sha256', otpSecret || 'dev-otp-secret-local-only').update(data.code).digest('hex');
 
     const verificationIdMatch = storedVerificationId === data.verificationId;
     // timingSafeEqual requires equal-length buffers
