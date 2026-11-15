@@ -47,6 +47,20 @@ async function checkOtpRateLimit(key: string): Promise<{ allowed: boolean; retry
   const resendDelayMs = 60 * 1000;  // 60 seconds
   const maxPerHour = 3;
 
+  // CRITICAL: Production must use Redis for rate limiting
+  // In-memory fallback only allowed in development
+  if (!isUpstashConfigured) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[OTP RATE LIMIT] CRITICAL: Redis not configured in production');
+      return {
+        allowed: false,
+        retryAfter: 60 // Deny with conservative retry
+      };
+    }
+    // Development only: log warning before falling through to in-memory
+    console.warn('[OTP RATE LIMIT] Development mode: Redis not configured, using in-memory fallback');
+  }
+
   if (isUpstashConfigured) {
     // Redis-backed — survives cold starts and multiple instances
     try {
@@ -77,7 +91,7 @@ async function checkOtpRateLimit(key: string): Promise<{ allowed: boolean; retry
 
       return { allowed: true };
     } catch (err) {
-      console.error('[OTP RATE LIMIT] Redis check failed:', err);
+      console.error('[OTP RATE LIMIT] Redis operation failed:', err);
       // CRITICAL: Fail closed in production to prevent rate limit bypass on multi-instance deployments
       // In development, fall through to in-memory for local testing
       if (process.env.NODE_ENV === 'production') {
@@ -87,7 +101,7 @@ async function checkOtpRateLimit(key: string): Promise<{ allowed: boolean; retry
         };
       }
       // Development only: fall through to in-memory
-      console.warn('[OTP RATE LIMIT] Development mode: falling back to in-memory limiter');
+      console.warn('[OTP RATE LIMIT] Development mode: Redis operation failed, falling back to in-memory');
     }
   }
 
