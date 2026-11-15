@@ -766,3 +766,106 @@ No privilege escalation paths found. No admin route found that allows role self-
 ---
 
 *This is a findings-only audit. No code changes will be made during this phase.*
+
+---
+
+## Group 6: Instructor Self-Service Routes
+
+**Routes reviewed:** documents, profile, subscription, earnings, payout-settings  
+**Files:** `app/api/instructor/documents/route.ts`, `profile/route.ts`, `subscription/route.ts`, `earnings/route.ts`, `payout-settings/route.ts`
+
+---
+
+### 6.1 `/api/instructor/documents` — Document Upload
+
+**INFO: Document type allowlist enforced ✅**
+- Validates `documentType` against explicit union of `DRIVING_DOC_FIELDS` + `INSTRUCTOR_DOC_FIELDS`
+- Rejects unknown document types with 400
+
+**INFO: File content validated before upload ✅**
+- `validateUpload()` checks MIME type and byte size against `DOCUMENT_ALLOWED_TYPES` / `MAX_DOCUMENT_BYTES`
+- Not relying on client-supplied Content-Type alone
+
+**INFO: D7 routing — driving docs go to `DrivingProviderProfile`, generic docs to `Provider` ✅**
+- Separation correct; `upsert` on DrivingProviderProfile handles first-upload case
+
+**LOW: No rate limit on document upload**
+- **Issue:** No rate limiting on POST — provider could spam Cloudinary uploads
+- **Impact:** Cloudinary storage/bandwidth cost amplification
+- **Recommendation:** Add rate limit (e.g. 10 uploads/hour per provider)
+
+---
+
+### 6.2 `/api/instructor/profile` — Profile Read/Write
+
+**INFO: Ownership enforced via session `providerId` — no cross-provider access ✅**
+- `getInstructorFromSession()` resolves provider from JWT `providerId` or falls back to `userId` lookup
+- No URL parameter that could be substituted to read another provider's profile
+
+**INFO: `requireActiveSubscription` gate on profile writes ✅**
+- Inactive providers get read-only access
+
+**INFO: `upsertDrivingProfile()` handles first-write correctly ✅**
+
+**LOW: `@ts-nocheck` absent but `as any` casts present throughout**
+- Not a security issue but indicates incomplete typing
+
+---
+
+### 6.3 `/api/instructor/subscription` — Subscription Management
+
+**Note:** `// @ts-nocheck` at top — 5th file found with this suppression.
+
+**INFO: Session-based auth — reads provider from email, not URL param ✅**
+- No IDOR possible; instructor can only see their own subscription
+
+**INFO: `cancelSubscription()` delegates to unified service (SUB-10-A fix) ✅**
+- Stripe-first cancellation, DB updated after Stripe confirms
+
+**INFO: `createOrReuseTrialSubscription()` guards against duplicate trials ✅**
+
+---
+
+### 6.4 `/api/instructor/earnings` — Earnings Report
+
+**Finding PH4-INS-01 (LOW): No role gate — any authenticated user can call this**
+- **Location:** Lines 68–70 — only checks `session?.user` exists, no role check
+- **Issue:** A CLIENT role user who guesses the route can call it. `providerId` is resolved from their session, and if they have no `providerId` they get 401. But a CLIENT who somehow has a `providerId` in their JWT would see earnings data.
+- **In practice:** Clients don't get `providerId` in their JWT (set only for `role: provider` in `lib/auth.ts`). Risk is LOW.
+- **Recommendation:** Add explicit `role === 'provider'` check for defence in depth: `if (session.user.role !== 'provider') return 403`
+
+**INFO: Earnings scoped to resolved `providerId` — no cross-provider leakage ✅**
+**INFO: Timezone-aware date range calculation ✅**
+
+---
+
+### 6.5 `/api/instructor/payout-settings` — Bank Details
+
+**Finding PH4-INS-02 (MEDIUM): Role check uses literal string `'provider'` — inconsistent with rest of codebase**
+- **Location:** Lines 29, 59: `session.user.role !== 'provider'`
+- **Issue:** Other routes use `'PROVIDER'` (uppercase). The `lib/auth.ts` sets `role` from the DB `user.role` column which stores `'provider'` (lowercase) for instructors. So this check works, but it is inconsistent with routes that use the uppercase form and could break if the DB value is ever normalised.
+- **Recommendation:** Standardise to a single casing and add a lint rule or constant
+
+**INFO: ABN verification fields are admin-only — instructor cannot self-certify ABN ✅**
+- `abnVerified`, `abnStatus`, `withholdingTaxRate` stripped from instructor input
+- Reset to PENDING when ABN number changes — correct
+
+**INFO: BSB and account number format validated ✅**
+- `isValidBSB()`, `isValidBankAccount()` called before DB write
+
+**INFO: ABN checksum validated ✅**
+- `isValidABNFormat()` performs luhn-style checksum check
+
+---
+
+### 6.6 Instructor Routes Summary
+
+**Pattern:** All instructor routes authenticate via session `providerId` or `userId` lookup — no URL parameter IDOR possible across this group.
+
+**Consistent gaps across instructor routes:**
+1. No rate limiting on document upload (PH4-INS-01)
+2. Earnings missing explicit role guard (PH4-INS-01)
+3. Role literal `'provider'` vs `'PROVIDER'` inconsistency (PH4-INS-02)
+4. `@ts-nocheck` on subscription route (5th instance found)
+
+**No financial integrity issues found** — ABN verification, payout settings, and subscription management all enforce correct separation between what instructors can self-report vs what requires admin confirmation.
