@@ -158,13 +158,40 @@ model User {
 
 ## Group 4: Cascade Delete Risks
 
-**Finding PH5-SCH-10 (HIGH): `Transaction` cascades delete when `Booking` is deleted**
-- `Transaction` has `onDelete: Cascade` from Booking
-- If a Booking is hard-deleted, its Transaction record is also deleted
-- Transactions are financial records that must be retained for audit, tax, and dispute purposes (Australian law: 7 years)
-- **Evidence:** `Booking.deletedAt` exists for soft delete, but hard deletes (`prisma.booking.delete()`) would cascade
-- **Verification needed:** Confirm no code path calls `booking.delete()` or `booking.deleteMany()` without first checking for associated transactions
-- **Recommendation:** Remove `onDelete: Cascade` from Transaction→Booking; replace with `onDelete: SetNull` or `onDelete: Restrict`
+**Finding PH5-SCH-10 (HIGH): `Transaction` cascades delete when `Booking` is deleted — latent data-retention hazard**
+
+**Schema behaviour (CONFIRMED):**
+- Migration `20260328041651_init` line 496: `ALTER TABLE "Transaction" ADD CONSTRAINT "Transaction_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "Booking"("id") ON DELETE CASCADE`
+- If a Booking row is hard-deleted via `DELETE FROM "Booking"`, PostgreSQL will cascade-delete all Transaction rows referencing that booking
+- Transactions are financial records required for audit, tax reconciliation, and dispute handling
+
+**Reachability analysis (VERIFIED — no production hard-delete paths found):**
+- Root application search (app/, lib/, scripts/): **zero** hard-delete calls on `Booking` in production code
+- Cron jobs (`app/api/cron/`): **zero** hard-delete calls on `Booking`
+- Admin routes (`app/api/admin/`): **zero** hard-delete calls on `Booking`
+- Test cleanup (`__tests__/`): 2 hard-delete calls in test-only cleanup (mm-05d, mm-05e)
+- Standard deletion pattern: `update({ where: { id }, data: { deletedAt: new Date() } })` — soft delete via `deletedAt` timestamp
+
+**Legacy/hybrid scripts (OUT OF SCOPE for root PostgreSQL database):**
+- `drivebook-hybrid/` contains multiple hard-delete scripts (handle-package-children.js, migrate-packages-to-wallet.js, cleanup-orphaned-bookings.js, fix-chairman-wallet.js)
+- These target the MongoDB hybrid database with a separate Prisma schema
+- MongoDB schema also defines `onDelete: Cascade` on Transaction→Booking
+- These scripts do not execute against the root PostgreSQL production database
+
+**Risk assessment:**
+- **Current risk: LOW** — no reachable production code path hard-deletes bookings; soft-delete pattern is enforced consistently
+- **Latent risk: HIGH** — the cascade constraint remains in the schema; a future refactor, admin tool, or database migration script that calls `DELETE FROM "Booking"` would destroy financial records without warning
+- **Australian financial record retention:** ATO generally requires 5 years (not universally 7); specific retention period depends on entity type and record category
+
+**Remediation decision:**
+- **Recommended fix:** Change `onDelete: Cascade` to `onDelete: Restrict`
+  - **Restrict** prevents deletion of a Booking while Transaction rows reference it
+  - **SetNull** would preserve Transaction rows but sever the booking linkage — this weakens reconciliation unless `Transaction.metadata` retains an immutable booking snapshot
+  - Restrict aligns with the current soft-delete pattern and makes hard-delete attempts fail explicitly rather than silently destroying financial data
+- **Migration requirement:** Schema change alone is insufficient — must generate and apply a migration that issues `ALTER TABLE "Transaction" DROP CONSTRAINT "Transaction_bookingId_fkey"` then re-adds it with `ON DELETE RESTRICT`
+- **Verification:** After migration, attempt `DELETE FROM "Booking" WHERE id = '<test-booking-with-transaction>'` in a test environment — PostgreSQL should reject with foreign key violation
+
+**Status:** CONFIRMED schema defect with latent data-retention risk — FIX NOT YET IMPLEMENTED
 
 **Finding PH5-SCH-11 (LOW): `AuditLog` immutability trigger confirmed (AUDIT-03) but cascade paths not fully traced**
 - AuditLog is protected by a DB trigger preventing deletion
