@@ -605,13 +605,13 @@ No privilege escalation paths found. No admin route found that allows role self-
    - LOW "OTP hash secret falls back to dev constant" â†’ fixed  
    - Additional defect: Redis not-configured also fails closed in production â†’ fixed c1bd5c6d  
    - Vercel SUCCESS for c1bd5c6d. Production environment variables unverified.
+3. **DEFERRED: Marketplace 503 Response (PH4-REG-01)**
+   - Current: returns 503 when `paymentMode === 'DIRECT'` (should be 404 or 501)
+   - Decision: DEFERRED — DIRECT payment mode is planned for implementation before release; correct HTTP status will be addressed as part of that feature work
 
-3. **OPEN: Marketplace 503 Response**  
-   - Change to 404 + clear message  
-   - Location: `/api/payments/create-intent`
-
-4. **OPEN: Transaction Timeouts**  
-   - Registration: 30s â†’ target â‰¤10s  
+4. **DEFERRED: Transaction Timeouts (PH4-REG-02)**
+   - Registration: 30s timeout, Bookings: 10s timeout — both excessive under concurrent load
+   - Decision: DEFERRED — correctness not affected; only impacts under high concurrency; will be addressed in optimisation phase
    - Bookings: 10s â†’ target â‰¤5s
 
 ---
