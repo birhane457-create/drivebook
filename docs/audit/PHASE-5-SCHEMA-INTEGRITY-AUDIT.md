@@ -264,13 +264,19 @@ model User {
 | PH5-SCH-20 | LOW | GiST exclusion constraint not in Prisma schema — drift risk, no automated safeguard |
 | PH5-SCH-21 | MEDIUM | FinancialLedger writes non-atomic with booking confirmation — 24h reconciliation gap |
 | PH5-SCH-22 | MEDIUM | PlatformLedger increments non-atomic with LedgerEntry — totals can diverge, no reconciliation |
-| PH5-SCH-23 | MEDIUM | `verifyLedgerIntegrity()` always reports balanced — cannot detect missing entries (zero call sites; currently unused, future use must be blocked until corrected) |
+| PH5-SCH-23 | MEDIUM | ``verifyLedgerIntegrity()`` always reports balanced — cannot detect missing entries (zero root production callers; hybrid quick-reference doc presents it as valid — developer-safety risk) |
 | PH5-SCH-24 | MEDIUM | LedgerEntry immutability violated — payout-service.ts updates metadata on existing entries |
 | PH5-SCH-25 | LOW | Reconciliation uses different ledgers — cross-ledger consistency not verified |
 | PH5-SCH-26 | LOW | FinancialLedger reference fields are plain strings — no FK enforcement |
 | PH5-SCH-27 | MEDIUM | Business ID resolution inconsistent — resolveBusinessId() not used in all routes; normal onboarding creates independent CUID Business IDs |
 | PH5-SCH-28 | MEDIUM | Customer hard-delete check/delete race — SAAS-only (no user account), narrow concurrent booking window, cascade to Transaction |
 | PH5-SCH-29 | LOW | Booking.serviceId not referentially enforced — nullable string, no FK to BusinessService |
+| PH5-SCH-30 | MEDIUM | BookingIdempotencyKey TOCTOU race — check outside tx, upsert inside with `update: {}` (concurrency risk; exact outcome unverified — requires test) |
+| PH5-SCH-31 | LOW | BookingIdempotencyKey.bookingId not a FK relation — correct for idempotency |
+| PH5-SCH-32 | LOW | No explicit expiry on BookingIdempotencyKey — 24h cron cleanup only |
+| PH5-SCH-33 | LOW | No cleanup/retention policy for WebhookEvent — audit trail grows indefinitely |
+| PH5-SCH-34 | LOW | WebhookEvent.processedAt set at record creation, not transaction commit |
+| PH5-SCH-35 | MEDIUM | SaaS booking webhook event outside processing tx — pre-transaction status check does not provide atomic concurrency guard |
 
 **1 HIGH, 15 MEDIUM, 18 LOW, 1 NEGLIGIBLE — 35 total findings across Groups 1-12**
 
@@ -511,21 +517,22 @@ The constraint is an all-rows constraint (no `WHERE` clause). Expired rows are r
 - **Risk:** PlatformLedger.totalCollected can diverge from the sum of LedgerEntry amounts. The payout guard `assertSufficientBalance` reads from PlatformLedger, not from LedgerEntry aggregates.
 - **No reconciliation check compares PlatformLedger totals against LedgerEntry sum.** The reconciliation cron checks FinancialLedger gaps and refund coverage, not PlatformLedger consistency.
 
-**Finding PH5-SCH-23 (MEDIUM, downgraded from HIGH): `verifyLedgerIntegrity()` is ineffective — always reports balanced; currently unused (zero call sites)**
+**Finding PH5-SCH-23 (MEDIUM, downgraded from HIGH): `verifyLedgerIntegrity()` is ineffective — always reports balanced; zero production runtime callers in the root application**
 
 - `lib/services/ledger.ts` lines 351-374: the function aggregates `FinancialLedger.amount` and assigns the same value to both `totalDebits` and `totalCredits`
 - The comment says: `Since each entry records the same amount as both a debit and a credit, both are the same`
 - The `difference` is always 0.0 by construction; `valid` is always `true`
 - **This function cannot detect missing entries.** If an entire transaction's double-entry record is absent (PH5-SCH-21), this function still reports the ledger as balanced because it sums the rows that DO exist and compares them to themselves.
-- **Call-site search:** Zero call sites found across `app/`, `lib/`, and `scripts/`. The function is exported from `ledger.ts` line 356 but never imported or called by any route, service, cron job, or admin tool.
-- **Severity rationale:** Downgraded from HIGH to MEDIUM. The function is genuinely broken, but since nobody calls it, it has zero production impact today. The distinction is between:
-  - A broken integrity-verification function that is actively relied upon in production (would be HIGH)
-  - A broken, unused function that could create false confidence if introduced into a future workflow (MEDIUM)
-- **Requirement:** Future use of this function must be blocked until it is corrected to perform per-account balance verification and completeness checks against expected entries.
+- **Call-site search scope:** `app/`, `lib/`, `scripts/` — the root PostgreSQL application. Zero call sites found. The function is exported from `ledger.ts` line 356 but never imported or called by any route, service, cron job, or admin tool in the root application.
+- **Hybrid references (out of scope for this finding, documented separately):** `drivebook-hybrid/LEDGER_QUICK_REFERENCE.md` lines 259–261 and `drivebook-hybrid/test-ledger-system.js` lines 19 and 43 both reference and invoke `verifyLedgerIntegrity()`. These are under `drivebook-hybrid/`, which the Phase 5 audit treats as a separate MongoDB system with a separate Prisma schema. They constitute developer-guidance references to a defective function, not production runtime callers of the root PostgreSQL implementation.
+- **Developer-safety risk:** The quick-reference document presents `verifyLedgerIntegrity()` as a valid operational check without warning that the implementation is defective. A developer following this guidance would receive a false BALANCED result regardless of ledger state. This risk applies whether the caller is in the root or hybrid application.
+- **Required actions (independent of this audit's remediation phase):**
+  1. The quick-reference example in `drivebook-hybrid/LEDGER_QUICK_REFERENCE.md` must be corrected or annotated with an explicit warning that the function is defective and must not be used.
+  2. The function must not be introduced into any production caller — root or hybrid — until it is corrected.
+- **Severity rationale:** MEDIUM — zero production runtime callers in the audited root application; the hybrid caller is in documentation and a test script, not a production execution path. Would be HIGH if any caller processed live financial decisions.
 - **A correct integrity check would need to:**
   1. Sum amounts grouped by `debitAccount` and verify they equal sums grouped by `creditAccount` (per-account balance)
   2. Compare expected entries (from confirmed bookings/transactions) against actual FinancialLedger rows (completeness)
-- **Risk assessment:** MEDIUM — broken dead code that could give false confidence if used in the future.
 - However, `payout-service.ts` line 470: `await prisma.ledgerEntry.update({ where: { id: adj.id }, data: { metadata: { ...meta, recovered: true, recoveredByPayoutId: payoutId } } })`
 - This modifies the `metadata` field of an existing ADJUSTMENT entry to mark it as recovered by a specific payout
 - **Risk assessment:** MEDIUM — the update is metadata-only (amount and type are not changed), but the immutability invariant is broken. A DB-level trigger preventing `UPDATE` on LedgerEntry would be the correct enforcement; currently the claim relies on application discipline only.
@@ -749,15 +756,6 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 ## Phase 5 Complete — All Groups Audited
 
 **Final finding count: 1 HIGH, 15 MEDIUM, 18 LOW, 1 NEGLIGIBLE = 35 total findings across Groups 1-12**
-
-| ID | Severity | Finding |
-|----|----------|---------|
-| PH5-SCH-30 | MEDIUM | BookingIdempotencyKey TOCTOU race — check outside tx, upsert inside with update:{} (concurrency risk; exact outcome unverified — requires test) |
-| PH5-SCH-31 | LOW | BookingIdempotencyKey.bookingId not a FK relation — correct for idempotency |
-| PH5-SCH-32 | LOW | No explicit expiry on BookingIdempotencyKey — 24h cron cleanup only |
-| PH5-SCH-33 | LOW | No cleanup/retention policy for WebhookEvent — audit trail grows indefinitely |
-| PH5-SCH-34 | LOW | WebhookEvent.processedAt set at record creation, not transaction commit |
-| PH5-SCH-35 | MEDIUM | SaaS booking webhook event recorded outside tx — pre-transaction status check does not provide atomic concurrency guard |
 
 ---
 

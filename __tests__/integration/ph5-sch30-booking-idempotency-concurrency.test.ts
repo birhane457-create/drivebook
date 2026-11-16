@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PH5-SCH-30: BookingIdempotencyKey Concurrency Test
  *
  * PURPOSE:
@@ -30,16 +30,34 @@
  *   T1 — Sequential same-key, different slot: second should be blocked by
  *        existing idempotency key (replay stored response)
  *   T2 — Concurrent same-key, different slot: determine if both bookings
- *        are created, one fails, or both succeed (THE KEY TEST)
+ *        are created, one fails, or both succeed (THE KEY TEST — DIAGNOSTIC)
+ *        Note: T2 is diagnostic — it records the actual race outcome but does
+ *        not enforce a correctness invariant. A passing T2 exit code does NOT
+ *        mean the idempotency mechanism is safe. See T2 assertions for how to
+ *        interpret the result.
  *   T3 — Concurrent same-key, same slot: GiST constraint should block one
- *        (existing mitigation)
+ *        (existing mitigation — establishes that slot exclusion != idempotency)
  *   T4 — Concurrent different-key, different slot: both succeed (control)
+ *   T5 — Concurrent same-key, same request data, NO slot reservation:
+ *        Tests whether idempotency key uniqueness alone prevents duplicate
+ *        bookings when no GiST constraint is involved. This is the definitive
+ *        test: a slot exclusion must not be mistaken for idempotency protection.
+ *
+ * DATABASE SETUP NOTE:
+ *   Use prisma migrate deploy (not prisma db push) to apply migrations.
+ *   prisma db push does not replay raw-SQL migrations including the GiST
+ *   exclusion constraint required by T3. Without it, T3 will not test what
+ *   it claims to test.
+ *
+ * PRISMA VERSION: 5.22.0 (from package-lock.json at dd54c1b0)
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+// Print resolved versions on startup for traceability
+console.log('Prisma client version:', require('@prisma/client/package.json').version);
 
 const TEST_PREFIX = `ph5sch30_${Date.now()}`;
 
@@ -273,7 +291,14 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
           });
           return { result: 'p2002_caught', bookingId: stored?.bookingId };
         }
-        return { result: 'error', error: err.message, code: err.code };
+        // Retain name, code, meta and message for full constraint identification
+        return {
+          result: 'error',
+          name: err.name,
+          code: err.code,
+          meta: err.meta,
+          error: err.message,
+        };
       }
     };
 
@@ -348,21 +373,16 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
         // Codes accepted as evidence of a database-level guard:
         //   P2002 — unique constraint (should have been classified as p2002_caught above)
         //   P2034 — transaction write conflict or serialization failure
-        //   23P01 — exclusion constraint violation
         // Important: these codes are not interchangeable evidence.
         //   P2002 establishes that the idempotency key uniqueness constraint fired.
         //   P2034 establishes that PostgreSQL serialization prevented a conflicting write.
-        //   23P01 establishes that an exclusion constraint (e.g. SlotReservation_no_overlap)
-        //         fired — it does NOT establish that the idempotency mechanism worked.
-        // The constraint name or detail must be logged to establish which guard fired.
+        // 23P01 (exclusion constraint) is NOT accepted here: T2 creates no SlotReservation
+        // rows, so an exclusion constraint violation would indicate a test-setup error,
+        // not evidence that the race is mitigated.
         const code = (losingResult as any).code;
         const meta = (losingResult as any).meta;
-        const acceptedCodes = ['P2002', 'P2034', '23P01'];
-        console.log('T2: Losing request error code:', code, 'meta:', meta, 'message:', (losingResult as any).error);
-        if (code === '23P01') {
-          console.warn('⚠️ T2: 23P01 fired — exclusion constraint, NOT the idempotency mechanism');
-          console.warn('⚠️ T2: This means a slot constraint prevented the duplicate, not the idem key uniqueness');
-        }
+        const acceptedCodes = ['P2002', 'P2034'];
+        console.log('T2: Losing request error code:', code, 'name:', (losingResult as any).name, 'meta:', meta, 'message:', (losingResult as any).error);
         expect(acceptedCodes).toContain(code);
 
       } else {
@@ -523,5 +543,128 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
       where: { providerId: testProviderId },
     });
     expect(allBookings.length).toBe(2);
+  });
+
+  // T5: THE DEFINITIVE TEST — Concurrent same-key, same request data, NO slot reservation
+  // Purpose: establish whether the idempotency key uniqueness constraint alone prevents
+  // duplicate bookings when no GiST slot constraint is involved.
+  // A slot exclusion must not be mistaken for idempotency protection.
+  // Both requests target the same slot but create NO SlotReservation before the
+  // transaction. If one booking is prevented, it must be by the idempotency key
+  // constraint or serialisation — not by any slot exclusion.
+  it('T5: concurrent same-key same-request no-slot — idempotency key alone', async () => {
+    const idemKey = `${TEST_PREFIX}_T5`;
+    const slotStart = new Date('2027-06-20T10:00:00Z');
+    const slotEnd   = new Date('2027-06-20T11:00:00Z');
+
+    // Barrier: both requests pass the lookup before either enters the transaction
+    const barrier = { count: 0, resolve: null as ((v: void) => void) | null };
+    const barrierPromise = new Promise<void>((resolve) => { barrier.resolve = resolve; });
+
+    const createBookingNoSlot = async () => {
+      // Lookup OUTSIDE transaction (simulates the route's pre-check)
+      const existing = await prisma.bookingIdempotencyKey.findUnique({
+        where: { key: idemKey },
+      });
+
+      barrier.count++;
+      if (barrier.count >= 2 && barrier.resolve) barrier.resolve();
+      await barrierPromise;
+
+      if (existing) return { result: 'replayed', bookingId: existing.bookingId };
+
+      try {
+        const booking = await prisma.$transaction(async (tx) => {
+          const b = await tx.booking.create({
+            data: {
+              providerId: testProviderId,
+              customerId: testCustomerId,
+              customerName: `${TEST_PREFIX}_Customer`,
+              customerPhone: '0400000001',
+              status: 'PENDING_PAYMENT',
+              startTime: slotStart,
+              endTime: slotEnd,
+              duration: 60,
+              price: 70,
+              platformFee: 0,
+              providerPayout: 59.5,
+              commissionRate: 0.15,
+            },
+          });
+          // No SlotReservation — idempotency key is the ONLY constraint guard
+          await (tx as any).bookingIdempotencyKey.upsert({
+            where: { key: idemKey },
+            update: {},
+            create: {
+              key: idemKey,
+              email: `${TEST_PREFIX}@test.com`,
+              bookingId: b.id,
+              response: { bookingId: b.id, status: 'PENDING_PAYMENT' },
+            },
+          });
+          return b;
+        });
+        return { result: 'created', bookingId: booking.id };
+      } catch (err: any) {
+        if (err.code === 'P2002') {
+          const stored = await prisma.bookingIdempotencyKey.findUnique({
+            where: { key: idemKey },
+          });
+          return { result: 'p2002_caught', bookingId: stored?.bookingId };
+        }
+        // Retain all fields for constraint identification
+        return { result: 'error', name: err.name, code: err.code, meta: err.meta, error: err.message };
+      }
+    };
+
+    const [result1, result2] = await Promise.all([
+      createBookingNoSlot(),
+      createBookingNoSlot(),
+    ]);
+
+    const allBookings = await prisma.booking.findMany({
+      where: { providerId: testProviderId },
+    });
+    const allKeys = await prisma.bookingIdempotencyKey.findMany({
+      where: { key: idemKey },
+    });
+
+    console.log('T5 Results:', { result1, result2 });
+    console.log('T5: Bookings created:', allBookings.length);
+    console.log('T5: Idempotency keys:', allKeys.length);
+
+    if (allBookings.length === 2) {
+      console.error('❌ T5 CONFIRMED: idempotency key alone does NOT prevent duplicate bookings');
+      console.error('❌ PH5-SCH-30 DEFINITIVE: no slot exclusion involved — upsert update:{} is broken');
+    } else if (allBookings.length === 1) {
+      const loser = result1.result === 'created' ? result2 : result1;
+      console.log('✅ T5: Only one booking created. Losing result:', loser);
+    }
+
+    // Bounds check: 0 or >2 is a test-setup failure
+    expect(allBookings.length).toBeGreaterThanOrEqual(1);
+    expect(allBookings.length).toBeLessThanOrEqual(2);
+    expect(allKeys.length).toBe(1);
+
+    // If one booking: classify the mechanism that prevented the duplicate
+    if (allBookings.length === 1) {
+      const losingResult = result1.result === 'created' ? result2 : result1;
+      if (losingResult.result === 'p2002_caught') {
+        console.log('✅ T5: P2002 — idempotency key uniqueness constraint fired (idempotency works)');
+      } else if (losingResult.result === 'replayed') {
+        console.log('✅ T5: replayed — barrier may not have held; rerun to confirm');
+      } else if (losingResult.result === 'error') {
+        const code = (losingResult as any).code;
+        // 23P01 is not expected (no SlotReservation created) — treat as setup error
+        console.log('T5: Losing error code:', code, 'name:', (losingResult as any).name,
+          'meta:', (losingResult as any).meta, 'message:', (losingResult as any).error);
+        if (code === '23P01') {
+          throw new Error('T5: 23P01 (exclusion constraint) fired but no SlotReservation was created — test-setup error');
+        }
+        expect(['P2002', 'P2034']).toContain(code);
+      } else {
+        throw new Error(`T5: Unexpected losing result '${losingResult.result}' with single booking`);
+      }
+    }
   });
 });
