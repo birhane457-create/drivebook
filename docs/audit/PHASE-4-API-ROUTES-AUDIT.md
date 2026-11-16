@@ -907,7 +907,7 @@ Cascading hang is unlikely in practice. LOW.
 | ID | Group | Severity | Finding | Status |
 |----|-------|----------|---------|--------|
 | PH4-WH-01 | Webhooks | MEDIUM | WhatsApp POST: no fail-closed guard when `WHATSAPP_APP_SECRET` unset | FIX IMPLEMENTED 7c5155c1 — production config verification deferred |
-| PH4-AV-01 | Availability | MEDIUM | POST `/api/availability`: main app did not validate voice service credentials | FIX IMPLEMENTED 6e98a6df â€” awaiting runtime test |
+| PH4-AV-01 | Availability | MEDIUM | POST `/api/availability`: main app did not validate voice service credentials | FIX-VERIFIED at source level (6e98a6df) — live endpoint test deferred: AI voice architecture is being redesigned; current hybrid integration will change; source fix is defence-in-depth and survives the redesign |
 | PH4-DBG-01 | Debug | LOW | `/api/debug/session`: no auth gate | FIX IMPLEMENTED 7c5155c1 — runtime verification pending |
 | PH4-CAL-01 | Calendar | LOW | OAuth callback `appUrl()` uses `NEXTAUTH_URL` not `getAppUrl()` | FIX IMPLEMENTED 7c5155c1 — runtime verification pending |
 | PH4-CLT-02 | Client | LOW | `transactions/route`: no CLIENT role gate | FIX IMPLEMENTED 7c5155c1 — runtime verification pending |
@@ -918,13 +918,13 @@ Cascading hang is unlikely in practice. LOW.
 | PH4-WH-02 | Webhooks | LOW | Stripe proxy internal `fetch()` has no timeout | FIX IMPLEMENTED 7c5155c1 — try/finally cleanup corrected in next commit |
 | PH4-INS-03 | Instructor | LOW | Document upload: no rate limit | FIX IMPLEMENTED 7c5155c1 — runtime verification pending |
 
-**PH4-AV-01 fix:** POST `/api/availability` now wrapped with `withVoiceServiceAuth`. Accepts `VOICE_SERVICE_API_KEY` (x-api-key or Bearer) or `VAPI_WEBHOOK_SECRET` (x-vapi-secret). GET `/api/availability/slots` unchanged — public access intentional for marketplace booking flow. Production env vars (`VOICE_SERVICE_API_KEY`, `VAPI_WEBHOOK_SECRET`) confirmed configured in Vercel.
+**PH4-AV-01:** POST `/api/availability` wrapped with `withVoiceServiceAuth` (6e98a6df). Defence-in-depth: blocks direct unauthenticated access regardless of hybrid proxy behaviour. Live endpoint test deferred — AI voice architecture is planned for redesign; auth pattern for the availability endpoint should be reviewed as part of that work, not tested against an integration that will change. Status: FIX-VERIFIED at source level.
 
 **PH4-ABN-01 fix:** Route now requires `role === 'provider'` session. Returns 401 (no session) or 403 (wrong role) before the rate limit check. Per-provider rate limit `abnVerifyRateLimit` (10/hour) applied after session check. `checkRateLimitStrict` fails closed in production when Redis is unavailable. Redis and session configuration confirmed in Vercel production.
 
 **Production environment variables confirmed configured (2026-11-15):** `CRON_SECRET`, `WHATSAPP_APP_SECRET`, `VOICE_SERVICE_API_KEY`, `VAPI_WEBHOOK_SECRET`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `OTP_HASH_SECRET`, `NEXT_PUBLIC_APP_URL`
 
-**All 11 findings have fixes implemented. Remaining live endpoint verification: PH4-AV-01 (voice availability auth), PH4-ABN-01 (ABN payout settings), PH4-WH-01 (WhatsApp signature enforcement).**
+**All 11 findings have fixes implemented. PH4-AV-01 FIX-VERIFIED at source (live test deferred to AI redesign). Remaining live endpoint tests: PH4-ABN-01 (ABN payout settings), PH4-WH-01 (WhatsApp signature — no DB writes currently, low priority).**
 
 | ID | Reason |
 |----|--------|
