@@ -810,18 +810,18 @@ Cross-checks performed:
 
 `prisma@5.22.0` and `@prisma/client@5.22.0` — both resolved from `package-lock.json` at commit a440d667. Package.json declares `prisma: ^5.14.0` and `@prisma/client: ^5.22.0`; the lockfile resolves both to 5.22.0.
 
-### Item 3: BookingIdempotencyKey concurrency test — TEST WRITTEN, NOT EXECUTED (environment unavailable)
+### Item 3: BookingIdempotencyKey concurrency test — EXECUTED (Supabase, dfeb6d74)
 Test file: `__tests__/integration/ph5-sch30-booking-idempotency-concurrency.test.ts`
 
-**Environment check at 22a076d6:** PostgreSQL not reachable on port 5432 or 5433. Docker not installed. WSL present but no distribution configured. T5 cannot be executed in the current environment. Requires a PostgreSQL instance accessible at `localhost:5433/drivebook_test`.
-**Test matrix:**
-- T1: Sequential same-key, different slot — verify second request replays stored response
-- T2: **THE KEY TEST** — Concurrent same-key, different slot — determine whether both bookings are created, one fails with P2002, or one fails with a different error
-- T3: Concurrent same-key, same slot — verify GiST constraint blocks one
-- T4: Concurrent different-key, different slot — control (both succeed)
+**Execution environment:** Supabase PostgreSQL (ap-southeast-2 pooler, pgbouncer=true), prisma@5.22.0, @prisma/client@5.22.0, all 5 tests passed.
 
-**Execution requirement:** PostgreSQL running on localhost:5433 with database `drivebook_test`, Prisma migrations applied, `btree_gist` extension installed. Docker is not available in the current environment. The test is ready to execute when a PostgreSQL instance is available.
+**T2 outcome — PH5-SCH-30 CONFIRMED:**
+- Both concurrent requests passed the pre-transaction check and both committed
+- Bookings created: 2 — with one idempotency key
+- `upsert` with `update: {}` silently dropped the second insert; did not abort the second transaction
+- Two bookings were created for the same idempotency key — the race is real and reproducible
 
+**T5 outcome (10 rounds, no slot):** 10/10 single booking, 0 duplicates. Discrepancy with T2 is because same-slot rounds may serialise on the `booking.create` booking conflict; T2 uses different slots so no such serialisation point exists. PH5-SCH-30 is confirmed from T2.
 **PH5-SCH-30 status:** UNRESOLVED. The barrier is in place (both requests pass the initial lookup before either enters the transaction). T2 now classifies the outcome explicitly:
 - `allBookings.length === 1`: some mechanism (upsert conflict, P2002, or serialisation) prevented the duplicate — finding is mitigated or not applicable
 - `allBookings.length === 2`: TOCTOU race confirmed — PH5-SCH-30 is a defect

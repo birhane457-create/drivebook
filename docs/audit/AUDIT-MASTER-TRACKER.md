@@ -1136,7 +1136,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | ID | Title | Risk | Status | Reason |
 |---|---|---|---|---|
 | PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | OPEN | Remediation: onDelete: Restrict; requires migration; Customer cascade path documented via PH5-SCH-28 |
-| PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | UNRESOLVED — Prisma-layer test written (T2 with barrier), not executed; PostgreSQL required | upsert update:{} exact outcome under concurrent access not tested |
+| PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | CONFIRMED — race executed against Supabase PostgreSQL: two bookings created with one idempotency key (T2, dfeb6d74); upsert update:{} does not abort the second transaction | Remediation: replace upsert with create + P2002 catch inside the booking transaction |
 | PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | OPEN — production-service test written (ph5-sch35-saas-checkout-concurrency.test.ts); calls exported handleCheckoutComplete() with vi.mock for Stripe + notifications; barrier-synchronised C2 is diagnostic; PostgreSQL execution unavailable | Requires PostgreSQL on localhost:5433; run with prisma migrate deploy not db push |
 | PH5-SCH-36 | Book Later path creates duplicate Checkout Sessions on retry | MEDIUM | OPEN/PROVISIONAL — no idempotency write in Book Later branch; multiple sessions possible on Twilio retry | Impact and exploitability assessment deferred |
 | PH5-SCH-37 | BookingIdempotencyKey replay scope insufficiently bound — requires both matching key and email; stored response includes paymentToken URL | MEDIUM | OPEN/PROVISIONAL — replay validates key and email but does not bind to original booking parameters (providerId, hours, slot) | Exploitability depends on key generation; assessment deferred |
@@ -1147,7 +1147,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 
 - [ ] Reconcile all 37 finding IDs — 37-ID table PENDING; PH5-SCH-36/37 severities provisional
 - [x] Confirm resolved Prisma versions — prisma@5.22.0 and @prisma/client@5.22.0
-- [ ] Execute BookingIdempotencyKey concurrency test (T2 with barrier) against PostgreSQL; update PH5-SCH-30
+- [x] Execute BookingIdempotencyKey concurrency test — DONE (dfeb6d74): PH5-SCH-30 CONFIRMED
 - [ ] Write and execute deterministic concurrent webhook test for SaaS path (service-level, not HTTP); update PH5-SCH-35
 - [x] Add Phase 5 to master tracker
 - [x] Confirm DIRECT payment 503 guard in both single and bulk booking paths
