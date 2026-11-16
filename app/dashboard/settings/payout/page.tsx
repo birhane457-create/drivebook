@@ -431,7 +431,12 @@ export default function PayoutSettingsPage() {
               <p className="text-xs text-muted-foreground mt-1">Must match the name on your ABR registration. Used to verify ABN ownership.</p>
             </div>
             <div className="relative">
-              <input type="text" placeholder="12345678901" maxLength={11} value={s.abn} onChange={e => handleAbnChange(e.target.value)}
+              <input
+                type="text"
+                placeholder="23 105 066 199"
+                inputMode="numeric"
+                value={formatABN(s.abn)}
+                onChange={e => handleAbnChange(e.target.value)}
                 className={`${inputBase} pr-10 ${s.abn.length === 11 && !abnChecksumValid ? 'border-red-500' : s.abn.length === 11 && s.abnVerified ? 'border-green-500' : ''}`} />
               <div className="absolute right-3 top-2.5">
                 {verifying && <Loader2 className="h-4 w-4 text-primary animate-spin" />}
@@ -439,7 +444,7 @@ export default function PayoutSettingsPage() {
                 {!verifying && s.abn.length === 11 && !abnChecksumValid && <XCircle className="h-4 w-4 text-destructive" />}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-1">11 digits — no spaces. Verified automatically via the Australian Business Register.</p>
+            <p className="text-xs text-muted-foreground mt-1">11 digits — spaces are accepted (e.g. 23 105 066 199). Verified automatically via the Australian Business Register.</p>
 
             {s.abn.length === 11 && !abnChecksumValid && (
               <div className="flex items-center gap-2 text-sm text-destructive bg-red-900/30 border border-red-700/50 rounded-lg p-3 mt-2">
