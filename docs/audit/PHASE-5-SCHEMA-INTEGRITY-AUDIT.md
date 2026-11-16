@@ -272,7 +272,7 @@ model User {
 | PH5-SCH-28 | MEDIUM | Customer hard-delete check/delete race — SAAS-only (no user account), narrow concurrent booking window, cascade to Transaction |
 | PH5-SCH-29 | LOW | Booking.serviceId not referentially enforced — nullable string, no FK to BusinessService |
 
-**1 HIGH, 13 MEDIUM, 14 LOW, 1 NEGLIGIBLE — 29 total findings across Groups 1-10**
+**1 HIGH, 14 MEDIUM, 18 LOW, 1 NEGLIGIBLE — 34 total findings across Groups 1-12**
 
 **PH5-SCH-09 status:** Superseded by PH5-SCH-14 â€” the constraint exists (partial unique index in migration `20260916131858_sub22`) but is not reflected in the Prisma schema.
 
@@ -629,12 +629,136 @@ The schema comment describes it as an FK to `BusinessService.id` but there is no
 
 ---
 
-## Remaining Groups (pending)
+## Group 11: BookingIdempotencyKey
 
-- Group 11: BookingIdempotencyKey — scope, uniqueness, expiry, replay behaviour
-- Group 12: WebhookEvent — event uniqueness, processing state, retry safety
+**Schema (lines 788-795):**
+```prisma
+model BookingIdempotencyKey {
+  key       String   @id
+  bookingId String
+  response  Json
+  createdAt DateTime @default(now())
+  email     String
+  @@index([createdAt])
+  @@index([email])
+}
+```
+
+**Migration:** `20260603000002_add_booking_idempotency_key` creates table with PK on `key`, index on `createdAt`. Second migration `20260813085848` adds `email` column and index.
+
+**Constraints:**
+- `key` is PRIMARY KEY (unique by definition) ✅
+- No FK on `bookingId` — plain string ✅ (correct for idempotency records)
 
 ---
 
-**Last updated:** 2026-11-15 (Group 10 complete)
-**Commit baseline:** 978e8ddb
+**Finding PH5-SCH-30 (MEDIUM): BookingIdempotencyKey has TOCTOU race — check outside transaction, upsert inside with no-op update**
+
+- `app/api/public/bookings/bulk/route.ts` line 133: `findUnique({ where: { key: idempotencyKey } })` — OUTSIDE the booking creation transaction
+- Line 714: `prisma.\$transaction(async (tx) => { ... })` — transaction begins
+- Line 774: `tx.booking.create(...)` — booking created
+- Line 840: `tx.bookingIdempotencyKey.upsert({ where: { key: idempotencyKey }, update: {}, create: { ... } })` — upsert with `update: {}` (no-op on conflict)
+
+**Race sequence:**
+1. Two concurrent requests with the same Idempotency-Key
+2. Both pass the initial `findUnique` check (key does not exist yet) — outside transaction
+3. Both enter their transactions
+4. Both create bookings inside their transactions
+5. Both try to upsert the key — one creates, the other does `update: {}` (no-op, no error)
+6. Both commit — result: two bookings, one idempotency key
+
+**Why the P2002 catch does not fire:** `upsert` translates to `INSERT ... ON CONFLICT DO NOTHING` in PostgreSQL. It does not throw P2002 — it handles conflicts internally. The catch at line 869 (`if (err.code === 'P2002')`) is defensive but does not address this race.
+
+**Mitigation:** The GiST exclusion constraint on SlotReservation (PH5-SCH-17/18) prevents duplicate same-time-slot bookings — the second transaction's slot reservation create would receive `23P01` and the booking transaction would abort. This means the race is only exploitable when the two concurrent requests specify different time slots with the same key.
+
+**Contrast with WebhookEvent (Group 12):** WebhookEvent uses `create` + P2002 catch (correct idempotency pattern). BookingIdempotencyKey uses `upsert` with `update: {}` (broken under concurrent access).
+
+**Remediation:** Move the idempotency check inside the transaction, or use `create` (not `upsert`) and let P2002 abort the transaction.
+
+---
+
+**Finding PH5-SCH-31 (LOW): `bookingId` is not a FK relation — no referential integrity**
+
+- `BookingIdempotencyKey.bookingId` is a plain string with no `@relation` directive
+- If a booking is hard-deleted, the idempotency key record remains with a dangling `bookingId`
+- This is **correct for idempotency** — the key should survive regardless of booking lifecycle
+- The `response` JSON contains the booking ID; replaying a stale response after the booking is deleted could confuse the client, but the 24-hour cleanup window limits exposure
+
+---
+
+**Finding PH5-SCH-32 (LOW): No explicit expiry — 24-hour cron cleanup only**
+
+- Keys are cleaned up by `cleanup-expired-bookings` cron (`deleteMany` where `createdAt < 24h ago`)
+- No `expiresAt` field — keys exist until the cron runs
+- If the cron fails, keys accumulate indefinitely (table bloat, no correctness impact)
+- The 24-hour window aligns with Stripe's own idempotency window, which is the correct duration
+
+---
+
+## Group 12: WebhookEvent
+
+**Schema (lines 600-607):**
+```prisma
+model WebhookEvent {
+  id             String   @id @default(cuid())
+  idempotencyKey String   @unique
+  eventType      String
+  stripeEventId  String
+  metadata       Json?
+  processedAt    DateTime @default(now())
+}
+```
+
+**Constraints:**
+- `idempotencyKey @unique` ✅ — authoritative deduplication guard
+- No indexes (implicit unique index on `idempotencyKey` is sufficient — only query is `findUnique`)
+- No FK relations (correct — webhook events are self-contained audit records)
+
+---
+
+**INFO: Idempotency pattern is correct ✅**
+
+`recordWebhookEvent()` (line 3310) uses `db.webhookEvent.create()` (not `upsert`). On P2002 (unique constraint violation), it throws `DuplicateWebhookEventError`, which the caller catches at line 116 and returns `{ received: true, duplicate: true }` (HTTP 200).
+
+This is the **correct idempotency pattern** — distinct from BookingIdempotencyKey's broken `upsert` pattern. The `create` + P2002 approach makes the database constraint the authoritative guard, and the error aborts the transaction atomically.
+
+**Idempotency key format:** `__` — deterministic, includes the Stripe event ID and creation timestamp. Safe for retries.
+
+**Transaction integration:** `recordWebhookEvent(tx, ...)` is called at the beginning of the processing transaction. If the transaction fails for any reason, the webhook event record is rolled back (allowing retry). If a concurrent delivery already claimed the event, P2002 aborts the transaction.
+
+---
+
+**Finding PH5-SCH-33 (LOW): No cleanup or retention policy for WebhookEvent records**
+
+- WebhookEvent records have no `expiresAt` and no cleanup cron
+- Records accumulate indefinitely — correct for audit trail purposes but will grow the table over years
+- **Risk:** table bloat after years of operation; no correctness impact
+- **Recommendation (deferred):** Consider a retention policy (e.g., archive records older than 2 years) as a performance optimisation, not a correctness fix
+
+---
+
+**Finding PH5-SCH-34 (LOW): `processedAt` is set at record creation, not at transaction commit**
+
+- `processedAt` defaults to `now()` — set when the record is created
+- `recordWebhookEvent(tx, ...)` is called at the beginning of the processing transaction
+- If the transaction takes significant time to complete, `processedAt` shows the start time, not the completion time
+- **Risk:** minor inaccuracy in audit timestamps — not a correctness issue since the transaction is atomic (if it commits, everything including the record is committed)
+
+---
+
+## Phase 5 Complete — All Groups Audited
+
+**Final finding count: 1 HIGH, 14 MEDIUM, 18 LOW, 1 NEGLIGIBLE = 34 total findings across Groups 1-12**
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| PH5-SCH-30 | MEDIUM | BookingIdempotencyKey TOCTOU race — check outside tx, upsert inside with no-op update |
+| PH5-SCH-31 | LOW | BookingIdempotencyKey.bookingId not a FK relation — correct for idempotency |
+| PH5-SCH-32 | LOW | No explicit expiry on BookingIdempotencyKey — 24h cron cleanup only |
+| PH5-SCH-33 | LOW | No cleanup/retention policy for WebhookEvent — audit trail grows indefinitely |
+| PH5-SCH-34 | LOW | WebhookEvent.processedAt set at record creation, not transaction commit |
+
+---
+
+**Last updated:** 2026-11-15 (Groups 11-12 complete — Phase 5 audit complete)
+**Commit baseline:** a5270361
