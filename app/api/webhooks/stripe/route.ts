@@ -27,16 +27,21 @@ export async function POST(req: NextRequest) {
     // a 500 response here is preferable to a silent hang.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30_000);
-    const response = await fetch(canonicalUrl.toString(), {
-      method: 'POST',
-      headers: {
-        ...headers,
-        'content-type': 'application/json',
-      },
-      body,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+
+    let response: Response;
+    try {
+      response = await fetch(canonicalUrl.toString(), {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'content-type': 'application/json',
+        },
+        body,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const responseBody = await response.text();
     return new NextResponse(responseBody, {
