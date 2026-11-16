@@ -286,7 +286,7 @@ export default function PayoutSettingsPage() {
       <p className="text-sm text-muted-foreground mb-6">How you receive payments and your Australian tax details.</p>
 
       {toast && (
-        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-foreground text-sm font-medium ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-destructive'}`}>
+        <div className={`fixed top-16 right-5 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-foreground text-sm font-medium ${toast.type === 'success' ? 'bg-emerald-600' : 'bg-destructive'}`}>
           {toast.type === 'success' ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
           {toast.message}
         </div>
