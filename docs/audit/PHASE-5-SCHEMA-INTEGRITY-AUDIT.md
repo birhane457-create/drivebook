@@ -1,11 +1,11 @@
 ﻿# Phase 5: Schema Integrity Audit
-
+- The uniqueness guard (`idempotencyKey @unique` + P2002 → `DuplicateWebhookEventError`) is sound for preventing concurrent duplicate recording ✅
 **Version:** 1.0  
-**Date:** 2026-11-15  
+- The SaaS booking path is the exception — it relies on a pre-transaction status check that does NOT provide an atomic concurrency guard ⚠️
 **Status:** IN PROGRESS  
-**Auditor:** Kiro  
+- Two concurrent deliveries can both pass the unpaid check before either transaction commits; both apply side effects before either tries to record ⚠️
 **Baseline commit:** be9ca25f (Phase 4 complete)
-
+- PH5-SCH-35 reassessed from LOW to MEDIUM: needs conditional state transition inside transaction or deterministic concurrent test
 **Scope:** 53 models across 1,305 lines of Prisma schema  
 **Methodology:** Findings-only audit. No code changes during this phase without explicit approval.
 
@@ -272,7 +272,7 @@ model User {
 | PH5-SCH-28 | MEDIUM | Customer hard-delete check/delete race — SAAS-only (no user account), narrow concurrent booking window, cascade to Transaction |
 | PH5-SCH-29 | LOW | Booking.serviceId not referentially enforced — nullable string, no FK to BusinessService |
 
-**1 HIGH, 14 MEDIUM, 19 LOW, 1 NEGLIGIBLE — 35 total findings across Groups 1-12**
+**1 HIGH, 15 MEDIUM, 18 LOW, 1 NEGLIGIBLE — 35 total findings across Groups 1-12**
 
 **PH5-SCH-09 status:** Superseded by PH5-SCH-14 â€” the constraint exists (partial unique index in migration `20260916131858_sub22`) but is not reflected in the Prisma schema.
 
@@ -757,7 +757,7 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 | PH5-SCH-32 | LOW | No explicit expiry on BookingIdempotencyKey — 24h cron cleanup only |
 | PH5-SCH-33 | LOW | No cleanup/retention policy for WebhookEvent — audit trail grows indefinitely |
 | PH5-SCH-34 | LOW | WebhookEvent.processedAt set at record creation, not transaction commit |
-| PH5-SCH-35 | LOW | SaaS booking webhook event recorded outside processing transaction — application-level idempotency via quote.status check compensates |
+| PH5-SCH-35 | MEDIUM | SaaS booking webhook event recorded outside tx — pre-transaction status check does not provide atomic concurrency guard |
 
 ---
 
@@ -818,15 +818,15 @@ Test file: `__tests__/integration/ph5-sch30-booking-idempotency-concurrency.test
 - This provides **application-level idempotency** via the quote status check, not **transaction-level idempotency**
 - Risk: if the Quote status check is ever removed or the status is reset, retries would double-process
 
-**Finding PH5-SCH-35 (LOW): SaaS booking webhook event recorded outside the processing transaction**
+**Finding PH5-SCH-35 (MEDIUM, reassessed from LOW): SaaS booking webhook event recorded outside the processing transaction**
 - `recordWebhookEvent(prisma, ...)` at line 700 is called AFTER `handleCheckoutComplete()` commits
-- Application-level idempotency via `quote.status === 'PAID'` check compensates for the non-atomic recording
-- Most other handlers correctly use `recordWebhookEvent(tx, ...)` inside the transaction
-- Risk: LOW — the quote status check is a reliable guard, but the pattern is inconsistent with other handlers
 
-**Overall WebhookEvent idempotency assessment:**
-- The uniqueness guard (`idempotencyKey @unique` + P2002 → `DuplicateWebhookEventError`) is sound for preventing concurrent duplicate processing ✅
-- Most side-effect handlers record the event inside the same transaction as the side effects ✅
+- `recordWebhookEvent(prisma, ...)` at line 700 is called AFTER `handleCheckoutComplete()` commits its transaction
+- `handleCheckoutComplete()` (saas-payment.ts line 437) performs a pre-transaction status check: `if (quote.status === 'PAID') return early`
+- **This check is NOT an atomic concurrency guard.** Two concurrent webhook deliveries can both read the unpaid Quote before either transaction commits. Both can proceed through the transaction and send notifications.
+- The status check helps with **sequential retries** after the first transaction commits. It does not prevent **concurrent duplicate processing**.
+- The `recordWebhookEvent` unique constraint prevents concurrent duplicate recording, but the side effects (Quote update, Booking update, audit log, notification emails) have already been applied by both handlers before either tries to record.
+- **Severity reassessed to MEDIUM:** The pre-transaction status check does not provide an atomic concurrency guard. A conditional state transition inside the transaction (e.g., `UPDATE Quote SET status = 'PAID' WHERE status != 'PAID'` with affected-row check) or equivalent database-level claim is needed before treating the application guard as sufficient.
 - The SaaS booking path is the exception — it relies on application-level idempotency ⚠️
 - No evidence found of double-processing in any other handler ✅
 
@@ -843,11 +843,11 @@ Consistent with PH4-REG-01 deferral: the 503→404/501 fix will be part of the D
 
 ---
 
-**Final count: 1 HIGH, 14 MEDIUM, 18 LOW, 1 NEGLIGIBLE = 34 findings (PH5-SCH-35 added in closure validation)**
+**Final count: 1 HIGH, 15 MEDIUM, 18 LOW, 1 NEGLIGIBLE = 35 findings**
 
 **PH5-SCH-30 remains UNRESOLVED** — concurrency test written but not executed (no PostgreSQL available in current environment).
 
 **Phase 5 baseline status:** FINDINGS COMPLETE — one concurrency test pending execution before full baseline freeze.
 
 **Last updated:** 2026-11-15 (closure validation complete except PH5-SCH-30 test execution)
-**Commit baseline:** a26bf693
+**Overall WebhookEvent idempotency assessment:**

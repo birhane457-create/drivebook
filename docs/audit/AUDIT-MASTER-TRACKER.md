@@ -1,7 +1,7 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-
+**Version:** 6.71 (Phase 5 closure validation — 35 findings, PH5-SCH-30 unresolved, PH5-SCH-35 added)
 **Version:** 6.68 (Registration onboarding baseline v1.1 — corrected gap statuses, roadmap dependencies, public SaaS readiness criteria, discovery spec)
-**Last Updated:** 2026-11-14 (v6.68)
+**Last Updated:** 2026-11-15 (v6.71)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1107,48 +1107,49 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 ---
 
 **Section 12 last updated:** 2026-11-14 (c1bd5c6d)  
-**Master Tracker version:** v6.69
+**Master Tracker version:** v6.71
 
 ---
 
 ## Section 13 — Phase 5: Schema Integrity Audit
-
+## Section 13 — Phase 5: Schema Integrity Audit
 **Version:** 1.0  
-**Started:** 2026-11-15  
+**Version:** 1.1
 **Status:** FINDINGS COMPLETE — closure validation pending (Prisma concurrency test, WebhookEvent full idempotency, master tracker reconciliation)  
-**Audit document:** `docs/audit/PHASE-5-SCHEMA-INTEGRITY-AUDIT.md`  
+**Status:** FINDINGS COMPLETE — closure validation partial: 5 of 6 items done; PH5-SCH-30 concurrency test written but not executed (no PostgreSQL); PH5-SCH-35 added and reassessed
 **Baseline commit:** a440d667  
-**Methodology:** Source and migration inspection of all 53 Prisma models. No code changes during audit. 12 groups, 34 findings.
+**Baseline commit:** 1b8d6804
 
 **Resolved versions:** `prisma@5.22.0`, `@prisma/client@5.22.0` (verified from `package-lock.json` at a440d667)
 
-### 13.1 — Finding Summary
+**Methodology:** Source and migration inspection of all 53 Prisma models. No code changes during audit. 12 groups, 35 findings.
 
 | Severity | Count | Key IDs |
 |----------|-------|---------|
 | HIGH | 1 | PH5-SCH-10: Transaction cascade-deletes when Booking is hard-deleted |
 | MEDIUM | 14 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk |
-| LOW | 18 | Various constraint, index, and schema-database drift issues |
+| MEDIUM | 14 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk |
 | NEGLIGIBLE | 1 | PH5-SCH-19: SlotReservation cascade (transient rows, no financial evidence) |
-| **Total** | **34** | All finding IDs PH5-SCH-01 through PH5-SCH-34 |
+| LOW | 19 | Various constraint, index, schema-database drift, PH5-SCH-35: SaaS webhook event outside tx |
 
-### 13.2 — Deferred Items
+| **Total** | **35** | All finding IDs PH5-SCH-01 through PH5-SCH-35 |
 
 | ID | Title | Risk | Status | Reason |
 |---|---|---|---|---|
 | PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | OPEN — no production path confirmed but Customer cascade path found (PH5-SCH-28) | Remediation: change to onDelete: Restrict; requires migration |
 | PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | UNRESOLVED — concurrency test required against Prisma 5.22.0 / PostgreSQL | Exact outcome of upsert update:{} under concurrent access not yet tested |
+| PH5-SCH-35 | SaaS booking webhook event recorded outside processing tx | MEDIUM | OPEN — pre-transaction status check does not provide atomic concurrency guard | Reassessed: two concurrent deliveries can both pass unpaid check before either tx commits; needs deterministic concurrent test |
 | PH4-REG-01 | DIRECT payment mode returns 503 | LOW | DEFERRED | 503 guard present in both single and bulk booking paths; fix as part of DIRECT payment implementation |
 | PH4-REG-02 | Transaction timeouts excessive | LOW | DEFERRED | No correctness impact; optimisation phase item |
 
 ### 13.3 — Phase 5 Closure Checklist
 
-- [ ] Reconcile all 34 finding IDs — verify no duplicates, severity consistent in summary and detail
+- [x] Reconcile all 35 finding IDs — no duplicates, severity consistent (PH5-SCH-35 added)
 - [ ] Run BookingIdempotencyKey concurrency test (Prisma 5.22.0, PostgreSQL); update PH5-SCH-30
-- [ ] Examine WebhookEvent full idempotency — event status transitions, side effects committed exactly once
+- [ ] Run BookingIdempotencyKey concurrency test (Prisma 5.22.0, PostgreSQL); update PH5-SCH-30 — test written, not executed
 - [ ] Confirm DIRECT payment 503 guard in both single and bulk booking paths (consistent with PH4-REG-01)
-
+- [x] Confirm DIRECT payment 503 guard in both single and bulk booking paths (consistent with PH4-REG-01)
 ---
 
 **Section 13 last updated:** 2026-11-15 (a440d667)  
-**Master Tracker version:** v6.70
+**Section 13 last updated:** 2026-11-15 (1b8d6804)

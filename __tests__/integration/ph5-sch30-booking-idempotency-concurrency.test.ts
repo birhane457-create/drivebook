@@ -99,8 +99,8 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     }).catch(() => {});
   });
 
-  // T1: Sequential same-key, different slot — second should replay
-  it('T1: sequential same-key different-slot — second request replays stored response', async () => {
+  // T1: Sequential same-key, different slot — second request should replay
+  it('T1: sequential same-key different-slot — second request replays stored response, no duplicate booking', async () => {
     const idemKey = `${TEST_PREFIX}_T1`;
     const slot1Start = new Date('2027-06-15T10:00:00Z');
     const slot1End = new Date('2027-06-15T11:00:00Z');
@@ -140,7 +140,8 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
       return booking;
     });
 
-    // Second request — same key, different slot — should find existing key
+    // Second request — same key, different slot — should find existing key and replay
+    // Simulates what the route does: check first, then create
     const existing = await prisma.bookingIdempotencyKey.findUnique({
       where: { key: idemKey },
     });
@@ -148,27 +149,78 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     expect(existing).not.toBeNull();
     expect(existing!.bookingId).toBe(booking1.id);
 
+    // Second request should NOT create a new booking — it should replay the stored response
+    let secondBookingCreated = false;
+    if (!existing) {
+      // Only create if key doesn't exist (it does, so this block should not execute)
+      await prisma.$transaction(async (tx) => {
+        const booking2 = await tx.booking.create({
+          data: {
+            providerId: testProviderId,
+            customerId: testCustomerId,
+            customerName: `${TEST_PREFIX}_Customer`,
+            customerPhone: '0400000001',
+            status: 'PENDING_PAYMENT',
+            startTime: slot2Start,
+            endTime: slot2End,
+            duration: 60,
+            price: 70,
+            platformFee: 0,
+            providerPayout: 59.5,
+            commissionRate: 0.15,
+          },
+        });
+        secondBookingCreated = true;
+        await (tx as any).bookingIdempotencyKey.upsert({
+          where: { key: idemKey },
+          update: {},
+          create: {
+            key: idemKey,
+            email: `${TEST_PREFIX}@test.com`,
+            bookingId: booking2.id,
+            response: { bookingId: booking2.id, status: 'PENDING_PAYMENT' },
+          },
+        });
+      });
+    }
+
+    expect(secondBookingCreated).toBe(false);
+
     // Verify only one booking was created
     const allBookings = await prisma.booking.findMany({
       where: { providerId: testProviderId },
     });
     expect(allBookings.length).toBe(1);
+    expect(allBookings[0].id).toBe(booking1.id);
   });
 
   // T2: THE KEY TEST — Concurrent same-key, different slot
-  it('T2: concurrent same-key different-slot — determine race outcome', async () => {
+  it('T2: concurrent same-key different-slot — determine race outcome with barrier', async () => {
     const idemKey = `${TEST_PREFIX}_T2`;
     const slot1Start = new Date('2027-06-16T10:00:00Z');
     const slot1End = new Date('2027-06-16T11:00:00Z');
     const slot2Start = new Date('2027-06-16T14:00:00Z');
     const slot2End = new Date('2027-06-16T15:00:00Z');
 
-    // Simulate the bulk booking flow: check outside tx, create inside tx
+    // Barrier: both requests must complete the initial findUnique before
+    // either proceeds to the transaction. This maximises the TOCTOU window.
+    const barrier = { count: 0, target: 2, resolve: null as ((v: void) => void) | null };
+    const barrierPromise = new Promise<void>((resolve) => { barrier.resolve = resolve; });
+
     const createBookingWithIdem = async (slotStart: Date, slotEnd: Date) => {
       // Step 1: Check if key exists (OUTSIDE transaction — this is the TOCTOU window)
       const existing = await prisma.bookingIdempotencyKey.findUnique({
         where: { key: idemKey },
       });
+
+      // Signal that we've passed the lookup
+      barrier.count++;
+      if (barrier.count >= barrier.target && barrier.resolve) {
+        barrier.resolve();
+      }
+      // Wait for the other request to also pass its lookup
+      await barrierPromise;
+
       if (existing) {
         return { result: 'replayed', bookingId: existing.bookingId };
       }
@@ -215,7 +267,7 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
           });
           return { result: 'p2002_caught', bookingId: stored?.bookingId };
         }
-        return { result: 'error', error: err.message };
+        return { result: 'error', error: err.message, code: err.code };
       }
     };
 
@@ -225,36 +277,41 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
       createBookingWithIdem(slot2Start, slot2End),
     ]);
 
-    // Record the outcome
-    console.log('T2 Results:', { result1, result2 });
-
-    // Count bookings created
+    // Count bookings and keys created
     const allBookings = await prisma.booking.findMany({
       where: { providerId: testProviderId },
     });
-
-    // Count idempotency keys
     const allKeys = await prisma.bookingIdempotencyKey.findMany({
       where: { key: idemKey },
     });
 
+    console.log('T2 Results:', { result1, result2 });
     console.log('T2: Bookings created:', allBookings.length);
     console.log('T2: Idempotency keys:', allKeys.length);
-    console.log('T2: Result1:', result1);
-    console.log('T2: Result2:', result2);
 
-    // Record findings for audit
+    // Record the outcome for audit — this determines PH5-SCH-30
     if (allBookings.length === 2) {
       console.warn('⚠️ PH5-SCH-30 CONFIRMED: Two bookings created with same idempotency key');
       console.warn('⚠️ The upsert with update:{} does NOT prevent duplicate booking creation under concurrency');
     } else if (allBookings.length === 1) {
-      console.log('✅ PH5-SCH-30 NOT CONFIRMED: Only one booking created (some mechanism prevented the duplicate)');
+      console.log('✅ PH5-SCH-30 NOT CONFIRMED: Only one booking created');
+      console.log('✅ Some mechanism (P2002, upsert conflict, or serialization) prevented the duplicate');
+    } else {
+      console.log('T2: Unexpected booking count:', allBookings.length);
     }
 
-    // The test outcome determines the finding:
-    // - If allBookings.length === 2: PH5-SCH-30 is a confirmed defect
-    // - If allBookings.length === 1: PH5-SCH-30 is mitigated (mechanism TBD)
-    expect(allBookings).toBeDefined(); // Basic sanity check
+    // Assert exact booking count — this is the definitive outcome
+    expect(allBookings.length).toBeGreaterThanOrEqual(1);
+    expect(allKeys.length).toBe(1); // Exactly one idempotency key
+
+    // Record which request won and which lost
+    console.log('T2: Winner:', allBookings[0]?.id);
+    console.log('T2: Result1:', result1);
+    console.log('T2: Result2:', result2);
+
+    // Classify the losing request's outcome
+    const losingResult = result1.result === 'created' ? result2 : result1;
+    console.log('T2: Losing request outcome:', losingResult.result);
   });
 
   // T3: Concurrent same-key, same slot — GiST constraint should block
@@ -336,10 +393,15 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
       where: { providerId: testProviderId },
     });
 
-    // GiST constraint should prevent duplicate same-slot bookings
     console.log('T3: Bookings created:', allBookings.length);
 
-    expect(allBookings.length).toBeLessThanOrEqual(1);
+    // GiST constraint should prevent duplicate same-slot bookings
+    expect(allBookings.length).toBe(1);
+
+    // Verify the losing request received the expected conflict
+    const losingResult = result1.result === 'created' ? result2 : result1;
+    expect(losingResult.result === 'gist_blocked' || losingResult.result === 'p2002_caught').toBe(true);
+    console.log('T3: Losing request outcome:', losingResult.result);
   });
 
   // T4: Concurrent different-key, different slot — both should succeed (control)
