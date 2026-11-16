@@ -815,6 +815,7 @@ Cascading hang is unlikely in practice. LOW.
 ---
 
 ## Group 13: ABN
+> **Historical record** — findings from initial audit pass. Current remediation status is in the Phase 4 findings and remediation status table above.
 
 **Files counted:** 1  
 **Files inspected:** 1
@@ -843,6 +844,7 @@ Cascading hang is unlikely in practice. LOW.
 ---
 
 ## Group 15: Health and Debug
+> **Historical record** — findings from initial audit pass. Current remediation status is in the Phase 4 findings and remediation status table above.
 
 **Files counted:** 2  
 **Files inspected:** 2 (all)
@@ -951,9 +953,9 @@ Cascading hang is unlikely in practice. LOW.
 **Total route.ts files:** 278  
 **Groups covered:** 18 (all)  
 **Files fully inspected:** ~80  
-**Open findings:** 1 MEDIUM, 8 LOW  
-**Fixes implemented this audit:** 13 (11 source-verified, all awaiting runtime confirmation)
-**Phase 4 audit:** COMPLETE â€” batch fix pending
+**Source-remediated findings:** 11 of 11 — all have fixes implemented at source level
+**Fixes implemented this audit:** 13
+**Phase 4 audit:** SOURCE REMEDIATION COMPLETE — runtime verification pending for all 11 findings
 
 ---
 
@@ -962,6 +964,7 @@ Cascading hang is unlikely in practice. LOW.
 ---
 
 ## Group 6: Instructor Self-Service Routes
+> **Historical record** — findings from initial audit pass. Current remediation status is in the Phase 4 findings and remediation status table above.
 
 **Routes reviewed:** documents, profile, subscription, earnings, payout-settings  
 **Files:** `app/api/instructor/documents/route.ts`, `profile/route.ts`, `subscription/route.ts`, `earnings/route.ts`, `payout-settings/route.ts`
@@ -1165,13 +1168,14 @@ Cascading hang is unlikely in practice. LOW.
 
 ### 8.3 Credentials Check: `CRON_SECRET` in Production
 
-Verify `CRON_SECRET` is configured in Vercel production environment. If missing, all CRON_SECRET-gated cron routes allow unauthenticated calls (the guard is `!process.env.CRON_SECRET || ...` which short-circuits to `false || false = false`, passing through).
+**CRON_SECRET must be set in Vercel production environment variables.** The guard pattern `!process.env.CRON_SECRET || authHeader !== ...` **denies** requests when CRON_SECRET is missing (the first condition is true, so the whole expression is true, and the request is rejected with 401). The secret must still be set for valid cron callers to authenticate.
 
 ---
 
 ---
 
 ## Group 9: Client Routes
+> **Historical record** — findings from initial audit pass. Current remediation status is in the Phase 4 findings and remediation status table above.
 
 **Files reviewed:** wallet-add, wallet-topup-intent, wallet/route, transactions, bookings/[id], quotes/request, schedule-package-hours, profile  
 **Total client route files:** 27
