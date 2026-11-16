@@ -1126,7 +1126,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | Severity | Count | Key IDs |
 |----------|-------|---------|
 | HIGH | 1 | PH5-SCH-10: Transaction cascade-deletes when Booking is hard-deleted |
-| MEDIUM | 17 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk; PH5-SCH-35: SaaS booking webhook outside tx; PH5-SCH-36: Book Later no idempotency write; PH5-SCH-37: replay exposes paymentToken URL |
+| MEDIUM | 17 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk; PH5-SCH-35: SaaS booking webhook outside tx; PH5-SCH-36: Book Later no idempotency write; PH5-SCH-37: replay scope does not bind to original booking parameters |
 | LOW | 18 | PH5-SCH-02, 04, 06, 08, 09, 11, 13, 14, 15, 16, 20, 25, 26, 29, 31, 32, 33, 34 |
 | NEGLIGIBLE | 1 | PH5-SCH-19: SlotReservation cascade (transient rows, no financial evidence) |
 | **Total** | **37** | All finding IDs PH5-SCH-01 through PH5-SCH-37 |
@@ -1139,7 +1139,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | UNRESOLVED — Prisma-layer test written (T2 with barrier), not executed; PostgreSQL required | upsert update:{} exact outcome under concurrent access not tested |
 | PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | OPEN — concurrent delivery risk confirmed in source; deterministic service-level test not yet written | Needs conditional state transition inside tx or controlled handleCheckoutComplete() concurrency test |
 | PH5-SCH-36 | Book Later path creates duplicate Checkout Sessions on retry | MEDIUM | OPEN/PROVISIONAL — no idempotency write in Book Later branch; multiple sessions possible on Twilio retry | Impact and exploitability assessment deferred |
-| PH5-SCH-37 | BookingIdempotencyKey replay scope insufficiently bound — requires both matching key and email; stored response includes paymentToken URL | MEDIUM | OPEN/PROVISIONAL — email-only binding does not scope replay to original booking parameters | Exploitability depends on key generation; assessment deferred |
+| PH5-SCH-37 | BookingIdempotencyKey replay scope insufficiently bound — requires both matching key and email; stored response includes paymentToken URL | MEDIUM | OPEN/PROVISIONAL — replay validates key and email but does not bind to original booking parameters (providerId, hours, slot) | Exploitability depends on key generation; assessment deferred |
 | PH4-REG-01 | DIRECT payment mode returns 503 | LOW | DEFERRED | 503 guard confirmed in both booking paths; fix as part of DIRECT payment implementation |
 | PH4-REG-02 | Transaction timeouts excessive | LOW | DEFERRED | No correctness impact; optimisation phase item |
 
