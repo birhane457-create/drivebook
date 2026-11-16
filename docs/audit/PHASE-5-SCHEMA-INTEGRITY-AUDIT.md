@@ -277,8 +277,10 @@ model User {
 | PH5-SCH-33 | LOW | No cleanup/retention policy for WebhookEvent — audit trail grows indefinitely |
 | PH5-SCH-34 | LOW | WebhookEvent.processedAt set at record creation, not transaction commit |
 | PH5-SCH-35 | MEDIUM | SaaS booking webhook event outside processing tx — pre-transaction status check does not provide atomic concurrency guard |
+| PH5-SCH-36 | MEDIUM | Book Later path creates Stripe Checkout Session without writing to BookingIdempotencyKey — retries create duplicate sessions (PROVISIONAL) |
+| PH5-SCH-37 | MEDIUM | BookingIdempotencyKey stored response includes paymentToken URL — replay exposes a live payment link to any requester with the same key (PROVISIONAL) |
 
-**1 HIGH, 15 MEDIUM, 18 LOW, 1 NEGLIGIBLE — 35 total findings across Groups 1-12**
+**1 HIGH, 17 MEDIUM, 18 LOW, 1 NEGLIGIBLE — 37 total findings across Groups 1-12**
 
 **PH5-SCH-09 status:** Superseded by PH5-SCH-14 â€” the constraint exists (partial unique index in migration `20260916131858_sub22`) but is not reflected in the Prisma schema.
 
@@ -524,12 +526,15 @@ The constraint is an all-rows constraint (no `WHERE` clause). Expired rows are r
 - The `difference` is always 0.0 by construction; `valid` is always `true`
 - **This function cannot detect missing entries.** If an entire transaction's double-entry record is absent (PH5-SCH-21), this function still reports the ledger as balanced because it sums the rows that DO exist and compares them to themselves.
 - **Call-site search scope:** `app/`, `lib/`, `scripts/` — the root PostgreSQL application. Zero call sites found. The function is exported from `ledger.ts` line 356 but never imported or called by any route, service, cron job, or admin tool in the root application.
-- **Hybrid references (out of scope for this finding, documented separately):** `drivebook-hybrid/LEDGER_QUICK_REFERENCE.md` lines 259–261 and `drivebook-hybrid/test-ledger-system.js` lines 19 and 43 both reference and invoke `verifyLedgerIntegrity()`. These are under `drivebook-hybrid/`, which the Phase 5 audit treats as a separate MongoDB system with a separate Prisma schema. They constitute developer-guidance references to a defective function, not production runtime callers of the root PostgreSQL implementation.
-- **Developer-safety risk:** The quick-reference document presents `verifyLedgerIntegrity()` as a valid operational check without warning that the implementation is defective. A developer following this guidance would receive a false BALANCED result regardless of ledger state. This risk applies whether the caller is in the root or hybrid application.
+- **Hybrid references — import resolution established:**
+  - File 1: `drivebook-hybrid/docs/financial/LEDGER_QUICK_REFERENCE.md` lines 259–261 imports `verifyLedgerIntegrity` from `@/lib/services/ledger`. The `@/` alias is a **Next.js root alias** — it resolves to `lib/services/ledger.ts` only within the root Next.js application. The hybrid project has no `tsconfig.json` and no `lib/` directory, so there is no alias resolution defined for the hybrid. The documentation uses an alias that is only valid in the root project.
+  - File 2: `drivebook-hybrid/scripts/test-ledger-system.js` line 23 imports from `'../lib/services/ledger.ts'` (a relative path). From `drivebook-hybrid/scripts/`, this resolves to `drivebook-hybrid/lib/services/ledger.ts`, which does not exist. If the script is run from the workspace root (`node drivebook-hybrid/scripts/test-ledger-system.js`), the relative path instead resolves to `lib/services/ledger.ts` — the **root PostgreSQL implementation**.
+  - **Conclusion:** The quick-reference documentation uses an alias that only resolves inside the root application. The test script uses a relative path that resolves to the root implementation when run from the workspace root. Neither the hybrid project nor any hybrid runtime code imports the function through a stable hybrid-local path. There is no confirmed evidence of a separate hybrid implementation of `verifyLedgerIntegrity`. A developer following the quick-reference can reach the defective root function.
+- **Developer-safety risk:** The quick-reference document presents `verifyLedgerIntegrity()` as a valid operational check without warning that the implementation is defective. A developer following this guidance, running the test script from the workspace root, or porting the `@/` import into any project that resolves the alias to the root `lib/` would call the defective function and receive a false BALANCED result.
 - **Required actions (independent of this audit's remediation phase):**
-  1. The quick-reference example in `drivebook-hybrid/LEDGER_QUICK_REFERENCE.md` must be corrected or annotated with an explicit warning that the function is defective and must not be used.
+  1. The quick-reference example in `drivebook-hybrid/docs/financial/LEDGER_QUICK_REFERENCE.md` must be annotated with an explicit warning that the function is defective and must not be used.
   2. The function must not be introduced into any production caller — root or hybrid — until it is corrected.
-- **Severity rationale:** MEDIUM — zero production runtime callers in the audited root application; the hybrid caller is in documentation and a test script, not a production execution path. Would be HIGH if any caller processed live financial decisions.
+- **Severity rationale:** MEDIUM — zero confirmed production runtime callers. The hybrid reference can reach the root implementation when run from the workspace root, but no evidence shows this path is exercised in production execution. Would be HIGH if any caller processed live financial decisions.
 - **A correct integrity check would need to:**
   1. Sum amounts grouped by `debitAccount` and verify they equal sums grouped by `creditAccount` (per-account balance)
   2. Compare expected entries (from confirmed bookings/transactions) against actual FinancialLedger rows (completeness)
@@ -753,7 +758,26 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 
 ---
 
-## Phase 5 Complete — All Groups Audited
+**Finding PH5-SCH-36 (MEDIUM, PROVISIONAL): Book Later path creates Stripe Checkout Session without writing to BookingIdempotencyKey**
+
+- `app/api/public/bookings/bulk/route.ts` lines 630–686: when `bookingType === 'later'`, the route creates a Stripe Checkout Session and returns `{ success: true, checkoutUrl: session.url }` — then returns without writing to `BookingIdempotencyKey`
+- The idempotency key check at line 133 runs before the `bookingType` branch but only reads from `BookingIdempotencyKey`; since nothing is written for Book Later, the check never finds an existing key
+- **Result:** A retry (Twilio retry, voice AI retry, or browser double-click) with the same `Idempotency-Key` header creates a new Stripe Checkout Session each time and returns a different `checkoutUrl`
+- **Practical consequence:** The student receives multiple SMS payment links for the same purchase. Each link leads to a live Checkout Session for the full amount. If the student pays more than one, the webhook handler (`checkout.session.completed`) processes each payment independently, crediting the wallet multiple times. The `verifyLedgerIntegrity()` function (PH5-SCH-23) would not detect this.
+- **Overlap check:** No existing finding covers this path. PH5-SCH-30 covers only the Book Now (`bookingType === 'now'`) concurrent upsert race.
+- **Severity assessment (PROVISIONAL — MEDIUM):** The duplicate session risk is real. Exploitability depends on retry frequency (Twilio retries are automatic) and whether duplicate Checkout Session payments are caught by the webhook. Impact and exploitability assessment is deferred.
+
+---
+
+**Finding PH5-SCH-37 (MEDIUM, PROVISIONAL): BookingIdempotencyKey stored response includes paymentToken URL — replay exposes live payment link**
+
+- `app/api/public/bookings/bulk/route.ts` line 830: the stored response includes `checkoutUrl: /booking/${newBooking.id}/payment?token=${paymentToken}` where `paymentToken = crypto.randomUUID()` stored on the Booking record
+- On replay, the route returns `existing.response` at line 142 — this includes the `checkoutUrl` with the live `paymentToken`
+- **Scope concern:** The idempotency key is only validated against `email` (line 138: `existing.email !== data.accountHolderEmail`). It is not validated against `providerId`, `hours`, or any other booking parameter. A request with the same key but different booking parameters receives the stored response, including the payment link for the original booking.
+- **paymentToken exposure:** The stored `checkoutUrl` includes a UUID token (`paymentToken`) that grants access to the payment page for the original booking. If the idempotency key is guessable, predictable, or shared across clients, the payment URL can be replayed to a different requester.
+- **Key source:** The idempotency key is supplied by the caller via the `Idempotency-Key` header. No server-side binding to a session or authenticated user is enforced beyond the email check.
+- **Overlap check:** No existing finding covers this exposure. PH5-SCH-30 covers the concurrent upsert race; PH5-SCH-32 covers expiry. Neither addresses the replay scope or token exposure.
+- **Severity assessment (PROVISIONAL — MEDIUM):** Practical exploitability depends on how idempotency keys are generated by Twilio/voice AI callers. If keys are UUIDs generated per-call, guessing is infeasible. If keys are derived from predictable fields (phone number, timestamp), the exposure is higher. Assessment is deferred.
 
 **Final finding count: 1 HIGH, 15 MEDIUM, 18 LOW, 1 NEGLIGIBLE = 35 total findings across Groups 1-12**
 

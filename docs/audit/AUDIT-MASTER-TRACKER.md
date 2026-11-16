@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.71 (Phase 5 closure validation — 35 findings, PH5-SCH-30 unresolved, PH5-SCH-35 added)
-**Last Updated:** 2026-11-15 (v6.71)
+**Version:** 6.72 (PH5-SCH-36/37 added; PH5-SCH-23 import chain resolved; T5 null-time and 50-round matrix pending)
+**Last Updated:** 2026-11-15 (v6.72)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1126,10 +1126,10 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | Severity | Count | Key IDs |
 |----------|-------|---------|
 | HIGH | 1 | PH5-SCH-10: Transaction cascade-deletes when Booking is hard-deleted |
-| MEDIUM | 15 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk; PH5-SCH-35: SaaS booking webhook outside tx |
+| MEDIUM | 17 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk; PH5-SCH-35: SaaS booking webhook outside tx; PH5-SCH-36: Book Later no idempotency write; PH5-SCH-37: replay exposes paymentToken URL |
 | LOW | 18 | PH5-SCH-02, 04, 06, 08, 09, 11, 13, 14, 15, 16, 20, 25, 26, 29, 31, 32, 33, 34 |
 | NEGLIGIBLE | 1 | PH5-SCH-19: SlotReservation cascade (transient rows, no financial evidence) |
-| **Total** | **35** | All finding IDs PH5-SCH-01 through PH5-SCH-35 |
+| **Total** | **37** | All finding IDs PH5-SCH-01 through PH5-SCH-37 |
 
 ### 13.2 — Deferred Items
 
@@ -1138,6 +1138,8 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | OPEN | Remediation: onDelete: Restrict; requires migration; Customer cascade path documented via PH5-SCH-28 |
 | PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | UNRESOLVED — Prisma-layer test written (T2 with barrier), not executed; PostgreSQL required | upsert update:{} exact outcome under concurrent access not tested |
 | PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | OPEN — concurrent delivery risk confirmed in source; deterministic service-level test not yet written | Needs conditional state transition inside tx or controlled handleCheckoutComplete() concurrency test |
+| PH5-SCH-36 | Book Later path creates duplicate Checkout Sessions on retry | MEDIUM | OPEN/PROVISIONAL — no idempotency write in Book Later branch; multiple sessions possible on Twilio retry | Impact and exploitability assessment deferred |
+| PH5-SCH-37 | BookingIdempotencyKey replay exposes paymentToken URL | MEDIUM | OPEN/PROVISIONAL — email-only replay scope; paymentToken URL in stored response | Exploitability depends on key generation; assessment deferred |
 | PH4-REG-01 | DIRECT payment mode returns 503 | LOW | DEFERRED | 503 guard confirmed in both booking paths; fix as part of DIRECT payment implementation |
 | PH4-REG-02 | Transaction timeouts excessive | LOW | DEFERRED | No correctness impact; optimisation phase item |
 

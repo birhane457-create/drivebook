@@ -545,24 +545,61 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     expect(allBookings.length).toBe(2);
   });
 
-  // T5: THE DEFINITIVE TEST — Concurrent same-key, same request data, NO slot reservation
-  // Purpose: establish whether the idempotency key uniqueness constraint alone prevents
-  // duplicate bookings when no GiST slot constraint is involved.
-  // A slot exclusion must not be mistaken for idempotency protection.
-  // Both requests target the same slot but create NO SlotReservation before the
-  // transaction. If one booking is prevented, it must be by the idempotency key
-  // constraint or serialisation — not by any slot exclusion.
-  it('T5: concurrent same-key same-request no-slot — idempotency key alone', async () => {
-    const idemKey = `${TEST_PREFIX}_T5`;
-    const slotStart = new Date('2027-06-20T10:00:00Z');
-    const slotEnd   = new Date('2027-06-20T11:00:00Z');
+  // ─── T5: DEFINITIVE IDEMPOTENCY TEST ──────────────────────────────────────────
+  //
+  // Design rationale (addresses review requirements):
+  //
+  // A. 50 independent rounds with fresh keys + isolated cleanup per round.
+  //    Repeated trials expose database behaviour across executions.
+  //    A single execution may not trigger the race due to scheduler timing.
+  //
+  // B. Null startTime / endTime case (matches the production no-slot path).
+  //    The bulk route can create a booking without scheduled times when only
+  //    an unscheduled slot request is made. This matches a real caller pattern.
+  //
+  // C. 'replayed' treated as a setup failure.
+  //    If either request receives 'replayed' at the barrier, the barrier did
+  //    not hold — the first transaction committed before both lookups completed.
+  //    Re-running establishes whether this is a timing anomaly or structural.
+  //
+  // D. Exact classification of the losing request's outcome.
+  //    Only P2002 and P2034 are accepted as evidence of a database-level guard.
+  //    23P01 is a test-setup error (no SlotReservation created in T5).
+  //
+  // E. Prisma and @prisma/client versions logged for traceability.
+  //
+  // PASS / FAIL INTERPRETATION:
+  //   Each round is DIAGNOSTIC: it records the outcome but does not fail Vitest
+  //   on 2 bookings. At the end of 50 rounds, the counts are summarised.
+  //   - duplicateRounds > 0 means PH5-SCH-30 is confirmed.
+  //   - duplicateRounds === 0 does not prove safety (50 rounds is not exhaustive).
+  //   A strict companion test (T5-STRICT) must be added after remediation to
+  //   require exactly one booking.
 
-    // Barrier: both requests pass the lookup before either enters the transaction
-    const barrier = { count: 0, resolve: null as ((v: void) => void) | null };
-    const barrierPromise = new Promise<void>((resolve) => { barrier.resolve = resolve; });
+  it('T5: 50-round repeated idempotency test — no slot, same key, same request (definitive)', async () => {
+    // Print resolved versions for traceability
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const prismaVersion = require('@prisma/client/package.json').version as string;
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const prismaCliVersion = require('prisma/package.json').version as string;
+    console.log(`T5: prisma@${prismaCliVersion} @prisma/client@${prismaVersion}`);
 
-    const createBookingNoSlot = async () => {
-      // Lookup OUTSIDE transaction (simulates the route's pre-check)
+    const ROUNDS = 50;
+    const results = {
+      singleBooking: 0,    // winning outcome: idempotency held
+      duplicateBooking: 0, // race confirmed: two bookings created
+      replayedEarly: 0,    // barrier did not hold
+      unexpectedError: 0,  // unclassified error
+    };
+
+    // Helper: create one booking without a SlotReservation, using the given key
+    const createBookingNoSlot = async (
+      idemKey: string,
+      slotStart: Date | null,
+      slotEnd: Date | null,
+      barrier: { count: number; resolve: ((v: void) => void) | null },
+      barrierPromise: Promise<void>,
+    ) => {
       const existing = await prisma.bookingIdempotencyKey.findUnique({
         where: { key: idemKey },
       });
@@ -582,8 +619,9 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
               customerName: `${TEST_PREFIX}_Customer`,
               customerPhone: '0400000001',
               status: 'PENDING_PAYMENT',
-              startTime: slotStart,
-              endTime: slotEnd,
+              // null times represent the production no-slot path (unscheduled booking)
+              startTime: slotStart ?? undefined,
+              endTime: slotEnd ?? undefined,
               duration: 60,
               price: 70,
               platformFee: 0,
@@ -612,59 +650,97 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
           });
           return { result: 'p2002_caught', bookingId: stored?.bookingId };
         }
-        // Retain all fields for constraint identification
-        return { result: 'error', name: err.name, code: err.code, meta: err.meta, error: err.message };
+        return {
+          result: 'error',
+          name: err.name,
+          code: err.code,
+          meta: err.meta,
+          error: err.message,
+        };
       }
     };
 
-    const [result1, result2] = await Promise.all([
-      createBookingNoSlot(),
-      createBookingNoSlot(),
-    ]);
+    for (let round = 0; round < ROUNDS; round++) {
+      // Each round uses a unique key and unique slot times to avoid cross-round contamination
+      const roundKey = `${TEST_PREFIX}_T5_r${round}`;
+      // Alternate between: (a) concrete slot times, (b) null times (no-slot production path)
+      const useNullTimes = round % 2 === 1;
+      const slotStart = useNullTimes ? null : new Date(`2027-07-${String(round + 1).padStart(2, '0')}T10:00:00Z`);
+      const slotEnd   = useNullTimes ? null : new Date(`2027-07-${String(round + 1).padStart(2, '0')}T11:00:00Z`);
 
-    const allBookings = await prisma.booking.findMany({
-      where: { providerId: testProviderId },
-    });
-    const allKeys = await prisma.bookingIdempotencyKey.findMany({
-      where: { key: idemKey },
-    });
+      const barrier = { count: 0, resolve: null as ((v: void) => void) | null };
+      const barrierPromise = new Promise<void>((resolve) => { barrier.resolve = resolve; });
 
-    console.log('T5 Results:', { result1, result2 });
-    console.log('T5: Bookings created:', allBookings.length);
-    console.log('T5: Idempotency keys:', allKeys.length);
+      const [r1, r2] = await Promise.all([
+        createBookingNoSlot(roundKey, slotStart, slotEnd, barrier, barrierPromise),
+        createBookingNoSlot(roundKey, slotStart, slotEnd, barrier, barrierPromise),
+      ]);
 
-    if (allBookings.length === 2) {
-      console.error('❌ T5 CONFIRMED: idempotency key alone does NOT prevent duplicate bookings');
-      console.error('❌ PH5-SCH-30 DEFINITIVE: no slot exclusion involved — upsert update:{} is broken');
-    } else if (allBookings.length === 1) {
-      const loser = result1.result === 'created' ? result2 : result1;
-      console.log('✅ T5: Only one booking created. Losing result:', loser);
-    }
+      // Count bookings created for this round
+      const roundBookings = await prisma.booking.findMany({
+        where: { providerId: testProviderId },
+        select: { id: true },
+      });
 
-    // Bounds check: 0 or >2 is a test-setup failure
-    expect(allBookings.length).toBeGreaterThanOrEqual(1);
-    expect(allBookings.length).toBeLessThanOrEqual(2);
-    expect(allKeys.length).toBe(1);
+      const roundCount = roundBookings.length;
 
-    // If one booking: classify the mechanism that prevented the duplicate
-    if (allBookings.length === 1) {
-      const losingResult = result1.result === 'created' ? result2 : result1;
-      if (losingResult.result === 'p2002_caught') {
-        console.log('✅ T5: P2002 — idempotency key uniqueness constraint fired (idempotency works)');
-      } else if (losingResult.result === 'replayed') {
-        console.log('✅ T5: replayed — barrier may not have held; rerun to confirm');
-      } else if (losingResult.result === 'error') {
-        const code = (losingResult as any).code;
-        // 23P01 is not expected (no SlotReservation created) — treat as setup error
-        console.log('T5: Losing error code:', code, 'name:', (losingResult as any).name,
-          'meta:', (losingResult as any).meta, 'message:', (losingResult as any).error);
-        if (code === '23P01') {
-          throw new Error('T5: 23P01 (exclusion constraint) fired but no SlotReservation was created — test-setup error');
+      // Per-round classification
+      if (r1.result === 'replayed' || r2.result === 'replayed') {
+        results.replayedEarly++;
+        // Treat as setup issue — barrier may not have held; count separately
+        console.warn(`T5 round ${round}: 'replayed' — barrier may not have held (r1=${r1.result}, r2=${r2.result})`);
+      } else if (roundCount >= 2) {
+        results.duplicateBooking++;
+        const loser = r1.result === 'created' ? r2 : r1;
+        console.error(`T5 round ${round}: DUPLICATE (${roundCount} bookings). Loser: ${loser.result} code=${(loser as any).code}`);
+      } else if (roundCount === 1) {
+        results.singleBooking++;
+        const loser = r1.result === 'created' ? r2 : r1;
+        if (loser.result === 'error') {
+          const code = (loser as any).code;
+          if (code === '23P01') {
+            // 23P01 is a test-setup error in T5 — no SlotReservation created
+            console.error(`T5 round ${round}: 23P01 exclusion constraint fired — test-setup error (no SlotReservation created)`);
+            results.unexpectedError++;
+          } else if (!['P2002', 'P2034'].includes(code)) {
+            console.error(`T5 round ${round}: Unclassified error code ${code} — not evidence of idempotency guard`);
+            results.unexpectedError++;
+          }
         }
-        expect(['P2002', 'P2034']).toContain(code);
       } else {
-        throw new Error(`T5: Unexpected losing result '${losingResult.result}' with single booking`);
+        results.unexpectedError++;
+        console.error(`T5 round ${round}: Unexpected booking count ${roundCount}`);
       }
+
+      // Per-round isolation: clean up bookings and key after each round
+      await prisma.bookingIdempotencyKey.deleteMany({
+        where: { key: roundKey },
+      }).catch(() => {});
+      await prisma.booking.deleteMany({
+        where: { providerId: testProviderId },
+      }).catch(() => {});
     }
+
+    // Summary
+    console.log('\nT5 SUMMARY (50 rounds):');
+    console.log(`  Single booking (safe): ${results.singleBooking}`);
+    console.log(`  Duplicate booking (race): ${results.duplicateBooking}`);
+    console.log(`  Replayed early (barrier issue): ${results.replayedEarly}`);
+    console.log(`  Unexpected errors: ${results.unexpectedError}`);
+
+    if (results.duplicateBooking > 0) {
+      console.error(`\n❌ PH5-SCH-30 CONFIRMED: ${results.duplicateBooking} of ${ROUNDS} rounds produced duplicate bookings`);
+      console.error('❌ The upsert update:{} pattern does NOT prevent duplicate booking creation');
+    } else {
+      console.log(`\n✅ No duplicates in ${ROUNDS} rounds — idempotency held in every trial`);
+      console.log('✅ Note: 50 rounds is not exhaustive; this is evidence, not proof of safety');
+    }
+
+    // Fail on unexpected errors (23P01, unclassified codes, booking count anomalies)
+    expect(results.unexpectedError).toBe(0);
+
+    // All rounds must have produced a classifiable single or duplicate outcome
+    // (replayedEarly is a setup issue, not a test failure, but should be rare)
+    expect(results.singleBooking + results.duplicateBooking).toBeGreaterThan(0);
   });
 });
