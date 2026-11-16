@@ -278,7 +278,7 @@ model User {
 | PH5-SCH-34 | LOW | WebhookEvent.processedAt set at record creation, not transaction commit |
 | PH5-SCH-35 | MEDIUM | SaaS booking webhook event outside processing tx — pre-transaction status check does not provide atomic concurrency guard |
 | PH5-SCH-36 | MEDIUM | Book Later path creates Stripe Checkout Session without writing to BookingIdempotencyKey — retries create duplicate sessions (PROVISIONAL) |
-| PH5-SCH-37 | MEDIUM | BookingIdempotencyKey stored response includes paymentToken URL — replay exposes a live payment link to any requester with the same key (PROVISIONAL) |
+| PH5-SCH-37 | MEDIUM | BookingIdempotencyKey replay scope does not bind to original booking parameters — requires matching key AND email; stored response includes paymentToken URL (PROVISIONAL) |
 
 **1 HIGH, 17 MEDIUM, 18 LOW, 1 NEGLIGIBLE — 37 total findings across Groups 1-12**
 
@@ -530,11 +530,11 @@ The constraint is an all-rows constraint (no `WHERE` clause). Expired rows are r
   - File 1: `drivebook-hybrid/docs/financial/LEDGER_QUICK_REFERENCE.md` lines 259–261 imports `verifyLedgerIntegrity` from `@/lib/services/ledger`. The `@/` alias is a **Next.js root alias** — it resolves to `lib/services/ledger.ts` only within the root Next.js application. The hybrid project has no `tsconfig.json` and no `lib/` directory, so there is no alias resolution defined for the hybrid. If a developer copies this import into the root project, it reaches the defective root function.
   - File 2: `drivebook-hybrid/scripts/test-ledger-system.js` line 23 imports from `'../lib/services/ledger.ts'` (a relative path from `drivebook-hybrid/scripts/`). This resolves to `drivebook-hybrid/lib/services/ledger.ts`, which does not exist. Plain Node.js does not ordinarily load TypeScript files. The script does not reach the root implementation at runtime — the import would fail before execution. This reference is included for completeness but does not establish a production execution risk.
   - **Conclusion:** The developer-risk path is the quick-reference documentation. Its `@/lib/services/ledger` import uses an alias that only resolves inside the root Next.js project. A developer copying this example into the root codebase would call the defective function and receive a false BALANCED result. The test script does not constitute a live call path.
-- **Developer-safety risk:** The quick-reference document presents `verifyLedgerIntegrity()` as a valid operational check without warning that the implementation is defective. A developer following this guidance, running the test script from the workspace root, or porting the `@/` import into any project that resolves the alias to the root `lib/` would call the defective function and receive a false BALANCED result.
+- **Developer-safety risk:** The quick-reference document presents `verifyLedgerIntegrity()` as a valid operational check without warning that the implementation is defective. A developer copying the `@/lib/services/ledger` import from the quick-reference into the root Next.js project would call the defective function and receive a false BALANCED result.
 - **Required actions (independent of this audit's remediation phase):**
   1. The quick-reference example in `drivebook-hybrid/docs/financial/LEDGER_QUICK_REFERENCE.md` must be annotated with an explicit warning that the function is defective and must not be used.
   2. The function must not be introduced into any production caller — root or hybrid — until it is corrected.
-- **Severity rationale:** MEDIUM — zero confirmed production runtime callers. The hybrid reference can reach the root implementation when run from the workspace root, but no evidence shows this path is exercised in production execution. Would be HIGH if any caller processed live financial decisions.
+- **Severity rationale:** MEDIUM — zero confirmed production runtime callers. The developer-safety risk is the quick-reference documentation presenting the function as valid; the script import is a broken path that does not reach the root implementation at runtime. Would be HIGH if any production caller processed live financial decisions.
 - **A correct integrity check would need to:**
   1. Sum amounts grouped by `debitAccount` and verify they equal sums grouped by `creditAccount` (per-account balance)
   2. Compare expected entries (from confirmed bookings/transactions) against actual FinancialLedger rows (completeness)
@@ -769,7 +769,7 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 
 ---
 
-**Finding PH5-SCH-37 (MEDIUM, PROVISIONAL): BookingIdempotencyKey stored response includes paymentToken URL — replay exposes live payment link**
+**Finding PH5-SCH-37 (MEDIUM, PROVISIONAL): BookingIdempotencyKey replay scope does not bind to original booking parameters**
 
 - `app/api/public/bookings/bulk/route.ts` line 830: the stored response includes `checkoutUrl: /booking/${newBooking.id}/payment?token=${paymentToken}` where `paymentToken = crypto.randomUUID()` stored on the Booking record
 - On replay, the route returns `existing.response` at line 142 — this includes the `checkoutUrl` with the live `paymentToken`
@@ -801,11 +801,11 @@ Full reconciliation at commit d9c07cde (verified from source):
 | **Total** | **37** | PH5-SCH-01 through PH5-SCH-37, all unique |
 
 Cross-checks performed:
-- All 35 IDs appear exactly once in the summary table
+- All 37 IDs appear exactly once in the summary table
 - No ID appears in both LOW and MEDIUM sets
-- LOW IDs in Section 13.1 match the phase document exactly
-- MEDIUM IDs in Section 13.1 key-IDs field covers PH5-SCH-21/22/23/27/28/30/35 (abbreviated); full list above
-- Deferred items (PH5-SCH-10, 30, 35) are OPEN/UNRESOLVED, not counted as closed
+- LOW IDs in Section 13.1 match the phase document exactly (18 IDs: 02,04,06,08,09,11,13,14,15,16,20,25,26,29,31,32,33,34)
+- MEDIUM IDs in Section 13.1 covers all 17: 01,03,05,07,12,17,18,21,22,23,24,27,28,30,35,36,37
+- Deferred items (PH5-SCH-10, 30, 35, 36, 37) are OPEN/UNRESOLVED, not counted as closed
 
 ### Item 2: Confirm resolved Prisma versions — COMPLETE
 

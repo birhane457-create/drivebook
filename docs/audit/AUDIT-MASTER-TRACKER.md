@@ -1117,7 +1117,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 **Status:** FINDINGS COMPLETE — closure validation partial (see 13.3); PH5-SCH-30 unresolved; PH5-SCH-35 MEDIUM and OPEN
 **Audit document:** `docs/audit/PHASE-5-SCHEMA-INTEGRITY-AUDIT.md`
 **Baseline commit:** 8b3b5c3c
-**Methodology:** Source and migration inspection of all 53 Prisma models. No code changes during audit. 12 groups, 35 findings.
+**Methodology:** Source and migration inspection of all 53 Prisma models. No code changes during audit. 12 groups, 37 findings.
 
 **Resolved versions:** `prisma@5.22.0`, `@prisma/client@5.22.0` (verified from `package-lock.json` at a440d667)
 
@@ -1139,13 +1139,13 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | UNRESOLVED — Prisma-layer test written (T2 with barrier), not executed; PostgreSQL required | upsert update:{} exact outcome under concurrent access not tested |
 | PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | OPEN — concurrent delivery risk confirmed in source; deterministic service-level test not yet written | Needs conditional state transition inside tx or controlled handleCheckoutComplete() concurrency test |
 | PH5-SCH-36 | Book Later path creates duplicate Checkout Sessions on retry | MEDIUM | OPEN/PROVISIONAL — no idempotency write in Book Later branch; multiple sessions possible on Twilio retry | Impact and exploitability assessment deferred |
-| PH5-SCH-37 | BookingIdempotencyKey replay exposes paymentToken URL | MEDIUM | OPEN/PROVISIONAL — email-only replay scope; paymentToken URL in stored response | Exploitability depends on key generation; assessment deferred |
+| PH5-SCH-37 | BookingIdempotencyKey replay scope insufficiently bound — requires both matching key and email; stored response includes paymentToken URL | MEDIUM | OPEN/PROVISIONAL — email-only binding does not scope replay to original booking parameters | Exploitability depends on key generation; assessment deferred |
 | PH4-REG-01 | DIRECT payment mode returns 503 | LOW | DEFERRED | 503 guard confirmed in both booking paths; fix as part of DIRECT payment implementation |
 | PH4-REG-02 | Transaction timeouts excessive | LOW | DEFERRED | No correctness impact; optimisation phase item |
 
 ### 13.3 — Phase 5 Closure Checklist
 
-- [x] Reconcile all 35 finding IDs — no duplicates, severity consistent in summary and detail
+- [ ] Reconcile all 37 finding IDs — 37-ID table PENDING; PH5-SCH-36/37 severities provisional
 - [x] Confirm resolved Prisma versions — prisma@5.22.0 and @prisma/client@5.22.0
 - [ ] Execute BookingIdempotencyKey concurrency test (T2 with barrier) against PostgreSQL; update PH5-SCH-30
 - [ ] Write and execute deterministic concurrent webhook test for SaaS path (service-level, not HTTP); update PH5-SCH-35
