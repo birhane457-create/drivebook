@@ -869,7 +869,7 @@ Test file: `__tests__/integration/ph5-sch30-booking-idempotency-concurrency.test
 
 ### Item 5: Master tracker — COMPLETE
 
-Section 13 added to `AUDIT-MASTER-TRACKER.md` with all 37 findings (including PH5-SCH-36/37), closure checklist, deferred items. Version v6.72.
+Section 13 added to `AUDIT-MASTER-TRACKER.md` with all 37 findings (including PH5-SCH-36/37), closure checklist, deferred items. Version v6.73 (c2599a2e).
 
 ### Item 6: DIRECT payment 503 guard — COMPLETE
 

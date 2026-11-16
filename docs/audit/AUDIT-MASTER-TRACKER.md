@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.72 (PH5-SCH-36/37 added; PH5-SCH-23 import chain resolved; T5 null-time and 50-round matrix pending)
-**Last Updated:** 2026-11-15 (v6.72)
+**Version:** 6.73 (Documentation metadata reconciled — c2599a2e)
+**Last Updated:** 2026-11-15 (v6.73)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1106,7 +1106,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 ---
 
 **Section 12 last updated:** 2026-11-14 (c1bd5c6d)  
-**Master Tracker version:** v6.71
+**Master Tracker version:** v6.73
 
 ---
 
@@ -1154,5 +1154,5 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 
 ---
 
-**Section 13 last updated:** 2026-11-15 (8b3b5c3c)
-**Master Tracker version:** v6.71
+**Section 13 last updated:** 2026-11-15 (c2599a2e)
+**Master Tracker version:** v6.73
