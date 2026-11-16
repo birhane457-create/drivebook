@@ -1,43 +1,51 @@
-/**
- * PH5-SCH-35: SaaS Checkout Idempotency — Service-Level Concurrency Test
+﻿/**
+ * PH5-SCH-35: SaaS Checkout Idempotency — Database Race Simulation
  *
- * PURPOSE:
- * Determine whether two concurrent calls to handleCheckoutComplete() for the
- * same Stripe session produce duplicate side effects (Quote update, Booking
- * update, AuditLog, notifications).
+ * SCOPE:
+ * This test manually reproduces the transaction sequence that handleCheckoutComplete()
+ * performs. It does NOT call handleCheckoutComplete() directly. It is a database-level
+ * race simulation, not a test of the production service.
  *
- * PH5-SCH-35 states that the pre-transaction status check
- * (if quote.status === 'PAID') is performed before the transaction, so two
- * concurrent deliveries can both pass the unpaid check before either commits,
- * and both apply side effects.
+ * The correct next step is to make handleCheckoutComplete() testable through
+ * dependency injection or controlled module mocks (vi.mock for Stripe and notifications),
+ * then call the actual exported function twice concurrently.
+ *
+ * WHAT THIS TEST DOES:
+ * - Simulates the pre-transaction status check and the atomic Quote/Booking/AuditLog
+ *   transaction that handleCheckoutComplete() performs
+ * - Uses a barrier to ensure both concurrent simulations pass the status check before
+ *   either enters its transaction
+ * - Records whether duplicate AuditLog entries or duplicate notification calls occur
+ * - Requires PostgreSQL to run; PostgreSQL not available in the current environment
+ *
+ * WHAT THIS TEST DOES NOT DO:
+ * - Call handleCheckoutComplete()
+ * - Exercise the production recordWebhookEvent() sequence
+ * - Mock Stripe through the service (Stripe is never called)
+ * - Establish whether the production service has an atomic guard not visible in source
  *
  * ARCHITECTURE:
- *   Direct service-layer call to handleCheckoutComplete()
- *   Prisma → isolated PostgreSQL (localhost:5433/drivebook_test)
- *   Stripe dependency mocked (controlled session response)
- *   Notification dependency mocked (verify exactly-once invocation)
+ *   Direct Prisma calls → isolated PostgreSQL (localhost:5433/drivebook_test)
+ *   Notification mock: manual call counter (service not invoked)
  *
  * PRE-CONDITIONS:
  *   - PostgreSQL running on localhost:5433 with database drivebook_test
  *   - DATABASE_URL=postgresql://postgres:testpass@localhost:5433/drivebook_test
  *   - Prisma migrations applied with prisma migrate deploy (not db push)
- *   - No external Stripe credentials required (Stripe is mocked)
  *
  * EXECUTION:
  *   DATABASE_URL=postgresql://postgres:testpass@localhost:5433/drivebook_test \
  *   npx vitest run __tests__/integration/ph5-sch35-saas-checkout-concurrency.test.ts
  *
- * ACCEPTANCE CRITERIA (what proves PH5-SCH-35 is a real defect):
- *   - Both calls complete without error
- *   - Quote.status === 'PAID' (exactly one update — or two, confirming the race)
- *   - AuditLog contains exactly one QUOTE_PAYMENT_COMPLETED entry
- *   - Notification helper called exactly once
- *
- * ACCEPTANCE CRITERIA (what proves a fix is effective):
- *   - Exactly one call completes with side effects applied
- *   - The second call returns early because Quote.status === 'PAID' at read time
+ * C1 ACCEPTANCE CRITERIA (sequential — should be safe):
+ *   - Second call detects PAID status and returns early
  *   - AuditLog contains exactly one entry
- *   - Notification helper called exactly once
+ *   - Notification counter incremented exactly once
+ *
+ * C2 DIAGNOSTIC CRITERIA (concurrent — the actual race):
+ *   - AuditLog entry count establishes whether both transactions committed
+ *   - Notification counter establishes whether both notification paths ran
+ *   - AuditLog > 1 or notifications > 1 confirms the race in the simulated sequence
  *
  * SCOPE:
  *   This is a service-layer test, not an HTTP route test.
@@ -47,7 +55,7 @@
  * PRISMA VERSION: 5.22.0 (from package-lock.json at 22a076d6)
  */
 
-import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 
 // ── Printed versions ──────────────────────────────────────────────────────────
@@ -69,31 +77,13 @@ let testUserId: string;
 // Records how many times notifications are sent
 const notificationCalls: Array<{ quoteId: string }> = [];
 
-// ── Mock Stripe session factory ───────────────────────────────────────────────
-function makeStripeSession(sessionId: string, quoteId: string, bookingId: string) {
-  return {
-    id: sessionId,
-    payment_status: 'paid',
-    metadata: {
-      type: 'saas_booking',
-      quoteId,
-      bookingId,
-      businessId: testBusinessId,
-    },
-    payment_intent: {
-      id: `pi_${TEST_PREFIX}`,
-      amount: 10000,                   // $100.00 AUD
-      application_fee_amount: 1000,    // $10.00 platform fee
-    },
-    customer: `cus_${TEST_PREFIX}`,
-  };
-}
-
 // ── Override module imports used inside handleCheckoutComplete ─────────────────
-// We mock Stripe and notifications so the test runs without external services.
-// The Prisma calls are real — they hit the isolated test database.
+// NOTE: handleCheckoutComplete() is NOT called by this test.
+// This test manually reproduces the database transaction sequence.
+// A proper service-level test would use vi.mock() to mock Stripe and
+// notifications, then call the exported handleCheckoutComplete() directly.
 
-describe('PH5-SCH-35: SaaS checkout concurrent delivery', () => {
+describe('PH5-SCH-35: SaaS checkout database race simulation (NOT a service-level test)', () => {
   beforeAll(async () => {
     console.log(`PH5-SCH-35 test: prisma@${prismaVersion} @prisma/client@${prismaClientVersion}`);
 
@@ -177,8 +167,8 @@ describe('PH5-SCH-35: SaaS checkout concurrent delivery', () => {
       },
     });
 
-    const sessionId = `cs_${TEST_PREFIX}_C1`;
-    const session = makeStripeSession(sessionId, quote.id, booking.id);
+    const sessionId = cs_\_C1;
+    // No Stripe session object needed — the service is not called
 
     // Instrument the function by calling it directly against the test DB
     // We need to inject a controlled Stripe mock and notification mock.
