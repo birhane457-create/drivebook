@@ -1,5 +1,5 @@
 ﻿# Phase 5: Schema Integrity Audit
-
+- **Service-level test approach (not HTTP route required):** A deterministic concurrent test can call `handleCheckoutComplete()` directly with two parallel invocations using a controlled Prisma client and mocked Stripe/notification dependencies. A running Next.js server is not required. This is structurally similar to the sub-22-concurrent.test.ts pattern.
 **Scope limitation:** This test exercises database-layer behaviour directly via Prisma, not the HTTP route. It does not verify route-level P2002 handling, response replay, or non-booking side effects. A separate HTTP-level concurrency test (following the PAY-H-04-E pattern) would be needed to verify those layers.
 - The SaaS booking path is the exception — it relies on a pre-transaction status check that does NOT provide an atomic concurrency guard ⚠️
 **Status:** IN PROGRESS  

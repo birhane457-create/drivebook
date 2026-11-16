@@ -329,9 +329,23 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     console.log('T2: Result1:', result1);
     console.log('T2: Result2:', result2);
 
-    // Classify the losing request's outcome
+    // Classify the losing request's outcome and assert it was an expected response
+    // (replay, uniqueness conflict, or error) rather than a silent unrelated failure.
     const losingResult = result1.result === 'created' ? result2 : result1;
     console.log('T2: Losing request outcome:', losingResult.result);
+
+    if (allBookings.length === 1) {
+      // If only one booking was created, the losing request must have encountered
+      // an expected constraint (p2002, replay, or error) — not passed silently.
+      expect(['replayed', 'p2002_caught', 'error']).toContain(losingResult.result);
+      if (losingResult.result === 'error') {
+        // An error is only expected if it carries a recognisable database error code.
+        // A silent success from an unrelated failure would appear as 'created'.
+        expect(losingResult.error).toBeDefined();
+        console.log('T2: Losing request error:', (losingResult as any).error);
+      }
+    }
+    // If two bookings were created, both results are 'created' — no losing result to classify.
   });
 
   // T3: Concurrent same-key, same slot — GiST constraint should block

@@ -1111,44 +1111,46 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 ---
 
 ## Section 13 — Phase 5: Schema Integrity Audit
-## Section 13 — Phase 5: Schema Integrity Audit
-**Version:** 1.0  
-**Version:** 1.1
-**Status:** FINDINGS COMPLETE — closure validation pending (Prisma concurrency test, WebhookEvent full idempotency, master tracker reconciliation)  
-**Status:** FINDINGS COMPLETE — closure validation partial: 5 of 6 items done; PH5-SCH-30 concurrency test written but not executed (no PostgreSQL); PH5-SCH-35 added and reassessed
-**Baseline commit:** a440d667  
-**Baseline commit:** 1b8d6804
+
+**Version:** 1.2
+**Started:** 2026-11-15
+**Status:** FINDINGS COMPLETE — closure validation partial (see 13.3); PH5-SCH-30 unresolved; PH5-SCH-35 MEDIUM and OPEN
+**Audit document:** `docs/audit/PHASE-5-SCHEMA-INTEGRITY-AUDIT.md`
+**Baseline commit:** 8b3b5c3c
+**Methodology:** Source and migration inspection of all 53 Prisma models. No code changes during audit. 12 groups, 35 findings.
 
 **Resolved versions:** `prisma@5.22.0`, `@prisma/client@5.22.0` (verified from `package-lock.json` at a440d667)
 
-**Methodology:** Source and migration inspection of all 53 Prisma models. No code changes during audit. 12 groups, 35 findings.
+### 13.1 — Finding Summary
 
 | Severity | Count | Key IDs |
 |----------|-------|---------|
 | HIGH | 1 | PH5-SCH-10: Transaction cascade-deletes when Booking is hard-deleted |
-| MEDIUM | 14 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk |
-| MEDIUM | 14 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk |
+| MEDIUM | 15 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk; PH5-SCH-35: SaaS booking webhook outside tx |
+| LOW | 18 | Various constraint, index, and schema-database drift issues (PH5-SCH-01..09, 11..16, 20, 25, 26, 29, 31..34) |
 | NEGLIGIBLE | 1 | PH5-SCH-19: SlotReservation cascade (transient rows, no financial evidence) |
-| LOW | 19 | Various constraint, index, schema-database drift, PH5-SCH-35: SaaS webhook event outside tx |
-
 | **Total** | **35** | All finding IDs PH5-SCH-01 through PH5-SCH-35 |
+
+### 13.2 — Deferred Items
 
 | ID | Title | Risk | Status | Reason |
 |---|---|---|---|---|
-| PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | OPEN — no production path confirmed but Customer cascade path found (PH5-SCH-28) | Remediation: change to onDelete: Restrict; requires migration |
-| PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | UNRESOLVED — concurrency test required against Prisma 5.22.0 / PostgreSQL | Exact outcome of upsert update:{} under concurrent access not yet tested |
-| PH5-SCH-35 | SaaS booking webhook event recorded outside processing tx | MEDIUM | OPEN — pre-transaction status check does not provide atomic concurrency guard | Reassessed: two concurrent deliveries can both pass unpaid check before either tx commits; needs deterministic concurrent test |
-| PH4-REG-01 | DIRECT payment mode returns 503 | LOW | DEFERRED | 503 guard present in both single and bulk booking paths; fix as part of DIRECT payment implementation |
+| PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | OPEN | Remediation: onDelete: Restrict; requires migration; Customer cascade path documented via PH5-SCH-28 |
+| PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | UNRESOLVED — Prisma-layer test written (T2 with barrier), not executed; PostgreSQL required | upsert update:{} exact outcome under concurrent access not tested |
+| PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | OPEN — concurrent delivery risk confirmed in source; deterministic service-level test not yet written | Needs conditional state transition inside tx or controlled handleCheckoutComplete() concurrency test |
+| PH4-REG-01 | DIRECT payment mode returns 503 | LOW | DEFERRED | 503 guard confirmed in both booking paths; fix as part of DIRECT payment implementation |
 | PH4-REG-02 | Transaction timeouts excessive | LOW | DEFERRED | No correctness impact; optimisation phase item |
 
 ### 13.3 — Phase 5 Closure Checklist
 
-- [x] Reconcile all 35 finding IDs — no duplicates, severity consistent (PH5-SCH-35 added)
-- [ ] Run BookingIdempotencyKey concurrency test (Prisma 5.22.0, PostgreSQL); update PH5-SCH-30
-- [ ] Run BookingIdempotencyKey concurrency test (Prisma 5.22.0, PostgreSQL); update PH5-SCH-30 — test written, not executed
-- [ ] Confirm DIRECT payment 503 guard in both single and bulk booking paths (consistent with PH4-REG-01)
-- [x] Confirm DIRECT payment 503 guard in both single and bulk booking paths (consistent with PH4-REG-01)
+- [x] Reconcile all 35 finding IDs — no duplicates, severity consistent in summary and detail
+- [x] Confirm resolved Prisma versions — prisma@5.22.0 and @prisma/client@5.22.0
+- [ ] Execute BookingIdempotencyKey concurrency test (T2 with barrier) against PostgreSQL; update PH5-SCH-30
+- [ ] Write and execute deterministic concurrent webhook test for SaaS path (service-level, not HTTP); update PH5-SCH-35
+- [x] Add Phase 5 to master tracker
+- [x] Confirm DIRECT payment 503 guard in both single and bulk booking paths
+
 ---
 
-**Section 13 last updated:** 2026-11-15 (a440d667)  
-**Section 13 last updated:** 2026-11-15 (1b8d6804)
+**Section 13 last updated:** 2026-11-15 (8b3b5c3c)
+**Master Tracker version:** v6.71
