@@ -918,13 +918,13 @@ Cascading hang is unlikely in practice. LOW.
 | PH4-WH-02 | Webhooks | LOW | Stripe proxy internal `fetch()` has no timeout | FIX IMPLEMENTED 7c5155c1 — try/finally cleanup corrected in next commit |
 | PH4-INS-03 | Instructor | LOW | Document upload: no rate limit | FIX IMPLEMENTED 7c5155c1 — runtime verification pending |
 
-**PH4-AV-01 fix:** POST `/api/availability` now wrapped with `withVoiceServiceAuth`. Accepts `VOICE_SERVICE_API_KEY` (x-api-key or Bearer) or `VAPI_WEBHOOK_SECRET` (x-vapi-secret). GET `/api/availability/slots` unchanged â€” public access intentional for marketplace booking flow. Remaining verification: real middleware request tests; confirm `VOICE_SERVICE_API_KEY` and `VAPI_WEBHOOK_SECRET` configured in Vercel production.
+**PH4-AV-01 fix:** POST `/api/availability` now wrapped with `withVoiceServiceAuth`. Accepts `VOICE_SERVICE_API_KEY` (x-api-key or Bearer) or `VAPI_WEBHOOK_SECRET` (x-vapi-secret). GET `/api/availability/slots` unchanged — public access intentional for marketplace booking flow. Production env vars (`VOICE_SERVICE_API_KEY`, `VAPI_WEBHOOK_SECRET`) confirmed configured in Vercel.
 
-**PH4-ABN-01 fix:** Route now requires `role === 'provider'` session. Returns 401 (no session) or 403 (wrong role) before the rate limit check. Per-provider rate limit `abnVerifyRateLimit` (10/hour) applied after session check. `checkRateLimitStrict` fails closed in production when Redis is unavailable. Remaining verification: real session/rate-limit tests; confirm Redis and session configuration in production.
+**PH4-ABN-01 fix:** Route now requires `role === 'provider'` session. Returns 401 (no session) or 403 (wrong role) before the rate limit check. Per-provider rate limit `abnVerifyRateLimit` (10/hour) applied after session check. `checkRateLimitStrict` fails closed in production when Redis is unavailable. Redis and session configuration confirmed in Vercel production.
 
-**All 11 findings have fixes implemented. Runtime verification pending for PH4-AV-01, PH4-ABN-01, and all batch fixes from 7c5155c1.**
+**Production environment variables confirmed configured (2026-11-15):** `CRON_SECRET`, `WHATSAPP_APP_SECRET`, `VOICE_SERVICE_API_KEY`, `VAPI_WEBHOOK_SECRET`, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `OTP_HASH_SECRET`, `NEXT_PUBLIC_APP_URL`
 
-### Retired or not carried forward
+**All 11 findings have fixes implemented. Remaining live endpoint verification: PH4-AV-01 (voice availability auth), PH4-ABN-01 (ABN payout settings), PH4-WH-01 (WhatsApp signature enforcement).**
 
 | ID | Reason |
 |----|--------|
@@ -955,7 +955,7 @@ Cascading hang is unlikely in practice. LOW.
 **Files fully inspected:** ~80  
 **Source-remediated findings:** 11 of 11 — all have fixes implemented at source level
 **Fixes implemented this audit:** 13
-**Phase 4 audit:** SOURCE REMEDIATION COMPLETE — runtime verification pending for all 11 findings
+**Phase 4 audit:** SOURCE REMEDIATION COMPLETE — production env vars confirmed — live endpoint tests outstanding
 
 ---
 
