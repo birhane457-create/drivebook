@@ -768,7 +768,22 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 
 ### Item 1: Reconcile all 35 finding IDs — COMPLETE
 
-All 35 finding IDs (PH5-SCH-01 through PH5-SCH-35) are unique in the summary table. No duplicates found. PH5-SCH-35 added during closure validation and reassessed from LOW to MEDIUM. Severity is consistent between the summary table and detailed sections.
+Full reconciliation at commit d9c07cde (verified from source):
+
+| Severity | Count | IDs |
+|----------|-------|-----|
+| HIGH | 1 | PH5-SCH-10 |
+| MEDIUM | 15 | PH5-SCH-01, 03, 05, 07, 12, 17, 18, 21, 22, 23, 24, 27, 28, 30, 35 |
+| LOW | 18 | PH5-SCH-02, 04, 06, 08, 09, 11, 13, 14, 15, 16, 20, 25, 26, 29, 31, 32, 33, 34 |
+| NEGLIGIBLE | 1 | PH5-SCH-19 |
+| **Total** | **35** | PH5-SCH-01 through PH5-SCH-35, all unique |
+
+Cross-checks performed:
+- All 35 IDs appear exactly once in the summary table
+- No ID appears in both LOW and MEDIUM sets
+- LOW IDs in Section 13.1 match the phase document exactly
+- MEDIUM IDs in Section 13.1 key-IDs field covers PH5-SCH-21/22/23/27/28/30/35 (abbreviated); full list above
+- Deferred items (PH5-SCH-10, 30, 35) are OPEN/UNRESOLVED, not counted as closed
 
 ### Item 2: Confirm resolved Prisma versions — COMPLETE
 

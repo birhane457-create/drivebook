@@ -347,13 +347,22 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
         // An error is only acceptable if it is a recognised database error code.
         // Codes accepted as evidence of a database-level guard:
         //   P2002 — unique constraint (should have been classified as p2002_caught above)
-        //   P2034 — transaction conflict / serialization failure
-        //   23P01 — exclusion constraint (unexpected here but harmless)
-        // Any other code means an unrelated failure coincidentally left one booking,
-        // which is not evidence that the race is mitigated.
+        //   P2034 — transaction write conflict or serialization failure
+        //   23P01 — exclusion constraint violation
+        // Important: these codes are not interchangeable evidence.
+        //   P2002 establishes that the idempotency key uniqueness constraint fired.
+        //   P2034 establishes that PostgreSQL serialization prevented a conflicting write.
+        //   23P01 establishes that an exclusion constraint (e.g. SlotReservation_no_overlap)
+        //         fired — it does NOT establish that the idempotency mechanism worked.
+        // The constraint name or detail must be logged to establish which guard fired.
         const code = (losingResult as any).code;
+        const meta = (losingResult as any).meta;
         const acceptedCodes = ['P2002', 'P2034', '23P01'];
-        console.log('T2: Losing request error code:', code, 'message:', (losingResult as any).error);
+        console.log('T2: Losing request error code:', code, 'meta:', meta, 'message:', (losingResult as any).error);
+        if (code === '23P01') {
+          console.warn('⚠️ T2: 23P01 fired — exclusion constraint, NOT the idempotency mechanism');
+          console.warn('⚠️ T2: This means a slot constraint prevented the duplicate, not the idem key uniqueness');
+        }
         expect(acceptedCodes).toContain(code);
 
       } else {
