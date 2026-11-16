@@ -545,9 +545,13 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     expect(allBookings.length).toBe(2);
   });
 
-  // ─── T5: DEFINITIVE IDEMPOTENCY TEST ──────────────────────────────────────────
+  // ─── T5: REPEATED IDEMPOTENCY PROBE ───────────────────────────────────────────
   //
-  // Design rationale (addresses review requirements):
+  // This is a diagnostic probe, not a correctness or safety test.
+  // A passing exit does not establish that the idempotency mechanism is safe.
+  // A failing exit (duplicateBooking > 0) confirms PH5-SCH-30.
+  //
+  // Design rationale:
   //
   // A. 50 independent rounds with fresh keys + isolated cleanup per round.
   //    Repeated trials expose database behaviour across executions.
@@ -576,7 +580,7 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
   //   A strict companion test (T5-STRICT) must be added after remediation to
   //   require exactly one booking.
 
-  it('T5: 50-round repeated idempotency test — no slot, same key, same request (definitive)', async () => {
+  it('T5: 50-round idempotency probe — no slot, same key, same request (DIAGNOSTIC)', async () => {
     // Print resolved versions for traceability
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const prismaVersion = require('@prisma/client/package.json').version as string;
@@ -661,12 +665,13 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     };
 
     for (let round = 0; round < ROUNDS; round++) {
-      // Each round uses a unique key and unique slot times to avoid cross-round contamination
       const roundKey = `${TEST_PREFIX}_T5_r${round}`;
-      // Alternate between: (a) concrete slot times, (b) null times (no-slot production path)
+      // Each round uses a unique key. Slot times use a fixed base date + hour offset
+      // so all 50 rounds produce valid timestamps (day-of-month overflows are avoided).
       const useNullTimes = round % 2 === 1;
-      const slotStart = useNullTimes ? null : new Date(`2027-07-${String(round + 1).padStart(2, '0')}T10:00:00Z`);
-      const slotEnd   = useNullTimes ? null : new Date(`2027-07-${String(round + 1).padStart(2, '0')}T11:00:00Z`);
+      const baseMs = new Date('2027-08-01T10:00:00Z').getTime();
+      const slotStart = useNullTimes ? null : new Date(baseMs + round * 60 * 60 * 1000);
+      const slotEnd   = useNullTimes ? null : new Date(baseMs + round * 60 * 60 * 1000 + 60 * 60 * 1000);
 
       const barrier = { count: 0, resolve: null as ((v: void) => void) | null };
       const barrierPromise = new Promise<void>((resolve) => { barrier.resolve = resolve; });
