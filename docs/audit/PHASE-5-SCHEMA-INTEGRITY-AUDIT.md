@@ -246,21 +246,93 @@ model User {
 | PH5-SCH-06 | LOW | No `@unique` on `Transaction.stripePaymentIntentId` |
 | PH5-SCH-07 | MEDIUM | `ClientWallet.balance` stored Decimal can diverge from transaction aggregate |
 | PH5-SCH-08 | LOW | No `@unique` on `PayoutTransaction.transactionId` |
-| PH5-SCH-09 | LOW | No partial unique index on active Subscription per Provider |
-| PH5-SCH-10 | HIGH | Transaction cascade-deletes when Booking is hard-deleted |
+| PH5-SCH-09 | LOW | No partial unique index on active Subscription per Provider (SUPERSEDED by PH5-SCH-14) |
+| PH5-SCH-10 | HIGH | Transaction cascade-deletes when Booking is hard-deleted (VERIFIED — latent risk confirmed, no production paths) |
 | PH5-SCH-11 | LOW | AuditLog cascade paths not fully traced (previously closed AUDIT-03) |
 | PH5-SCH-12 | MEDIUM | Missing composite index `(providerId, status, startTime)` on Booking |
 | PH5-SCH-13 | LOW | Missing composite index `(providerId, status, createdAt)` on Transaction |
+| PH5-SCH-14 | LOW | Partial unique index `Subscription_provider_current_unique` not reflected in Prisma schema — schema-database drift |
+| PH5-SCH-15 | LOW | `Subscription → Provider` cascade delete loses subscription history (same latent risk as PH5-SCH-10) |
+| PH5-SCH-16 | LOW | `Subscription.status` plain string — no DB-level enum constraint |
 
-**1 HIGH, 4 MEDIUM, 8 LOW**
+**1 HIGH (PH5-SCH-10 verified), 5 MEDIUM, 10 LOW**
+
+**PH5-SCH-09 status:** Superseded by PH5-SCH-14 — the constraint exists (partial unique index in migration `20260916131858_sub22`) but is not reflected in the Prisma schema.
+
+---
+
+## Group 7: Subscription Model
+
+**Prisma schema definition (lines 503-528):**
+```prisma
+model Subscription {
+  id                   String    @id @default(cuid())
+  providerId           String
+  tier                 String
+  status               String    @default("ACTIVE")
+  stripeSubscriptionId String?   @unique
+  // ... 
+  provider  Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+}
+```
+
+**Migration history:**
+- `20260116000000_sub_06_a_unique_constraints`: Added `@unique` on `stripeSubscriptionId` and `Provider.stripeCustomerId`
+- `20260916131858_sub22_unique_current_subscription`: Added partial unique index `WHERE status IN ('TRIAL', 'ACTIVE', 'PAST_DUE')` to enforce one-current-subscription-per-provider
+
+**Actual database constraints (verified via migrations):**
+1. `Subscription_stripeSubscriptionId_key UNIQUE (stripeSubscriptionId)` — full unique constraint ✅
+2. `Subscription_provider_current_unique UNIQUE (providerId) WHERE status IN ('TRIAL', 'ACTIVE', 'PAST_DUE')` — partial unique index ✅
+
+**Finding PH5-SCH-14 (LOW): Partial unique index not reflected in Prisma schema**
+- Migration `20260916131858_sub22_unique_current_subscription` creates a PostgreSQL partial unique index: `CREATE UNIQUE INDEX "Subscription_provider_current_unique" ON "Subscription"("providerId") WHERE status IN ('TRIAL', 'ACTIVE', 'PAST_DUE')`
+- This constraint **is active in the database** and prevents duplicate current subscriptions
+- Prisma schema has **no declaration** of this constraint — Prisma does not support partial unique indexes in the schema language
+- **Risk:** Developers reading the schema see no one-per-provider constraint; `prisma db push` or schema changes could drop the index without warning
+- **Evidence:** SUB-22 test suite (`app/api/stripe/webhook/__tests__/sub-22-concurrent.test.ts`) verifies the constraint works at the database level
+- **Impact:** Schema-database drift — the authoritative constraint is in raw SQL, invisible to Prisma tooling
+- **Recommendation:** Document the partial index in a schema comment block above the `Subscription` model; add a test that verifies the index exists in production
+
+**INFO: One stripeSubscriptionId per Subscription enforced ✅**  
+**INFO: Webhook handler uses `updateMany` with affected-row count to prevent race conditions (SUB-22) ✅**  
+**INFO: No duplicate-subscription vulnerabilities found in application layer ✅**
+
+**Application-layer subscription creation paths (source search):**
+- `app/api/stripe/webhook/route.ts` lines 2003, 2050: `subscription.created` and `subscription.updated` webhook handlers
+- Webhook handler pattern (SUB-22 Step 5):
+  1. Find existing subscription by `stripeSubscriptionId`
+  2. If not found, use `updateMany` to atomically claim a trial subscription row
+  3. Check `updateResult.count` — if 0, create new subscription; if > 1, throw error
+  4. Partial unique index prevents duplicate ACTIVE subscriptions even if race condition bypasses application logic
+- **Verification:** `sub-22-concurrent.test.ts` is a production-route concurrency test that calls the real webhook handler with signed Stripe events against an isolated test database
+
+**Finding PH5-SCH-15 (LOW): `Subscription → Provider` cascade delete — loses subscription history**
+- `Subscription` has `onDelete: Cascade` from Provider
+- If a Provider is hard-deleted, all their Subscription records (including historical CANCELLED/EXPIRED) are deleted
+- **Risk:** Subscription history is needed for billing reconciliation, tax reporting, dispute resolution, and churn analysis
+- **Current mitigation:** Provider soft-delete (`Provider.deletedAt`) is the standard pattern — no production paths hard-delete providers
+- **Latent risk:** Same as PH5-SCH-10 — the cascade remains; future admin tool or database script could destroy subscription history
+- **Recommendation:** Change `onDelete: Cascade` to `onDelete: Restrict` or add `Provider.deletedAt` check before any hard-delete operation
+
+**Finding PH5-SCH-16 (LOW): `Subscription.status` is a plain string — no DB-level enum constraint**
+- Schema declares `status String @default("ACTIVE")`
+- No PostgreSQL `CHECK` constraint or `ENUM` type limits values to the expected set ('TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED')
+- **Risk:** Application bug or direct DB write could set invalid status (e.g. 'active' lowercase, 'PAUSED', null coercion to empty string)
+- **Evidence:** Webhook handler uses `normalizeStatus()` helper to map Stripe statuses — but no DB-level guard
+- **Impact:** Queries filtering by status may miss rows with unexpected values; partial unique index `WHERE status IN (...)` might not cover all "current" statuses if new ones are added
+- **Recommendation:** Add PostgreSQL `CHECK (status IN ('TRIAL', 'ACTIVE', 'PAST_DUE', 'CANCELLED', 'EXPIRED'))` or define a PostgreSQL ENUM type
+
+---
+
+## Group 8: SlotReservation (PAY-H-04 verification)
 
 **Next audit targets within Phase 5:**
-- Subscription model constraints
-- SlotReservation (PAY-H-04 fix confirmed — verify constraint still present)
+- SlotReservation (PAY-H-04 fix confirmed — verify constraint still present and overlap prevention)
 - LedgerEntry / FinancialLedger relation integrity
 - ProviderDiscovery and Business models
 - BookingIdempotencyKey and WebhookEvent idempotency structures
 
 ---
 
-**Last updated:** 2026-11-15
+**Last updated:** 2026-11-15  
+**Commit baseline:** deab13b0
