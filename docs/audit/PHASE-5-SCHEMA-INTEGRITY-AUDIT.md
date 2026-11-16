@@ -822,11 +822,11 @@ Test file: `__tests__/integration/ph5-sch30-booking-idempotency-concurrency.test
 - Two bookings were created for the same idempotency key — the race is real and reproducible
 
 **T5 outcome (10 rounds, no slot):** 10/10 single booking, 0 duplicates. Discrepancy with T2 is because same-slot rounds may serialise on the `booking.create` booking conflict; T2 uses different slots so no such serialisation point exists. PH5-SCH-30 is confirmed from T2.
-**PH5-SCH-30 status:** UNRESOLVED. The barrier is in place (both requests pass the initial lookup before either enters the transaction). T2 now classifies the outcome explicitly:
-- `allBookings.length === 1`: some mechanism (upsert conflict, P2002, or serialisation) prevented the duplicate — finding is mitigated or not applicable
-- `allBookings.length === 2`: TOCTOU race confirmed — PH5-SCH-30 is a defect
-- Any other count (0, >2): test-setup failure
-**Pattern analysis (all recordWebhookEvent call sites in app/api/stripe/webhook/route.ts):**
+**PH5-SCH-30 status: CONFIRMED.** T2 executed against Supabase PostgreSQL (ap-southeast-2 pooler, pgbouncer=true, READ COMMITTED, Prisma 5.22.0, commit dfeb6d74). Result: `allBookings.length === 2` with one idempotency key. Both concurrent requests passed the initial lookup, both committed their transactions, and the `upsert` with `update: {}` silently dropped the second key insert without aborting the second booking transaction. The race is real and reproducible.
+- Scope: Prisma/database-layer reproduction against the same Supabase instance used by existing integration tests. Not a test of the complete HTTP route.
+- T5 (10 rounds, no slot): 0 duplicates — same-slot rounds may serialise on `booking.create` conflict. T2 (different slots) has no such serialisation point. T2 is the authoritative result.
+- Remediation: replace `upsert` with `create` + P2002 catch inside the booking transaction.
+
 
 **Inside transaction (tx) — correct pattern:**
 - Line 510: wallet credit checkout — `recordWebhookEvent(tx, ...)` atomic with wallet credit ✅
