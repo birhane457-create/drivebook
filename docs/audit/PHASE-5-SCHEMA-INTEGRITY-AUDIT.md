@@ -3,6 +3,12 @@
 | PH5-SCH-18 | MEDIUM | Path B bulk booking transaction uses READ COMMITTED — not SERIALIZABLE (GiST constraint is the safety net) |
 | PH5-SCH-19 | LOW | `SlotReservation -> Provider` cascade delete — transient rows lost on provider deletion (acceptable) |
 | PH5-SCH-20 | LOW | GiST exclusion constraint not reflected in Prisma schema — silent loss risk on schema regeneration |
+| PH5-SCH-21 | MEDIUM | FinancialLedger writes non-atomic with booking confirmation — 24h reconciliation gap |
+| PH5-SCH-22 | MEDIUM | PlatformLedger increments non-atomic with LedgerEntry — totals can diverge, no reconciliation |
+| PH5-SCH-23 | HIGH | `verifyLedgerIntegrity()` always reports balanced — cannot detect missing entries |
+| PH5-SCH-24 | MEDIUM | LedgerEntry immutability violated — payout-service.ts updates metadata on existing entries |
+| PH5-SCH-25 | LOW | Reconciliation uses different ledgers — cross-ledger consistency not verified |
+| PH5-SCH-26 | LOW | FinancialLedger reference fields are plain strings — no FK enforcement |
 - Group 9: LedgerEntry / FinancialLedger — authoritative model identification, immutability, balance integrity
 - Group 10: Business models — ownership, tenant isolation, cascade behaviour, orphan prevention
 - Group 11: BookingIdempotencyKey — scope, uniqueness, expiry, replay behaviour
@@ -259,7 +265,7 @@ model User {
 | PH5-SCH-15 | LOW | `Subscription â†’ Provider` cascade delete loses subscription history (same latent risk as PH5-SCH-10) |
 | PH5-SCH-16 | LOW | `Subscription.status` plain string â€” no DB-level enum constraint |
 
-**1 HIGH (PH5-SCH-10 verified), 7 MEDIUM (PH5-SCH-17/18 added), 12 LOW (PH5-SCH-19/20 added) — 20 total findings across Groups 1-8**
+**2 HIGH (PH5-SCH-10 + PH5-SCH-23), 9 MEDIUM, 14 LOW — 26 total findings across Groups 1-9**
 
 **PH5-SCH-09 status:** Superseded by PH5-SCH-14 â€” the constraint exists (partial unique index in migration `20260916131858_sub22`) but is not reflected in the Prisma schema.
 
@@ -407,40 +413,40 @@ The constraint is an all-rows constraint (no `WHERE` clause). Expired rows are r
 
 ### Findings
 
-**Finding PH5-SCH-17 (MEDIUM): Path A check-and-reserve has a TOCTOU window â€” the application overlap check and the reservation create are not in a single transaction**
+**Finding PH5-SCH-17 (MEDIUM): Path A check-and-reserve — TOCTOU window; constraint violation handling verified**
 
-- `check-and-reserve/route.ts`: `findFirst` (overlap check) and `slotReservation.create` are two separate database operations with no wrapping transaction
-- Between the check and the create, a concurrent request can pass the check and also attempt a create
-- The GiST exclusion constraint (Layer 3) is the actual safety net â€” one of the concurrent creates will receive a `23P01` error which is caught and returned as 409
-- **Risk assessment:** The TOCTOU window is real but the GiST constraint is the correct and sufficient final guard. The application check (Layer 1/2) reduces contention; the constraint (Layer 3) prevents the actual violation. The design is documented this way in the PAY-H-04 migration comment.
+- Application overlap check (findFirst) and slotReservation.create are separate operations with no wrapping transaction
+- **Constraint violation handling VERIFIED:** 23P01 caught in check-and-reserve/route.ts; returns HTTP 409 with structured JSON. No 500 on constraint violation. Unrecognised errors re-thrown to outer catch which returns 500 — that path is correct (non-overlap create failures are genuine server errors).
+- **Risk assessment:** Acceptable by design. GiST constraint is the stated invariant; application check reduces contention only.
+
 - **Concern:** The application-level check is at READ COMMITTED and is not authoritative. Under sustained concurrent load, most requests will reach the constraint. That is not a correctness problem but it does mean more constraint violations surfaced to users as 409s.
 - **Status:** Acceptable by design. Document that the GiST constraint is the invariant, not the application check.
 
-**Finding PH5-SCH-18 (MEDIUM): Path B booking transaction uses READ COMMITTED isolation â€” not SERIALIZABLE**
+**Finding PH5-SCH-18 (MEDIUM): Path B bulk booking — READ COMMITTED transaction; constraint violation handling verified**
 
-- `public/bookings/bulk/route.ts` line 714: `prisma.$transaction(async tx => ...)` with no options â†’ READ COMMITTED
-- The transaction contains: booking conflict check â†’ reservation delete â†’ reservation conflict check â†’ reservation create
-- Under READ COMMITTED, two concurrent transactions can both pass the conflict check on stale reads before either commits
-- The GiST exclusion constraint inside the transaction will reject the second one with `23P01`
+- Transaction uses prisma.\$transaction with no isolationLevel option — READ COMMITTED (Prisma default)
+- **Constraint violation handling VERIFIED (line 863):** 23P01 and SlotReservation_no_overlap checked; returns HTTP 409 with 'This time slot is no longer available. Please choose another.' No 500 on constraint violation.
+- **Risk assessment:** Acceptable by design. Same conclusion as PH5-SCH-17.
+
 - **Risk assessment:** Same as PH5-SCH-17 â€” constraint is the safety net. However, the error handling path in Path B re-throws `SLOT_TAKEN` which surfaces as an HTTP error to the client, not a clean 409. Verify the client-facing error message is handled gracefully.
 - **Note:** Upgrading to SERIALIZABLE would cause transaction retries on serialization failures â€” a different tradeoff. The current design relies on the constraint rather than isolation level, which is a reasonable and documented choice.
 
-**Finding PH5-SCH-19 (LOW): `SlotReservation â†’ Provider` cascade delete â€” expired reservation rows deleted silently if provider is hard-deleted**
+**Finding PH5-SCH-19 (NEGLIGIBLE revised from LOW): SlotReservation cascade delete — no financial or dispute evidence attached**
 
-- Same pattern as PH5-SCH-10 and PH5-SCH-15
-- SlotReservation rows are temporary (10-minute hold); there is no financial record attached to them
-- If a provider is hard-deleted, their pending slot reservations are cascade-deleted
-- **Risk assessment:** LOW â€” slot reservations are transient. Losing them on provider deletion does not create a financial gap. Concurrent bookers whose reservations are deleted mid-payment would receive a 409 at booking confirmation, which is the correct failure mode.
+- Schema confirmed: SlotReservation has no bookingId, transactionId, paymentIntentId, or stripeChargeId fields
+- No other model references SlotReservation — not referenced by StripeDispute, AuditLog, or Transaction
+- Payment confirmation recorded on Booking.paymentIntentId and Transaction — independent of SlotReservation existence
+- Cascade-delete of provider slot reservations has no financial, audit, or dispute impact. Mid-payment bookers receive 409 — correct failure mode.
+- **Risk assessment revised:** NEGLIGIBLE. Finding retained for completeness.
 
-**Finding PH5-SCH-20 (LOW): GiST exclusion constraint not reflected in Prisma schema**
+**Finding PH5-SCH-20 (LOW): GiST constraint not in Prisma schema — documentation present, no automated safeguard**
 
-- The constraint is defined in raw SQL migration `20260922000001_payh04_slot_reservation_no_overlap`
-- Prisma does not support exclusion constraints in its schema language
-- The Prisma schema shows only `@@index([providerId, expiresAt])` and `@@index([sessionId])` â€” no hint of the exclusion constraint
-- **Risk:** A `prisma db push` or schema drift correction that drops and recreates the table would lose the constraint without warning. The overlap prevention guarantee would be silently lost.
-- **Recommendation:** Document the constraint in a schema comment above the `SlotReservation` model; add a startup check or migration guard that verifies the constraint exists before the application serves requests.
-
----
+- Constraint documented in schema comment above SlotReservation model (lines 274-279): migration reference, constraint SQL, three-layer architecture
+- Migration 20260922000001_payh04_slot_reservation_no_overlap retained in migrations directory (46 total)
+- **No automated constraint verification exists:** only manual script scripts/payh04-constraint-prototype.mjs; no startup check; no CI gate
+- prisma db push will NOT drop the constraint (additive only); force-reset or DROP TABLE migration would lose it silently
+- **Risk:** LOW. Developer unfamiliar with the architecture could regenerate schema without the constraint.
+- **Recommendation (deferred):** Add a database-startup assertion querying pg_constraint for SlotReservation_no_overlap; fail fast if absent.
 
 ### Test Evidence Assessment
 
@@ -462,5 +468,98 @@ The constraint is an all-rows constraint (no `WHERE` clause). Expired rows are r
 
 ---
 
-**Last updated:** 2026-11-15 (Group 8 complete)
-**Commit baseline:** 333530ba
+## Group 9: LedgerEntry / FinancialLedger / PlatformLedger
+
+**Three distinct financial recording models — not one ledger:**
+
+| Model | Purpose | Tables | Immutability | Idempotency |
+|-------|---------|--------|--------------|-------------|
+| `Transaction` | Stripe payment evidence (intent, charge, transfer, fee, payout) | PostgreSQL | Updatable | `stripePaymentIntentId` has no `@unique` (PH5-SCH-06) |
+| `LedgerEntry` | Typed event log (PAYMENT_COLLECTED, PAYOUT_PAID, REFUND_ISSUED, DISPUTE_*) | PostgreSQL | Append-only claimed, but `update()` exists in `payout-service.ts` line 470 | No unique constraint |
+| `FinancialLedger` | Double-entry accounting (debit/credit pairs) | PostgreSQL | Append-only | `idempotencyKey @unique` ✅ |
+| `PlatformLedger` | Singleton running totals | PostgreSQL | Mutable (increment via `upsert`) | N/A (singleton by `key @unique`) |
+
+**No single model is authoritative.** The architecture is multi-layer:
+- `Transaction` = Stripe payment evidence
+- `LedgerEntry` = event-oriented operational log
+- `FinancialLedger` = double-entry accounting records
+- `PlatformLedger` = aggregate running totals
+
+---
+
+**Finding PH5-SCH-21 (MEDIUM): FinancialLedger writes are non-atomic with the booking confirmation — silent gaps possible**
+
+- In `app/api/stripe/webhook/route.ts` line 1628: `recordBookingPayment(...)` is called AFTER the booking confirmation transaction commits
+- The call uses `.catch((err) => { ... logger.error('[FinancialLedger] recordBookingPayment failed (non-critical)') })`
+- If the ledger write fails (DB timeout, connection pool exhaustion, constraint error other than idempotency), the booking remains confirmed but the double-entry record is absent
+- **Mitigation exists:** The reconciliation cron (`app/api/cron/reconcile-stripe/route.ts` Check 4) detects confirmed bookings with missing FinancialLedger entries and backfills them
+- **Gap:** The backfill only runs once daily at 03:00 AWST. Between the failed write and the next reconciliation run, the platform's accounting records are incomplete. Payouts computed during this window may not reflect all collected payments.
+- **Risk assessment:** MEDIUM — financial records can be temporarily inconsistent; reconciliation catches it but with a delay window of up to 24 hours
+
+**Finding PH5-SCH-22 (MEDIUM): PlatformLedger increments are non-atomic with LedgerEntry appends**
+
+- `recordPaymentCollected` in `payout-service.ts` line 744 uses `Promise.all([appendLedgerEntry(...), incrementLedger(...)])`
+- If `appendLedgerEntry` succeeds but `incrementLedger` fails, the event log has the entry but the singleton totals are wrong
+- If `incrementLedger` succeeds but `appendLedgerEntry` fails, the totals are incremented but the event log is missing the detail record
+- **Risk:** PlatformLedger.totalCollected can diverge from the sum of LedgerEntry amounts. The payout guard `assertSufficientBalance` reads from PlatformLedger, not from LedgerEntry aggregates.
+- **No reconciliation check compares PlatformLedger totals against LedgerEntry sum.** The reconciliation cron checks FinancialLedger gaps and refund coverage, not PlatformLedger consistency.
+
+**Finding PH5-SCH-23 (HIGH): `verifyLedgerIntegrity()` is ineffective — always reports balanced**
+
+- `lib/services/ledger.ts` lines 351–374: the function aggregates `FinancialLedger.amount` and assigns the same value to both `totalDebits` and `totalCredits`
+- The comment says: "Since each entry records the same amount as both a debit and a credit, both are the same"
+- The `difference` is always 0.0 by construction; `valid` is always `true`
+- **This function cannot detect missing entries.** If an entire transaction's double-entry record is absent (PH5-SCH-21), this function still reports the ledger as balanced because it sums the rows that DO exist and compares them to themselves.
+- **A correct integrity check would need to:**
+  1. Sum amounts grouped by `debitAccount` and verify they equal sums grouped by `creditAccount` (per-account balance)
+  2. Compare expected entries (from confirmed bookings/transactions) against actual FinancialLedger rows (completeness)
+- **Risk assessment:** HIGH — the primary integrity verification tool gives a false sense of correctness. A missing ledger entry for a $500 booking would not be detected by this function.
+
+**Finding PH5-SCH-24 (MEDIUM): `LedgerEntry` immutability claim is violated by `payout-service.ts` line 470**
+
+- `lib/services/ledger-service.ts` line 13 comments: "Entries are never updated after creation"
+- `lib/services/ledger.ts` line 8 comments: "APPEND-ONLY: No updates, no deletes"
+- However, `payout-service.ts` line 470: `await prisma.ledgerEntry.update({ where: { id: adj.id }, data: { metadata: { ...meta, recovered: true, recoveredByPayoutId: payoutId } } })`
+- This modifies the `metadata` field of an existing ADJUSTMENT entry to mark it as recovered by a specific payout
+- **Risk assessment:** MEDIUM — the update is metadata-only (amount and type are not changed), but the immutability invariant is broken. A DB-level trigger preventing `UPDATE` on LedgerEntry would be the correct enforcement; currently the claim relies on application discipline only.
+
+**Finding PH5-SCH-25 (LOW): Reconciliation uses different ledgers for different checks — cross-ledger consistency not verified**
+
+- `reconcile-stripe` Check 1: detects missing LedgerEntry(PAYMENT_COLLECTED) by comparing Stripe payment_intent.succeeded events against LedgerEntry records
+- `reconcile-stripe` Check 4: detects missing FinancialLedger entries by comparing confirmed bookings against FinancialLedger rows
+- `reconcile-stripe` Check 5: checks refund coverage against LedgerEntry records
+- **Gap:** There is no check that compares LedgerEntry(PAYMENT_COLLECTED) sum against FinancialLedger amounts for the same booking. A booking could have a LedgerEntry but no FinancialLedger entry (or vice versa) and neither check would catch it unless they happen to run on the same day.
+- **Risk assessment:** LOW — reconciliation catches individual ledger gaps but not cross-ledger inconsistencies
+
+**Finding PH5-SCH-26 (LOW): `FinancialLedger` has no relation fields — bookingId/transactionId/payoutId are plain nullable strings**
+
+- Schema declares `bookingId String?`, `transactionId String?`, `payoutId String?`, `userId String?`, `providerId String?` — all nullable, none are `@relation` fields
+- No foreign keys enforce that a FinancialLedger row's `bookingId` references a real Booking
+- If a booking is hard-deleted (see PH5-SCH-10), its FinancialLedger rows remain but reference a non-existent booking
+- **Risk assessment:** LOW — this is actually the correct design for an immutable ledger (financial records should survive even if the referenced entity is deleted). But it means the ledger cannot be used to verify referential integrity; it can only verify internal consistency.
+
+---
+
+### Group 9 Summary
+
+| ID | Severity | Finding |
+|----|----------|---------|
+| PH5-SCH-21 | MEDIUM | FinancialLedger writes non-atomic with booking confirmation — reconciliation catches gaps with up to 24h delay |
+| PH5-SCH-22 | MEDIUM | PlatformLedger increments non-atomic with LedgerEntry appends — totals can diverge, no reconciliation checks this |
+| PH5-SCH-23 | HIGH | `verifyLedgerIntegrity()` always reports balanced — cannot detect missing entries |
+| PH5-SCH-24 | MEDIUM | LedgerEntry immutability claim violated — `payout-service.ts` updates metadata on existing entries |
+| PH5-SCH-25 | LOW | Reconciliation uses different ledgers for different checks — cross-ledger consistency not verified |
+| PH5-SCH-26 | LOW | FinancialLedger reference fields are plain strings — no FK enforcement (correct for immutable ledger, but limits verification) |
+
+---
+
+## Remaining Groups (pending)
+
+- Group 10: Business models — ownership, tenant isolation, cascade behaviour, orphan prevention
+- Group 11: BookingIdempotencyKey — scope, uniqueness, expiry, replay behaviour
+- Group 12: WebhookEvent — event uniqueness, processing state, retry safety
+
+---
+
+**Last updated:** 2026-11-15 (Group 9 complete)
+**Commit baseline:** cfed5ffa
