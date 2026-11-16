@@ -251,7 +251,7 @@ model User {
 | PH5-SCH-07 | MEDIUM | `ClientWallet.balance` stored Decimal can diverge from transaction aggregate |
 | PH5-SCH-08 | LOW | No `@unique` on `PayoutTransaction.transactionId` |
 | PH5-SCH-09 | LOW | No partial unique index on active Subscription per Provider (SUPERSEDED by PH5-SCH-14) |
-| PH5-SCH-10 | HIGH | Transaction cascade-deletes when Booking is hard-deleted (VERIFIED — latent risk confirmed; Customer hard-delete path found PH5-SCH-28) |
+| PH5-SCH-10 | HIGH | Transaction cascade-deletes when Booking is hard-deleted (VERIFIED — Customer hard-delete path found via PH5-SCH-28; fix: onDelete Restrict) |
 | PH5-SCH-11 | LOW | AuditLog cascade paths not fully traced (previously closed AUDIT-03) |
 | PH5-SCH-12 | MEDIUM | Missing composite index `(providerId, status, startTime)` on Booking |
 | PH5-SCH-13 | LOW | Missing composite index `(providerId, status, createdAt)` on Transaction |
@@ -264,15 +264,15 @@ model User {
 | PH5-SCH-20 | LOW | GiST exclusion constraint not in Prisma schema — drift risk, no automated safeguard |
 | PH5-SCH-21 | MEDIUM | FinancialLedger writes non-atomic with booking confirmation — 24h reconciliation gap |
 | PH5-SCH-22 | MEDIUM | PlatformLedger increments non-atomic with LedgerEntry — totals can diverge, no reconciliation |
-| PH5-SCH-23 | HIGH | `verifyLedgerIntegrity()` always reports balanced — cannot detect missing entries |
+| PH5-SCH-23 | MEDIUM | `verifyLedgerIntegrity()` always reports balanced — cannot detect missing entries (zero call sites; currently unused, future use must be blocked until corrected) |
 | PH5-SCH-24 | MEDIUM | LedgerEntry immutability violated — payout-service.ts updates metadata on existing entries |
 | PH5-SCH-25 | LOW | Reconciliation uses different ledgers — cross-ledger consistency not verified |
 | PH5-SCH-26 | LOW | FinancialLedger reference fields are plain strings — no FK enforcement |
-| PH5-SCH-27 | MEDIUM | Business ID resolution inconsistent — biz_`` constructed in 7+ active routes |
-| PH5-SCH-28 | MEDIUM | Customer hard-delete has check/delete race — concurrent booking can trigger Transaction cascade |
+| PH5-SCH-27 | MEDIUM | Business ID resolution inconsistent — resolveBusinessId() not used in all routes; normal onboarding creates independent CUID Business IDs |
+| PH5-SCH-28 | MEDIUM | Customer hard-delete check/delete race — SAAS-only (no user account), narrow concurrent booking window, cascade to Transaction |
 | PH5-SCH-29 | LOW | Booking.serviceId not referentially enforced — nullable string, no FK to BusinessService |
 
-**2 HIGH, 12 MEDIUM, 14 LOW, 1 NEGLIGIBLE — 29 total findings across Groups 1-10**
+**1 HIGH, 13 MEDIUM, 14 LOW, 1 NEGLIGIBLE — 29 total findings across Groups 1-10**
 
 **PH5-SCH-09 status:** Superseded by PH5-SCH-14 â€” the constraint exists (partial unique index in migration `20260916131858_sub22`) but is not reflected in the Prisma schema.
 
@@ -511,21 +511,21 @@ The constraint is an all-rows constraint (no `WHERE` clause). Expired rows are r
 - **Risk:** PlatformLedger.totalCollected can diverge from the sum of LedgerEntry amounts. The payout guard `assertSufficientBalance` reads from PlatformLedger, not from LedgerEntry aggregates.
 - **No reconciliation check compares PlatformLedger totals against LedgerEntry sum.** The reconciliation cron checks FinancialLedger gaps and refund coverage, not PlatformLedger consistency.
 
-**Finding PH5-SCH-23 (HIGH): `verifyLedgerIntegrity()` is ineffective — always reports balanced**
+**Finding PH5-SCH-23 (MEDIUM, downgraded from HIGH): `verifyLedgerIntegrity()` is ineffective — always reports balanced; currently unused (zero call sites)**
 
-- `lib/services/ledger.ts` lines 351–374: the function aggregates `FinancialLedger.amount` and assigns the same value to both `totalDebits` and `totalCredits`
-- The comment says: "Since each entry records the same amount as both a debit and a credit, both are the same"
+- `lib/services/ledger.ts` lines 351-374: the function aggregates `FinancialLedger.amount` and assigns the same value to both `totalDebits` and `totalCredits`
+- The comment says: `Since each entry records the same amount as both a debit and a credit, both are the same`
 - The `difference` is always 0.0 by construction; `valid` is always `true`
 - **This function cannot detect missing entries.** If an entire transaction's double-entry record is absent (PH5-SCH-21), this function still reports the ledger as balanced because it sums the rows that DO exist and compares them to themselves.
+- **Call-site search:** Zero call sites found across `app/`, `lib/`, and `scripts/`. The function is exported from `ledger.ts` line 356 but never imported or called by any route, service, cron job, or admin tool.
+- **Severity rationale:** Downgraded from HIGH to MEDIUM. The function is genuinely broken, but since nobody calls it, it has zero production impact today. The distinction is between:
+  - A broken integrity-verification function that is actively relied upon in production (would be HIGH)
+  - A broken, unused function that could create false confidence if introduced into a future workflow (MEDIUM)
+- **Requirement:** Future use of this function must be blocked until it is corrected to perform per-account balance verification and completeness checks against expected entries.
 - **A correct integrity check would need to:**
   1. Sum amounts grouped by `debitAccount` and verify they equal sums grouped by `creditAccount` (per-account balance)
   2. Compare expected entries (from confirmed bookings/transactions) against actual FinancialLedger rows (completeness)
-- **Risk assessment:** HIGH — the primary integrity verification tool gives a false sense of correctness. A missing ledger entry for a $500 booking would not be detected by this function.
-
-**Finding PH5-SCH-24 (MEDIUM): `LedgerEntry` immutability claim is violated by `payout-service.ts` line 470**
-
-- `lib/services/ledger-service.ts` line 13 comments: "Entries are never updated after creation"
-- `lib/services/ledger.ts` line 8 comments: "APPEND-ONLY: No updates, no deletes"
+- **Risk assessment:** MEDIUM — broken dead code that could give false confidence if used in the future.
 - However, `payout-service.ts` line 470: `await prisma.ledgerEntry.update({ where: { id: adj.id }, data: { metadata: { ...meta, recovered: true, recoveredByPayoutId: payoutId } } })`
 - This modifies the `metadata` field of an existing ADJUSTMENT entry to mark it as recovered by a specific payout
 - **Risk assessment:** MEDIUM — the update is metadata-only (amount and type are not changed), but the immutability invariant is broken. A DB-level trigger preventing `UPDATE` on LedgerEntry would be the correct enforcement; currently the claim relies on application discipline only.
@@ -571,9 +571,9 @@ The constraint is an all-rows constraint (no `WHERE` clause). Expired rows are r
 
 **Risk:** When a Provider has an independent Business ID (not `biz_`), routes that construct the legacy ID will either fail (Business not found) or create a second legacy Business. Subsequent operations may write to the wrong record.
 
-**Not evidence of cross-tenant data disclosure.** This is an identity-resolution and tenant-configuration consistency defect. Production prevalence of independent Business IDs needs checking.
+**Practical exposure — normal onboarding path, not just legacy:** `upsertBusinessBranding()` in `lib/branding/resolution.ts` line 250 creates new Business records with auto-generated `cuid()` IDs (not `biz_`${providerId}`). It then atomically links the Provider via `UPDATE Provider SET businessId = ... WHERE businessId IS NULL`. Every provider who goes through branding setup gets an independent Business ID. The routes that hardcode `biz_`${providerId}` will fail for these providers — they will either create a duplicate legacy Business or fail to find the configuration.
 
----
+**Some routes DO use `resolveBusinessId()` correctly** (routes at lines 44-45 and 74-75 in the business directory). The inconsistency is between routes that use the canonical resolver and routes that do not.
 
 ### PH5-SCH-28 (MEDIUM): Customer hard-delete has check/delete race — cascades to Transaction
 
@@ -599,6 +599,19 @@ The check (line 133) and the delete (line 194) are separate operations with no w
 **Impact on PH5-SCH-10:** The previous reachability assessment said "zero production hard-delete paths found." That statement is now incomplete. The Booking deletion is indirect, through the Customer FK cascade, and depends on a concurrency race. PH5-SCH-10 has been updated to record this path.
 
 **No concurrent deletion test has been run.** The race is confirmed as a realistic source path; its production reproducibility is not verified.
+
+**Exposure scope (SAAS-only, narrow window):**
+- The handler checks both `hasBookings` (line 133) AND `hasUserAccount` (line 134) before hard-deleting
+- In the MARKETPLACE business model, customers self-register and have user accounts — `hasUserAccount` is true, so the handler soft-deletes instead
+- The race only affects SAAS-model customers created by providers without user accounts
+- The timing window is between `findUnique` (line 111) and `delete` (line 194) — a single request, typically under 100ms of server time
+- A concurrent booking must target that exact customer in that window
+- MEDIUM is retained: the cascade to financial records is real, and the narrow window reduces likelihood but does not eliminate the integrity risk
+
+**Relationship to PH5-SCH-10:** These findings address different control layers and must remain independently tracked:
+- PH5-SCH-10: database permits deletion of financial records through cascade — fix: `onDelete: Restrict`
+- PH5-SCH-28: application check/delete race reaches the deletion path — fix: atomic or conditional deletion
+- Fixing one does not make the other unnecessary
 
 ---
 
