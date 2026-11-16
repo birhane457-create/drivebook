@@ -752,7 +752,7 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| PH5-SCH-30 | MEDIUM | BookingIdempotencyKey TOCTOU race — check outside tx, upsert inside with no-op update |
+| PH5-SCH-30 | MEDIUM | BookingIdempotencyKey TOCTOU race — check outside tx, upsert inside with update:{} (concurrency risk; exact outcome unverified — requires test) |
 | PH5-SCH-31 | LOW | BookingIdempotencyKey.bookingId not a FK relation — correct for idempotency |
 | PH5-SCH-32 | LOW | No explicit expiry on BookingIdempotencyKey — 24h cron cleanup only |
 | PH5-SCH-33 | LOW | No cleanup/retention policy for WebhookEvent — audit trail grows indefinitely |
@@ -760,5 +760,29 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 
 ---
 
-**Last updated:** 2026-11-15 (Groups 11-12 complete — Phase 5 audit complete)
+**Phase 5 audit: FINDINGS COMPLETE — closure validation pending**
 **Commit baseline:** a5270361
+
+---
+
+## Phase 5 Closure Validation (pending)
+
+Before Phase 5 is closed as a baseline for remediation:
+
+1. **Reconcile all 34 finding IDs** against the summary table and detailed sections — verify no duplicates, no missing IDs, severity consistent between summary and detail.
+2. **Confirm resolved Prisma versions:** `prisma@5.22.0` and `@prisma/client@5.22.0` (verified from `package-lock.json` at commit a440d667).
+3. **Run BookingIdempotencyKey concurrency test** against PostgreSQL with Prisma 5.22.0:
+   - Two concurrent requests with the same Idempotency-Key but different time slots
+   - Record whether: (a) both bookings are created, (b) one fails with P2002, (c) one fails with a different error
+   - Adjust PH5-SCH-30 severity and description based on actual outcome
+4. **Examine WebhookEvent full idempotency** — not just the uniqueness guard:
+   - Verify event status transitions are correct (no partial processing)
+   - Verify side effects (wallet credits, ledger entries, booking updates) are committed exactly once
+   - Confirm retries with the same event produce the same outcome
+5. **Add Phase 5 to AUDIT-MASTER-TRACKER.md** with finding count and status.
+6. **Record the DIRECT payment 503 guard** in both single and bulk booking paths as a known acceptance criterion for PH4-REG-01.
+
+**Status:** FINDINGS COMPLETE — closure validation items 1-6 pending before Phase 5 baseline freeze.
+
+**Last updated:** 2026-11-15 (closure validation added)
+**Commit baseline:** a440d667
