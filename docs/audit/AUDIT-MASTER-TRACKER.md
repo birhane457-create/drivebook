@@ -1127,7 +1127,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 |----------|-------|---------|
 | HIGH | 1 | PH5-SCH-10: Transaction cascade-deletes when Booking is hard-deleted |
 | MEDIUM | 15 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk; PH5-SCH-35: SaaS booking webhook outside tx |
-| LOW | 18 | Various constraint, index, and schema-database drift issues (PH5-SCH-01..09, 11..16, 20, 25, 26, 29, 31..34) |
+| LOW | 18 | PH5-SCH-02, 04, 06, 08, 09, 11, 13, 14, 15, 16, 20, 25, 26, 29, 31, 32, 33, 34 |
 | NEGLIGIBLE | 1 | PH5-SCH-19: SlotReservation cascade (transient rows, no financial evidence) |
 | **Total** | **35** | All finding IDs PH5-SCH-01 through PH5-SCH-35 |
 

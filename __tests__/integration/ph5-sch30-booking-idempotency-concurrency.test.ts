@@ -329,23 +329,43 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     console.log('T2: Result1:', result1);
     console.log('T2: Result2:', result2);
 
-    // Classify the losing request's outcome and assert it was an expected response
-    // (replay, uniqueness conflict, or error) rather than a silent unrelated failure.
-    const losingResult = result1.result === 'created' ? result2 : result1;
-    console.log('T2: Losing request outcome:', losingResult.result);
-
+    // Classify the losing request's outcome and assert it was an expected response.
+    // losingResult is only meaningful when exactly one booking was created.
     if (allBookings.length === 1) {
-      // If only one booking was created, the losing request must have encountered
-      // an expected constraint (p2002, replay, or error) — not passed silently.
-      expect(['replayed', 'p2002_caught', 'error']).toContain(losingResult.result);
-      if (losingResult.result === 'error') {
-        // An error is only expected if it carries a recognisable database error code.
-        // A silent success from an unrelated failure would appear as 'created'.
-        expect(losingResult.error).toBeDefined();
-        console.log('T2: Losing request error:', (losingResult as any).error);
+      const losingResult = result1.result === 'created' ? result2 : result1;
+      console.log('T2: Losing request outcome:', losingResult.result);
+
+      if (losingResult.result === 'p2002_caught') {
+        // Idempotency key unique constraint fired — this is the expected safe outcome.
+        console.log('✅ T2: Losing request received P2002 — uniqueness constraint fired');
+
+      } else if (losingResult.result === 'replayed') {
+        // Initial findUnique found a key despite the barrier — race closed before tx.
+        console.log('✅ T2: Losing request replayed stored response');
+
+      } else if (losingResult.result === 'error') {
+        // An error is only acceptable if it is a recognised database error code.
+        // Codes accepted as evidence of a database-level guard:
+        //   P2002 — unique constraint (should have been classified as p2002_caught above)
+        //   P2034 — transaction conflict / serialization failure
+        //   23P01 — exclusion constraint (unexpected here but harmless)
+        // Any other code means an unrelated failure coincidentally left one booking,
+        // which is not evidence that the race is mitigated.
+        const code = (losingResult as any).code;
+        const acceptedCodes = ['P2002', 'P2034', '23P01'];
+        console.log('T2: Losing request error code:', code, 'message:', (losingResult as any).error);
+        expect(acceptedCodes).toContain(code);
+
+      } else {
+        // 'created' with one booking means both transactions ran to completion but
+        // only one booking record exists — unexpected; fail explicitly.
+        throw new Error(`T2: Unexpected losing result '${losingResult.result}' with single booking`);
       }
     }
-    // If two bookings were created, both results are 'created' — no losing result to classify.
+    // If two bookings were created, both results are 'created' — TOCTOU confirmed;
+    // the diagnostic logging above records this. The test does not fail on two bookings
+    // because T2 is diagnostic: it records the actual outcome, not a correctness contract.
+    // A passing T2 exit code does NOT mean the race is safe — check allBookings.length === 1.
   });
 
   // T3: Concurrent same-key, same slot — GiST constraint should block
