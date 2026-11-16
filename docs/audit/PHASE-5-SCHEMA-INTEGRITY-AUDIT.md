@@ -1,20 +1,14 @@
 ﻿# Phase 5: Schema Integrity Audit
-| PH5-SCH-17 | MEDIUM | Path A check-and-reserve: TOCTOU window between overlap check and create (GiST constraint is the safety net) |
-| PH5-SCH-18 | MEDIUM | Path B bulk booking transaction uses READ COMMITTED — not SERIALIZABLE (GiST constraint is the safety net) |
-| PH5-SCH-19 | LOW | `SlotReservation -> Provider` cascade delete — transient rows lost on provider deletion (acceptable) |
-| PH5-SCH-20 | LOW | GiST exclusion constraint not reflected in Prisma schema — silent loss risk on schema regeneration |
-| PH5-SCH-21 | MEDIUM | FinancialLedger writes non-atomic with booking confirmation — 24h reconciliation gap |
-| PH5-SCH-22 | MEDIUM | PlatformLedger increments non-atomic with LedgerEntry — totals can diverge, no reconciliation |
-| PH5-SCH-23 | HIGH | `verifyLedgerIntegrity()` always reports balanced — cannot detect missing entries |
-| PH5-SCH-24 | MEDIUM | LedgerEntry immutability violated — payout-service.ts updates metadata on existing entries |
-| PH5-SCH-25 | LOW | Reconciliation uses different ledgers — cross-ledger consistency not verified |
-| PH5-SCH-26 | LOW | FinancialLedger reference fields are plain strings — no FK enforcement |
-- Group 9: LedgerEntry / FinancialLedger — authoritative model identification, immutability, balance integrity
-- Group 10: Business models — ownership, tenant isolation, cascade behaviour, orphan prevention
-- Group 11: BookingIdempotencyKey — scope, uniqueness, expiry, replay behaviour
-- Group 12: WebhookEvent — event uniqueness, processing state, retry safety
+
+**Version:** 1.0  
+**Date:** 2026-11-15  
+**Status:** IN PROGRESS  
 **Auditor:** Kiro  
 **Baseline commit:** be9ca25f (Phase 4 complete)
+
+**Scope:** 53 models across 1,305 lines of Prisma schema  
+**Methodology:** Findings-only audit. No code changes during this phase without explicit approval.
+
 
 **Scope:** 53 models across 1,305 lines of Prisma schema  
 **Methodology:** Findings-only audit. No code changes during this phase without explicit approval.
@@ -257,15 +251,28 @@ model User {
 | PH5-SCH-07 | MEDIUM | `ClientWallet.balance` stored Decimal can diverge from transaction aggregate |
 | PH5-SCH-08 | LOW | No `@unique` on `PayoutTransaction.transactionId` |
 | PH5-SCH-09 | LOW | No partial unique index on active Subscription per Provider (SUPERSEDED by PH5-SCH-14) |
-| PH5-SCH-10 | HIGH | Transaction cascade-deletes when Booking is hard-deleted (VERIFIED â€” latent risk confirmed, no production paths) |
+| PH5-SCH-10 | HIGH | Transaction cascade-deletes when Booking is hard-deleted (VERIFIED — latent risk confirmed; Customer hard-delete path found PH5-SCH-28) |
 | PH5-SCH-11 | LOW | AuditLog cascade paths not fully traced (previously closed AUDIT-03) |
 | PH5-SCH-12 | MEDIUM | Missing composite index `(providerId, status, startTime)` on Booking |
 | PH5-SCH-13 | LOW | Missing composite index `(providerId, status, createdAt)` on Transaction |
 | PH5-SCH-14 | LOW | Partial unique index `Subscription_provider_current_unique` not reflected in Prisma schema â€” schema-database drift |
 | PH5-SCH-15 | LOW | `Subscription â†’ Provider` cascade delete loses subscription history (same latent risk as PH5-SCH-10) |
 | PH5-SCH-16 | LOW | `Subscription.status` plain string â€” no DB-level enum constraint |
+| PH5-SCH-17 | MEDIUM | Path A check-and-reserve: TOCTOU window; GiST constraint is safety net; 409 handling verified |
+| PH5-SCH-18 | MEDIUM | Path B bulk booking: READ COMMITTED transaction; GiST constraint is safety net; 409 handling verified |
+| PH5-SCH-19 | NEGLIGIBLE | SlotReservation cascade delete — transient rows, no financial/dispute evidence attached |
+| PH5-SCH-20 | LOW | GiST exclusion constraint not in Prisma schema — drift risk, no automated safeguard |
+| PH5-SCH-21 | MEDIUM | FinancialLedger writes non-atomic with booking confirmation — 24h reconciliation gap |
+| PH5-SCH-22 | MEDIUM | PlatformLedger increments non-atomic with LedgerEntry — totals can diverge, no reconciliation |
+| PH5-SCH-23 | HIGH | `verifyLedgerIntegrity()` always reports balanced — cannot detect missing entries |
+| PH5-SCH-24 | MEDIUM | LedgerEntry immutability violated — payout-service.ts updates metadata on existing entries |
+| PH5-SCH-25 | LOW | Reconciliation uses different ledgers — cross-ledger consistency not verified |
+| PH5-SCH-26 | LOW | FinancialLedger reference fields are plain strings — no FK enforcement |
+| PH5-SCH-27 | MEDIUM | Business ID resolution inconsistent — biz_`` constructed in 7+ active routes |
+| PH5-SCH-28 | MEDIUM | Customer hard-delete has check/delete race — concurrent booking can trigger Transaction cascade |
+| PH5-SCH-29 | LOW | Booking.serviceId not referentially enforced — nullable string, no FK to BusinessService |
 
-**2 HIGH (PH5-SCH-10 + PH5-SCH-23), 9 MEDIUM, 14 LOW — 26 total findings across Groups 1-9**
+**2 HIGH, 12 MEDIUM, 14 LOW, 1 NEGLIGIBLE — 29 total findings across Groups 1-10**
 
 **PH5-SCH-09 status:** Superseded by PH5-SCH-14 â€” the constraint exists (partial unique index in migration `20260916131858_sub22`) but is not reflected in the Prisma schema.
 
@@ -544,22 +551,77 @@ The constraint is an all-rows constraint (no `WHERE` clause). Expired rows are r
 
 | ID | Severity | Finding |
 |----|----------|---------|
-| PH5-SCH-21 | MEDIUM | FinancialLedger writes non-atomic with booking confirmation — reconciliation catches gaps with up to 24h delay |
-| PH5-SCH-22 | MEDIUM | PlatformLedger increments non-atomic with LedgerEntry appends — totals can diverge, no reconciliation checks this |
-| PH5-SCH-23 | HIGH | `verifyLedgerIntegrity()` always reports balanced — cannot detect missing entries |
-| PH5-SCH-24 | MEDIUM | LedgerEntry immutability claim violated — `payout-service.ts` updates metadata on existing entries |
-| PH5-SCH-25 | LOW | Reconciliation uses different ledgers for different checks — cross-ledger consistency not verified |
-| PH5-SCH-26 | LOW | FinancialLedger reference fields are plain strings — no FK enforcement (correct for immutable ledger, but limits verification) |
+
+---
+
+## Group 10: Business Models — Ownership, Tenant Isolation, Cascades
+
+### PH5-SCH-27 (MEDIUM): Business ID resolution is inconsistent
+
+**Source verified:** Multiple active routes construct `biz_`${providerId}` directly instead of using `Provider.businessId`:
+- `app/api/business/services/route.ts` line 24, 34
+- `app/api/business/config/route.ts` line 46
+- `app/api/business/ai-config/route.ts` line 69
+- `app/api/business/capabilities/route.ts` line 87
+- `app/api/business/terminology/route.ts` line 18, 19
+- `app/api/business/route.ts` line 93, 94
+- `lib/core/business-config.ts` line 72
+
+**Architecture:** `resolveBusinessId()` uses `Provider.businessId` first and falls back to `biz_`${providerId}` for legacy records. `upsertBusinessBranding()` can create a Business with an independent generated ID.
+
+**Risk:** When a Provider has an independent Business ID (not `biz_`), routes that construct the legacy ID will either fail (Business not found) or create a second legacy Business. Subsequent operations may write to the wrong record.
+
+**Not evidence of cross-tenant data disclosure.** This is an identity-resolution and tenant-configuration consistency defect. Production prevalence of independent Business IDs needs checking.
+
+---
+
+### PH5-SCH-28 (MEDIUM): Customer hard-delete has check/delete race — cascades to Transaction
+
+**Source verified:** `app/api/clients/[id]/route.ts` line 194: `await prisma.customer.delete(...)`
+
+**Handler logic:**
+1. Line 133: `const hasBookings = existingClient.bookings.length > 0`
+2. Line 193: `// No user account, no bookings — safe to hard delete`
+3. Line 194: `await prisma.customer.delete({ where: { id } })`
+
+The check (line 133) and the delete (line 194) are separate operations with no wrapping transaction or database-level guard.
+
+**Cascade chain confirmed via migrations:**
+- `Booking.customerId -> Customer.id` ON DELETE CASCADE (migration `20260816074701` line 440)
+- `Transaction.bookingId -> Booking.id` ON DELETE CASCADE (migration `20260328041651_init` line 496)
+
+**Race sequence:**
+1. Deletion handler checks `hasBookings` — no bookings found
+2. Concurrent booking request creates a paid booking and its Transaction atomically
+3. Deletion handler deletes the Customer
+4. Database cascades: Customer DELETE -> Booking DELETE -> Transaction DELETE
+
+**Impact on PH5-SCH-10:** The previous reachability assessment said "zero production hard-delete paths found." That statement is now incomplete. The Booking deletion is indirect, through the Customer FK cascade, and depends on a concurrency race. PH5-SCH-10 has been updated to record this path.
+
+**No concurrent deletion test has been run.** The race is confirmed as a realistic source path; its production reproducibility is not verified.
+
+---
+
+### PH5-SCH-29 (LOW): Booking.serviceId not referentially enforced
+
+**Source verified:** `prisma/schema.prisma` line 400: `serviceId String? // FK to BusinessService.id (not a Prisma relation)`
+
+The schema comment describes it as an FK to `BusinessService.id` but there is no `@relation` directive and no database-level foreign key constraint.
+
+**Two active code paths make this consequential:**
+1. `createJobRequest()` accepts `serviceId` from the request and stores it without verifying that the service belongs to the selected Provider's Business
+2. `app/api/business/services/[id]/route.ts` permits hard deletion of a `BusinessService` without checking whether Bookings reference it
+
+**Risk:** A deleted service leaves existing quote-request Bookings with an unresolved `serviceId`. A request can also store an ID belonging to a different Business. No evidence found that this currently exposes the other Business's service data.
 
 ---
 
 ## Remaining Groups (pending)
 
-- Group 10: Business models — ownership, tenant isolation, cascade behaviour, orphan prevention
 - Group 11: BookingIdempotencyKey — scope, uniqueness, expiry, replay behaviour
 - Group 12: WebhookEvent — event uniqueness, processing state, retry safety
 
 ---
 
-**Last updated:** 2026-11-15 (Group 9 complete)
-**Commit baseline:** cfed5ffa
+**Last updated:** 2026-11-15 (Group 10 complete)
+**Commit baseline:** 978e8ddb
