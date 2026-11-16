@@ -272,7 +272,7 @@ model User {
 | PH5-SCH-28 | MEDIUM | Customer hard-delete check/delete race — SAAS-only (no user account), narrow concurrent booking window, cascade to Transaction |
 | PH5-SCH-29 | LOW | Booking.serviceId not referentially enforced — nullable string, no FK to BusinessService |
 
-**1 HIGH, 14 MEDIUM, 18 LOW, 1 NEGLIGIBLE — 34 total findings across Groups 1-12**
+**1 HIGH, 14 MEDIUM, 19 LOW, 1 NEGLIGIBLE — 35 total findings across Groups 1-12**
 
 **PH5-SCH-09 status:** Superseded by PH5-SCH-14 â€” the constraint exists (partial unique index in migration `20260916131858_sub22`) but is not reflected in the Prisma schema.
 
@@ -757,32 +757,97 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 | PH5-SCH-32 | LOW | No explicit expiry on BookingIdempotencyKey — 24h cron cleanup only |
 | PH5-SCH-33 | LOW | No cleanup/retention policy for WebhookEvent — audit trail grows indefinitely |
 | PH5-SCH-34 | LOW | WebhookEvent.processedAt set at record creation, not transaction commit |
+| PH5-SCH-35 | LOW | SaaS booking webhook event recorded outside processing transaction — application-level idempotency via quote.status check compensates |
 
 ---
 
-**Phase 5 audit: FINDINGS COMPLETE — closure validation pending**
-**Commit baseline:** a5270361
 
 ---
 
-## Phase 5 Closure Validation (pending)
+## Phase 5 Closure Validation
 
-Before Phase 5 is closed as a baseline for remediation:
+### Item 1: Reconcile all 34 finding IDs — COMPLETE
 
-1. **Reconcile all 34 finding IDs** against the summary table and detailed sections — verify no duplicates, no missing IDs, severity consistent between summary and detail.
-2. **Confirm resolved Prisma versions:** `prisma@5.22.0` and `@prisma/client@5.22.0` (verified from `package-lock.json` at commit a440d667).
-3. **Run BookingIdempotencyKey concurrency test** against PostgreSQL with Prisma 5.22.0:
-   - Two concurrent requests with the same Idempotency-Key but different time slots
-   - Record whether: (a) both bookings are created, (b) one fails with P2002, (c) one fails with a different error
-   - Adjust PH5-SCH-30 severity and description based on actual outcome
-4. **Examine WebhookEvent full idempotency** — not just the uniqueness guard:
-   - Verify event status transitions are correct (no partial processing)
-   - Verify side effects (wallet credits, ledger entries, booking updates) are committed exactly once
-   - Confirm retries with the same event produce the same outcome
-5. **Add Phase 5 to AUDIT-MASTER-TRACKER.md** with finding count and status.
-6. **Record the DIRECT payment 503 guard** in both single and bulk booking paths as a known acceptance criterion for PH4-REG-01.
+All 34 finding IDs (PH5-SCH-01 through PH5-SCH-34) are unique in the summary table. No duplicates found. Severity is consistent between the summary table and detailed sections.
 
-**Status:** FINDINGS COMPLETE — closure validation items 1-6 pending before Phase 5 baseline freeze.
+### Item 2: Confirm resolved Prisma versions — COMPLETE
 
-**Last updated:** 2026-11-15 (closure validation added)
-**Commit baseline:** a440d667
+`prisma@5.22.0` and `@prisma/client@5.22.0` — both resolved from `package-lock.json` at commit a440d667. Package.json declares `prisma: ^5.14.0` and `@prisma/client: ^5.22.0`; the lockfile resolves both to 5.22.0.
+
+### Item 3: BookingIdempotencyKey concurrency test — TEST WRITTEN, NOT EXECUTED
+
+Test file: `__tests__/integration/ph5-sch30-booking-idempotency-concurrency.test.ts`
+
+**Test matrix:**
+- T1: Sequential same-key, different slot — verify second request replays stored response
+- T2: **THE KEY TEST** — Concurrent same-key, different slot — determine whether both bookings are created, one fails with P2002, or one fails with a different error
+- T3: Concurrent same-key, same slot — verify GiST constraint blocks one
+- T4: Concurrent different-key, different slot — control (both succeed)
+
+**Execution requirement:** PostgreSQL running on localhost:5433 with database `drivebook_test`, Prisma migrations applied, `btree_gist` extension installed. Docker is not available in the current environment. The test is ready to execute when a PostgreSQL instance is available.
+
+**PH5-SCH-30 status:** UNRESOLVED. The source-level analysis identifies a TOCTOU window (check outside transaction, upsert inside with `update: {}`), but the exact concurrent outcome under Prisma 5.22.0 depends on whether `upsert` with empty `update: {}` generates `ON CONFLICT DO NOTHING` or `ON CONFLICT DO UPDATE SET` with a no-op. This cannot be determined from source alone — the test must run.
+
+### Item 4: WebhookEvent full idempotency — SOURCE ANALYSIS COMPLETE
+
+**Pattern analysis (all recordWebhookEvent call sites in app/api/stripe/webhook/route.ts):**
+
+**Inside transaction (tx) — correct pattern:**
+- Line 510: wallet credit checkout — `recordWebhookEvent(tx, ...)` atomic with wallet credit ✅
+- Line 885: booking payment success — `recordWebhookEvent(tx, ...)` atomic with booking confirmation ✅
+- Line 1085: payment_intent.succeeded — `recordWebhookEvent(tx, ...)` atomic with booking update ✅
+- Line 1492: payment_intent.succeeded (refund path) — inside transaction ✅
+- Line 1777: payment_intent.payment_failed — inside transaction ✅
+- Line 1853: subscription.created — inside transaction ✅
+- Line 1983: subscription.updated — inside transaction ✅
+- Line 2182: subscription.cancelled — inside transaction ✅
+- Line 2284: invoice.payment_succeeded — inside transaction ✅
+- Line 2415: invoice.payment_failed — inside transaction ✅
+- Line 3053: charge.refunded — inside transaction ✅
+- Line 3180: transfer.failed — inside transaction ✅
+
+**Outside transaction (prisma) — two distinct cases:**
+
+1. **Error/early-return paths** (lines 277, 300, 443, 1069, 1769, 1944, 2174, 2278, 2409, 2609, 2748, 2822, 3000, 3356): Records the event and returns without applying side effects. Correct — nothing to process, recording prevents retries from re-evaluating the same invalid event. ✅
+
+2. **SaaS booking checkout** (lines 700, 714): `handleCheckoutComplete()` updates Quote→PAID and Booking→CONFIRMED inside its own transaction (saas-payment.ts line 491), then `recordWebhookEvent(prisma, ...)` is called AFTER the transaction commits. ⚠️
+
+**SaaS booking idempotency analysis:**
+- If `recordWebhookEvent` at line 700 fails after the Quote update commits, the event is not recorded
+- On retry, `handleCheckoutComplete()` is called again, finds `quote.status === 'PAID'` (line 472 of saas-payment.ts), and returns early without re-applying side effects
+- This provides **application-level idempotency** via the quote status check, not **transaction-level idempotency**
+- Risk: if the Quote status check is ever removed or the status is reset, retries would double-process
+
+**Finding PH5-SCH-35 (LOW): SaaS booking webhook event recorded outside the processing transaction**
+- `recordWebhookEvent(prisma, ...)` at line 700 is called AFTER `handleCheckoutComplete()` commits
+- Application-level idempotency via `quote.status === 'PAID'` check compensates for the non-atomic recording
+- Most other handlers correctly use `recordWebhookEvent(tx, ...)` inside the transaction
+- Risk: LOW — the quote status check is a reliable guard, but the pattern is inconsistent with other handlers
+
+**Overall WebhookEvent idempotency assessment:**
+- The uniqueness guard (`idempotencyKey @unique` + P2002 → `DuplicateWebhookEventError`) is sound for preventing concurrent duplicate processing ✅
+- Most side-effect handlers record the event inside the same transaction as the side effects ✅
+- The SaaS booking path is the exception — it relies on application-level idempotency ⚠️
+- No evidence found of double-processing in any other handler ✅
+
+### Item 5: Master tracker — COMPLETE
+
+Section 13 added to `AUDIT-MASTER-TRACKER.md` with all 34 findings, closure checklist, and deferred items.
+
+### Item 6: DIRECT payment 503 guard — COMPLETE
+
+503 guard confirmed in both booking paths:
+- Bulk: `app/api/public/bookings/bulk/route.ts` line 258 — `if ((instructor as any).paymentMode === 'DIRECT') return ... 503`
+- Single: `app/api/payments/create-intent/route.ts` — same guard pattern
+Consistent with PH4-REG-01 deferral: the 503→404/501 fix will be part of the DIRECT payment mode implementation.
+
+---
+
+**Final count: 1 HIGH, 14 MEDIUM, 18 LOW, 1 NEGLIGIBLE = 34 findings (PH5-SCH-35 added in closure validation)**
+
+**PH5-SCH-30 remains UNRESOLVED** — concurrency test written but not executed (no PostgreSQL available in current environment).
+
+**Phase 5 baseline status:** FINDINGS COMPLETE — one concurrency test pending execution before full baseline freeze.
+
+**Last updated:** 2026-11-15 (closure validation complete except PH5-SCH-30 test execution)
+**Commit baseline:** a26bf693
