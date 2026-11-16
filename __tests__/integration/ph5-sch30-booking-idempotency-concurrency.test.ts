@@ -20,6 +20,12 @@
  *   Set DATABASE_URL=postgresql://postgres:testpass@localhost:5433/drivebook_test
  *   npx vitest run __tests__/integration/ph5-sch30-booking-idempotency-concurrency.test.ts
  *
+ * SCOPE LIMITATION:
+ * This test exercises database-layer behaviour directly via Prisma, not the HTTP route.
+ * It does not verify route-level P2002 handling, response replay, or non-booking side
+ * effects. A separate HTTP-level concurrency test (using Supertest + running Next.js
+ * server, following the PAY-H-04-E pattern) is needed to verify those layers.
+ *
  * TEST MATRIX:
  *   T1 — Sequential same-key, different slot: second should be blocked by
  *        existing idempotency key (replay stored response)
@@ -301,8 +307,22 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     }
 
     // Assert exact booking count — this is the definitive outcome
+    // Exactly one of two possible results:
+    //   allBookings.length === 1 → upsert conflict prevented the duplicate (or one tx aborted)
+    //   allBookings.length === 2 → TOCTOU race confirmed: both bookings created with same key
+    // Any other count (0, >2) is an unexpected test-setup failure.
     expect(allBookings.length).toBeGreaterThanOrEqual(1);
-    expect(allKeys.length).toBe(1); // Exactly one idempotency key
+    expect(allBookings.length).toBeLessThanOrEqual(2);
+    expect(allKeys.length).toBe(1); // Exactly one idempotency key regardless of booking count
+
+    if (allBookings.length === 2) {
+      // This is the failing case — record it explicitly so test output is unambiguous
+      console.error('❌ RACE CONFIRMED: booking count === 2 with one idempotency key');
+      console.error('❌ PH5-SCH-30: upsert update:{} does not prevent duplicate creation');
+    } else {
+      console.log('✅ RACE NOT TRIGGERED: booking count === 1');
+      console.log('✅ Mechanism that prevented duplicate:', result1.result, result2.result);
+    }
 
     // Record which request won and which lost
     console.log('T2: Winner:', allBookings[0]?.id);

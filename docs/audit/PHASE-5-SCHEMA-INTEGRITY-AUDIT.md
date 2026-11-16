@@ -1,6 +1,6 @@
 ﻿# Phase 5: Schema Integrity Audit
-- The uniqueness guard (`idempotencyKey @unique` + P2002 → `DuplicateWebhookEventError`) is sound for preventing concurrent duplicate recording ✅
-**Version:** 1.0  
+
+**Scope limitation:** This test exercises database-layer behaviour directly via Prisma, not the HTTP route. It does not verify route-level P2002 handling, response replay, or non-booking side effects. A separate HTTP-level concurrency test (following the PAY-H-04-E pattern) would be needed to verify those layers.
 - The SaaS booking path is the exception — it relies on a pre-transaction status check that does NOT provide an atomic concurrency guard ⚠️
 **Status:** IN PROGRESS  
 - Two concurrent deliveries can both pass the unpaid check before either transaction commits; both apply side effects before either tries to record ⚠️
@@ -748,7 +748,7 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 
 ## Phase 5 Complete — All Groups Audited
 
-**Final finding count: 1 HIGH, 14 MEDIUM, 18 LOW, 1 NEGLIGIBLE = 34 total findings across Groups 1-12**
+**Final finding count: 1 HIGH, 15 MEDIUM, 18 LOW, 1 NEGLIGIBLE = 35 total findings across Groups 1-12**
 
 | ID | Severity | Finding |
 |----|----------|---------|
@@ -766,9 +766,9 @@ This is the **correct idempotency pattern** — distinct from BookingIdempotency
 
 ## Phase 5 Closure Validation
 
-### Item 1: Reconcile all 34 finding IDs — COMPLETE
+### Item 1: Reconcile all 35 finding IDs — COMPLETE
 
-All 34 finding IDs (PH5-SCH-01 through PH5-SCH-34) are unique in the summary table. No duplicates found. Severity is consistent between the summary table and detailed sections.
+All 35 finding IDs (PH5-SCH-01 through PH5-SCH-35) are unique in the summary table. No duplicates found. PH5-SCH-35 added during closure validation and reassessed from LOW to MEDIUM. Severity is consistent between the summary table and detailed sections.
 
 ### Item 2: Confirm resolved Prisma versions — COMPLETE
 
@@ -786,10 +786,10 @@ Test file: `__tests__/integration/ph5-sch30-booking-idempotency-concurrency.test
 
 **Execution requirement:** PostgreSQL running on localhost:5433 with database `drivebook_test`, Prisma migrations applied, `btree_gist` extension installed. Docker is not available in the current environment. The test is ready to execute when a PostgreSQL instance is available.
 
-**PH5-SCH-30 status:** UNRESOLVED. The source-level analysis identifies a TOCTOU window (check outside transaction, upsert inside with `update: {}`), but the exact concurrent outcome under Prisma 5.22.0 depends on whether `upsert` with empty `update: {}` generates `ON CONFLICT DO NOTHING` or `ON CONFLICT DO UPDATE SET` with a no-op. This cannot be determined from source alone — the test must run.
-
-### Item 4: WebhookEvent full idempotency — SOURCE ANALYSIS COMPLETE
-
+**PH5-SCH-30 status:** UNRESOLVED. The barrier is in place (both requests pass the initial lookup before either enters the transaction). T2 now classifies the outcome explicitly:
+- `allBookings.length === 1`: some mechanism (upsert conflict, P2002, or serialisation) prevented the duplicate — finding is mitigated or not applicable
+- `allBookings.length === 2`: TOCTOU race confirmed — PH5-SCH-30 is a defect
+- Any other count (0, >2): test-setup failure
 **Pattern analysis (all recordWebhookEvent call sites in app/api/stripe/webhook/route.ts):**
 
 **Inside transaction (tx) — correct pattern:**
@@ -815,11 +815,11 @@ Test file: `__tests__/integration/ph5-sch30-booking-idempotency-concurrency.test
 **SaaS booking idempotency analysis:**
 - If `recordWebhookEvent` at line 700 fails after the Quote update commits, the event is not recorded
 - On retry, `handleCheckoutComplete()` is called again, finds `quote.status === 'PAID'` (line 472 of saas-payment.ts), and returns early without re-applying side effects
-- This provides **application-level idempotency** via the quote status check, not **transaction-level idempotency**
-- Risk: if the Quote status check is ever removed or the status is reset, retries would double-process
+- The pre-transaction status check provides **sequential retry protection** only — not concurrent delivery protection.
+- **Concurrent risk confirmed:** Two concurrent deliveries can both pass the unpaid check before either transaction commits, both apply side effects, and only the second one's `recordWebhookEvent` create fails with P2002. The first delivery's side effects are not undone.
 
 **Finding PH5-SCH-35 (MEDIUM, reassessed from LOW): SaaS booking webhook event recorded outside the processing transaction**
-- `recordWebhookEvent(prisma, ...)` at line 700 is called AFTER `handleCheckoutComplete()` commits
+
 
 - `recordWebhookEvent(prisma, ...)` at line 700 is called AFTER `handleCheckoutComplete()` commits its transaction
 - `handleCheckoutComplete()` (saas-payment.ts line 437) performs a pre-transaction status check: `if (quote.status === 'PAID') return early`
@@ -832,7 +832,7 @@ Test file: `__tests__/integration/ph5-sch30-booking-idempotency-concurrency.test
 
 ### Item 5: Master tracker — COMPLETE
 
-Section 13 added to `AUDIT-MASTER-TRACKER.md` with all 34 findings, closure checklist, and deferred items.
+Section 13 added to `AUDIT-MASTER-TRACKER.md` with all 35 findings (including PH5-SCH-35), closure checklist, deferred items. Version v6.71.
 
 ### Item 6: DIRECT payment 503 guard — COMPLETE
 

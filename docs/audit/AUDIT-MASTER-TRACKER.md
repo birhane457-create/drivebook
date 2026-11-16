@@ -1,6 +1,5 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
 **Version:** 6.71 (Phase 5 closure validation — 35 findings, PH5-SCH-30 unresolved, PH5-SCH-35 added)
-**Version:** 6.68 (Registration onboarding baseline v1.1 — corrected gap statuses, roadmap dependencies, public SaaS readiness criteria, discovery spec)
 **Last Updated:** 2026-11-15 (v6.71)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
