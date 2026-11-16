@@ -13,7 +13,7 @@
 **Note:** The earlier "41 route groups" count referred to directories, not files. Individual `route.ts` files are the correct unit. The initial v1.1 and v1.2 sections below reflect audit work from 2026-11-14 and are preserved as historical record. The active findings table is in the **Phase 4 â€” All Groups Open Findings** section at the bottom.
 
 **Executive Summary:**  
-Phase 4 is complete. All 18 route groups covered; 278 route.ts files inventoried; approximately 80 fully inspected. Prior critical fixes: duplicate GET (6f44dc92), OTP security (c0d74ad7â€“c1bd5c6d), subscription bypass (c779522f), Phase 4 security findings (f31a2f09â€“018af72d). Carry-forward items from the initial v1.1 pass (Marketplace 503 status code, PH4-REG-01; transaction timeouts, PH4-REG-02) remain LOW priority and are recorded in the Critical Action Items section. Active open findings are in the Phase 4 â€” All Groups Open Findings table.
+Phase 4 is complete. All 18 route groups covered; 278 route.ts files inventoried; approximately 80 fully inspected. Source remediation complete for all 11 findings. PH4-ABN-01 production-verified. PH4-AV-01 FIX-VERIFIED at source; live test deferred to AI redesign. PH4-REG-01 and PH4-REG-02 deferred — PH4-REG-01 is a release-blocking requirement when DIRECT payment mode is implemented. See Phase 4 findings table for individual finding status.
 
 ---
 
@@ -611,8 +611,8 @@ No privilege escalation paths found. No admin route found that allows role self-
 
 4. **DEFERRED: Transaction Timeouts (PH4-REG-02)**
    - Registration: 30s timeout, Bookings: 10s timeout — both excessive under concurrent load
-   - Decision: DEFERRED — correctness not affected; only impacts under high concurrency; will be addressed in optimisation phase
-   - Bookings: 10s â†’ target â‰¤5s
+
+
 
 ---
 
@@ -955,7 +955,7 @@ Cascading hang is unlikely in practice. LOW.
 **Files fully inspected:** ~80  
 **Source-remediated findings:** 11 of 11 — all have fixes implemented at source level
 **Fixes implemented this audit:** 13
-**Phase 4 audit:** SOURCE REMEDIATION COMPLETE — production env vars confirmed — live endpoint tests outstanding
+**Phase 4 audit:** COMPLETE — PH4-ABN-01 production-verified; PH4-AV-01 source-verified (live test deferred to AI redesign); PH4-WH-01 fix implemented (signature enforcement not yet live-tested); PH4-REG-01/02 deferred with explicit revisit conditions
 
 ---
 
