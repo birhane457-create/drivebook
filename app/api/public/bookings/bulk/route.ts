@@ -137,6 +137,17 @@ export async function POST(req: NextRequest) {
         if (existing.email !== data.accountHolderEmail) {
           return NextResponse.json({ error: 'Idempotency-Key does not match account' }, { status: 409 });
         }
+        // PH5-SCH-37 FIX: Validate providerId and hours match the original request.
+        // Without this, a request with the same key but different booking params
+        // would receive the original response including the paymentToken URL.
+        const storedProvider = (existing.response as any)?.providerId;
+        const storedHours = (existing.response as any)?.hours;
+        if (storedProvider && storedProvider !== resolvedInstructorId) {
+          return NextResponse.json({ error: 'Idempotency-Key does not match provider' }, { status: 409 });
+        }
+        if (storedHours !== undefined && storedHours !== data.hours) {
+          return NextResponse.json({ error: 'Idempotency-Key does not match booking parameters' }, { status: 409 });
+        }
         return NextResponse.json(existing.response, { status: 201 });
       }
     }
@@ -668,6 +679,35 @@ export async function POST(req: NextRequest) {
           customer_email: data.accountHolderEmail,
         });
 
+        // PH5-SCH-36 FIX: Write idempotency key for Book Later path.
+        // Without this, every retry creates a new Stripe Checkout Session
+        // and sends a new SMS payment link, allowing a student to pay twice.
+        // We use upsert (not create) because there is no wrapping transaction here:
+        // - If key doesn't exist: create it with this session's checkoutUrl.
+        // - If a concurrent retry already wrote a key: keep the first one (update:{}).
+        // The first session's URL wins; subsequent sessions are orphaned (never sent).
+        if (idempotencyKey) {
+          const laterResponse = {
+            success: true,
+            bookingType: 'later',
+            total: verifiedTotal,
+            checkoutUrl: session.url,
+            paymentIntentId: session.payment_intent as string | null,
+            providerId: resolvedInstructorId,
+            hours: data.hours ?? null,
+          };
+          await (prisma as any).bookingIdempotencyKey.upsert({
+            where: { key: idempotencyKey },
+            update: {},
+            create: {
+              key: idempotencyKey,
+              email: data.accountHolderEmail,
+              bookingId: session.id,
+              response: laterResponse,
+            },
+          });
+        }
+
         return NextResponse.json({
           success: true,
           bookingType: 'later',
@@ -851,6 +891,8 @@ export async function POST(req: NextRequest) {
             total: isShortNotice ? 0 : verifiedTotal,
             status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
             ...(checkoutUrl ? { checkoutUrl } : {}),
+            providerId: resolvedInstructorId,
+            hours: data.hours ?? null,
           };
           await (tx as any).bookingIdempotencyKey.update({
             where: { key: idempotencyKey },
