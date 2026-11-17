@@ -1135,7 +1135,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 
 | ID | Title | Risk | Status | Reason |
 |---|---|---|---|---|
-| PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | OPEN | Remediation: onDelete: Restrict; requires migration; Customer cascade path documented via PH5-SCH-28 |
+| PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | ✅ CLOSED — constraint changed to RESTRICT; applied via direct SQL to Sydney (d4406ea2); verified confdeltype=r in pg_constraint; schema updated in prisma/schema.prisma | Verification: scripts/migration/06-verify-constraint.ts, timestamp 2026-11-17T17:34:42Z |
 | PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | CONFIRMED (dfeb6d74) — T2: two bookings, one key; T5: 1 duplicate in 10 rounds; P2028 anomaly in C2 under investigation | Remediation: claim idempotency key FIRST inside transaction with `create` (not upsert); catch P2002 OUTSIDE the transaction call (PostgreSQL aborts tx on constraint violation — catching inside cannot restore it); read winning record and replay |
 | PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | CONFIRMED (cf6a1558) — C2: AuditLog 2 entries; P2028 anomaly unresolved (rerun pending); pre-tx status check does not prevent concurrent duplicate processing | Remediation: `updateMany` on Quote with `status: { not: 'PAID' }`; if `claimed.count !== 1` skip all Booking + AuditLog writes and defer notifications until after tx commit |
 | PH5-SCH-36 | Book Later path creates duplicate Checkout Sessions on retry | MEDIUM | OPEN/PROVISIONAL — no idempotency write in Book Later branch; multiple sessions possible on Twilio retry | Impact and exploitability assessment deferred |

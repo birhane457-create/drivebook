@@ -251,7 +251,7 @@ model User {
 | PH5-SCH-07 | MEDIUM | `ClientWallet.balance` stored Decimal can diverge from transaction aggregate |
 | PH5-SCH-08 | LOW | No `@unique` on `PayoutTransaction.transactionId` |
 | PH5-SCH-09 | LOW | No partial unique index on active Subscription per Provider (SUPERSEDED by PH5-SCH-14) |
-| PH5-SCH-10 | HIGH | Transaction cascade-deletes when Booking is hard-deleted (VERIFIED — Customer hard-delete path found via PH5-SCH-28; fix: onDelete Restrict) |
+| PH5-SCH-10 | HIGH | ✅ CLOSED (d4406ea2) — Transaction→Booking FK changed from CASCADE to RESTRICT; applied via raw SQL to Sydney; confdeltype=r verified in pg_constraint |
 | PH5-SCH-11 | LOW | AuditLog cascade paths not fully traced (previously closed AUDIT-03) |
 | PH5-SCH-12 | MEDIUM | Missing composite index `(providerId, status, startTime)` on Booking |
 | PH5-SCH-13 | LOW | Missing composite index `(providerId, status, createdAt)` on Transaction |
@@ -910,4 +910,4 @@ Consistent with PH4-REG-01 deferral: the 503→404/501 fix will be part of the D
   });
   if (claimed.count !== 1) return; // Another handler won — skip Booking + AuditLog
   ```
-  Notifications must only be sent after the transaction commits successfully. The booking update and AuditLog insertion must remain inside the transaction and must not execute when `claimed.count === 0`.
+**0 HIGH (PH5-SCH-10 ✅ CLOSED), 15 MEDIUM, 18 LOW, 1 NEGLIGIBLE — 35 findings; PH5-SCH-36/37 provisional**
