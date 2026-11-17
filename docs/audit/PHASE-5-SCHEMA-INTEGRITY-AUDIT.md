@@ -1,11 +1,11 @@
 ﻿# Phase 5: Schema Integrity Audit
-- **Service-level test approach (not HTTP route required):** A deterministic concurrent test can call `handleCheckoutComplete()` directly with two parallel invocations using a controlled Prisma client and mocked Stripe/notification dependencies. A running Next.js server is not required. This is structurally similar to the sub-22-concurrent.test.ts pattern.
-**Scope limitation:** This test exercises database-layer behaviour directly via Prisma, not the HTTP route. It does not verify route-level P2002 handling, response replay, or non-booking side effects. A separate HTTP-level concurrency test (following the PAY-H-04-E pattern) would be needed to verify those layers.
-- The SaaS booking path is the exception — it relies on a pre-transaction status check that does NOT provide an atomic concurrency guard ⚠️
-**Status:** IN PROGRESS  
-- Two concurrent deliveries can both pass the unpaid check before either transaction commits; both apply side effects before either tries to record ⚠️
-**Baseline commit:** be9ca25f (Phase 4 complete)
-- PH5-SCH-35 reassessed from LOW to MEDIUM: needs conditional state transition inside transaction or deterministic concurrent test
+**PH5-SCH-35 CONFIRMED.** C2 executed against Supabase direct URL (:5432), prisma@5.22.0, all tests passed.
+
+- C1 (sequential): AuditLog entries: 1 — PASS. Second call returned early, one set of side effects.
+- C2 (concurrent, barrier at Stripe retrieve): AuditLog entries: 2, notification calls: 2 — **PH5-SCH-35 CONFIRMED**
+- Both handlers applied side effects before the second transaction expired (P2028 on r2)
+- The pre-transaction `quote.status === 'PAID'` check does NOT prevent concurrent duplicate processing
+- Remediation: conditional state transition inside the transaction (e.g. `UPDATE Quote SET status = 'PAID' WHERE status != 'PAID'` with affected-row check)
 **Scope:** 53 models across 1,305 lines of Prisma schema  
 **Methodology:** Findings-only audit. No code changes during this phase without explicit approval.
 
@@ -886,4 +886,4 @@ Consistent with PH4-REG-01 deferral: the 503→404/501 fix will be part of the D
 **Phase 5 baseline status:** FINDINGS COMPLETE — one concurrency test pending execution before full baseline freeze.
 
 **Last updated:** 2026-11-15 (closure validation complete except PH5-SCH-30 test execution)
-**Overall WebhookEvent idempotency assessment:**
+### Item 4: WebhookEvent full idempotency — EXECUTED (Supabase, c8bc402d)

@@ -1137,7 +1137,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 |---|---|---|---|---|
 | PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | OPEN | Remediation: onDelete: Restrict; requires migration; Customer cascade path documented via PH5-SCH-28 |
 | PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | CONFIRMED — race executed against Supabase PostgreSQL: two bookings created with one idempotency key (T2, dfeb6d74); upsert update:{} does not abort the second transaction | Remediation: replace upsert with create + P2002 catch inside the booking transaction |
-| PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | OPEN — database race simulation written (ph5-sch35-saas-checkout-concurrency.test.ts); does NOT call production service handleCheckoutComplete(); Supabase test database accessible (TEST_DATABASE_URL in vitest.config); not yet executed | Write genuine service-level test invoking handleCheckoutComplete() directly with vi.mock for Stripe/notifications; then execute |
+| PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | CONFIRMED — C2 executed: AuditLog 2 entries with barrier-synchronized concurrent calls; both handlers applied side effects; pre-tx status check insufficient; Supabase :5432, prisma@5.22.0, c8bc402d | Remediation: conditional state transition inside tx with affected-row check |
 | PH5-SCH-36 | Book Later path creates duplicate Checkout Sessions on retry | MEDIUM | OPEN/PROVISIONAL — no idempotency write in Book Later branch; multiple sessions possible on Twilio retry | Impact and exploitability assessment deferred |
 | PH5-SCH-37 | BookingIdempotencyKey replay scope insufficiently bound — requires both matching key and email; stored response includes paymentToken URL | MEDIUM | OPEN/PROVISIONAL — replay validates key and email but does not bind to original booking parameters (providerId, hours, slot) | Exploitability depends on key generation; assessment deferred |
 | PH4-REG-01 | DIRECT payment mode returns 503 | LOW | DEFERRED | 503 guard confirmed in both booking paths; fix as part of DIRECT payment implementation |
@@ -1148,7 +1148,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 - [ ] Reconcile all 37 finding IDs — 37-ID table PENDING; PH5-SCH-36/37 severities provisional
 - [x] Confirm resolved Prisma versions — prisma@5.22.0 and @prisma/client@5.22.0
 - [x] Execute BookingIdempotencyKey concurrency test — DONE (dfeb6d74): PH5-SCH-30 CONFIRMED
-- [ ] Write and execute deterministic concurrent webhook test for SaaS path (service-level, not HTTP); update PH5-SCH-35
+- [x] Write and execute deterministic concurrent webhook test for SaaS path — DONE (c8bc402d): PH5-SCH-35 CONFIRMED
 - [x] Add Phase 5 to master tracker
 - [x] Confirm DIRECT payment 503 guard in both single and bulk booking paths
 
