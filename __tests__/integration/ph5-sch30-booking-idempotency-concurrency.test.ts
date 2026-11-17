@@ -476,8 +476,12 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
         if (err.code === 'P2002') {
           // Any P2002 here is acceptable (idempotency key or gist-related constraint);
           // T3 uses SlotReservation so both idempotency-key and GiST P2002s are possible.
-          return { result: 'p2002_caught', constraintTarget: (err.meta?.target as string[] | string | undefined) };
+          const target = err.meta?.target as string[] | string | undefined;
+          const targetStr = Array.isArray(target) ? target.join(',') : (target ?? '');
+          return { result: 'p2002_caught', constraintTarget: targetStr };
         }
+        // All other errors — explicit return for unclassified failures
+        return { result: 'error', name: err.name, code: err.code, meta: err.meta, error: err.message };
     };
 
     const [result1, result2] = await Promise.all([
@@ -507,7 +511,7 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
       const losingResult = result1.result === 'created' ? result2 : result1;
       expect(losingResult.result === 'gist_blocked' || losingResult.result === 'p2002_caught').toBe(true);
       console.log('T3: Losing request outcome:', losingResult.result);
-    }
+    }}
   });
   it('T4: concurrent different-key different-slot — both succeed (control)', async () => {
     const key1 = `${TEST_PREFIX}_T4a`;
@@ -587,7 +591,7 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
   //
   // Design rationale:
   //
-  // A. 50 independent rounds with fresh keys + isolated cleanup per round.
+  // A. 10 independent rounds with fresh keys + isolated cleanup per round.
   //    Repeated trials expose database behaviour across executions.
   //    A single execution may not trigger the race due to scheduler timing.
   //
@@ -687,7 +691,7 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
           const targetStr = Array.isArray(target) ? target.join(',') : (target ?? '');
           const isIdempKey = targetStr === 'BookingIdempotencyKey_pkey' || targetStr === 'BookingIdempotencyKey_key';
           if (!isIdempKey) {
-            return { result: 'error', name: err.name, code: err.code, meta: err.meta, error: P2002 on unexpected constraint: "${targetStr}" };
+            return { result: 'error', name: err.name, code: err.code, meta: err.meta, error: `P2002 on unexpected constraint: "${targetStr}" — not the idempotency key` };
           }
           const stored = await prisma.bookingIdempotencyKey.findUnique({ where: { key: idemKey } });
           return { result: 'p2002_caught', bookingId: stored?.bookingId, constraintTarget: targetStr };
