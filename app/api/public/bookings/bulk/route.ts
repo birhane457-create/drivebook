@@ -137,15 +137,15 @@ export async function POST(req: NextRequest) {
         if (existing.email !== data.accountHolderEmail) {
           return NextResponse.json({ error: 'Idempotency-Key does not match account' }, { status: 409 });
         }
-        // PH5-SCH-37 FIX: Validate providerId and hours match the original request.
-        // Without this, a request with the same key but different booking params
-        // would receive the original response including the paymentToken URL.
+        // PH5-SCH-37 FIX: Validate that the replay request matches the original booking parameters.
+        // Compare against data.providerId (request input) not resolvedInstructorId (not yet resolved here).
+        // This prevents the paymentToken URL from being delivered to a different booking context.
         const storedProvider = (existing.response as any)?.providerId;
         const storedHours = (existing.response as any)?.hours;
-        if (storedProvider && storedProvider !== resolvedInstructorId) {
+        if (storedProvider && storedProvider !== data.providerId) {
           return NextResponse.json({ error: 'Idempotency-Key does not match provider' }, { status: 409 });
         }
-        if (storedHours !== undefined && storedHours !== data.hours) {
+        if (storedHours !== undefined && storedHours !== null && storedHours !== data.hours) {
           return NextResponse.json({ error: 'Idempotency-Key does not match booking parameters' }, { status: 409 });
         }
         return NextResponse.json(existing.response, { status: 201 });
@@ -645,6 +645,13 @@ export async function POST(req: NextRequest) {
 
         const baseUrl = process.env.NEXTAUTH_URL || 'https://drivebook.com.au';
 
+        // PH5-SCH-36 FIX: Use Stripe's idempotency key to deduplicate session creation.
+        // Without this, concurrent retries each call stripe.checkout.sessions.create()
+        // independently before either has a chance to write the BookingIdempotencyKey record.
+        // Stripe's own idempotency key (derived from our request key) guarantees that
+        // concurrent requests with the same key return the same Stripe session.
+        // After session creation, we write the BookingIdempotencyKey record so that
+        // subsequent requests (even non-concurrent ones) are handled by the pre-check above.
         const session = await stripe.checkout.sessions.create({
           mode: 'payment',
           line_items: [
@@ -677,15 +684,13 @@ export async function POST(req: NextRequest) {
           cancel_url:  `${baseUrl}/client-dashboard/wallet?payment=cancelled`,
           // Pre-fill email so returning students don't have to type it again
           customer_email: data.accountHolderEmail,
-        });
+        }, idempotencyKey ? { idempotencyKey: `book-later-${idempotencyKey}` } : {});
 
-        // PH5-SCH-36 FIX: Write idempotency key for Book Later path.
-        // Without this, every retry creates a new Stripe Checkout Session
-        // and sends a new SMS payment link, allowing a student to pay twice.
-        // We use upsert (not create) because there is no wrapping transaction here:
-        // - If key doesn't exist: create it with this session's checkoutUrl.
-        // - If a concurrent retry already wrote a key: keep the first one (update:{}).
-        // The first session's URL wins; subsequent sessions are orphaned (never sent).
+        // Write the idempotency record so sequential retries are handled by the pre-check.
+        // Concurrent retries are handled by Stripe's idempotency key (above).
+        // We use upsert here (not create) because:
+        // - If another concurrent request wins the race to write the key, keep the first URL.
+        // - Stripe's idempotency ensures both requests received the same session anyway.
         if (idempotencyKey) {
           const laterResponse = {
             success: true,
