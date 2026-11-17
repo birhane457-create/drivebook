@@ -40,8 +40,9 @@
  *   T4 — Concurrent different-key, different slot: both succeed (control)
  *   T5 — Concurrent same-key, same request data, NO slot reservation:
  *        Tests whether idempotency key uniqueness alone prevents duplicate
- *        bookings when no GiST constraint is involved. This is the definitive
- *        test: a slot exclusion must not be mistaken for idempotency protection.
+ *        bookings when no GiST constraint is involved. This is a repeated
+ *        diagnostic probe: a slot exclusion must not be mistaken for idempotency
+ *        protection. A passing exit does not establish that the mechanism is safe.
  *
  * DATABASE SETUP NOTE:
  *   Use prisma migrate deploy (not prisma db push) to apply migrations.
