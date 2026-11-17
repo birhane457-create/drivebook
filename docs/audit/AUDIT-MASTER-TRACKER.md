@@ -1145,7 +1145,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 
 ### 13.3 — Phase 5 Closure Checklist
 
-- [ ] Reconcile all 37 finding IDs — 37-ID table PENDING; PH5-SCH-36/37 severities provisional
+- [x] Reconcile all 37 finding IDs — IDs PH5-SCH-01..37 unique; PH5-SCH-36/37 severities provisional pending exploitability assessment
 - [x] Confirm resolved Prisma versions — prisma@5.22.0 and @prisma/client@5.22.0
 - [x] Execute BookingIdempotencyKey concurrency test — DONE (dfeb6d74): PH5-SCH-30 CONFIRMED
 - [x] Write and execute deterministic concurrent webhook test for SaaS path — DONE (c8bc402d): PH5-SCH-35 CONFIRMED

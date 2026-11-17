@@ -881,9 +881,18 @@ Consistent with PH4-REG-01 deferral: the 503→404/501 fix will be part of the D
 
 **Final count: 1 HIGH, 17 MEDIUM, 18 LOW, 1 NEGLIGIBLE = 37 findings**
 
-**PH5-SCH-30 remains UNRESOLVED** — concurrency test written but not executed (no PostgreSQL available in current environment).
+**PH5-SCH-30 — CONFIRMED** (dfeb6d74): T2 produced 2 bookings with 1 idempotency key against Supabase PostgreSQL, Prisma 5.22.0. The `upsert` with `update: {}` does not abort the second transaction.
 
-**Phase 5 baseline status:** FINDINGS COMPLETE — one concurrency test pending execution before full baseline freeze.
+**Phase 5 baseline status:** FINDINGS COMPLETE — both PH5-SCH-30 and PH5-SCH-35 confirmed by runtime execution. PH5-SCH-36/37 exploitability assessment deferred. 37-ID reconciliation table pending PH5-SCH-36/37 severity confirmation.
 
-**Last updated:** 2026-11-15 (closure validation complete except PH5-SCH-30 test execution)
-### Item 4: WebhookEvent full idempotency — EXECUTED (Supabase, c8bc402d)
+**Last updated:** 2026-11-15 (cf6a1558 — PH5-SCH-30 and PH5-SCH-35 both confirmed by runtime execution)
+### Item 4: WebhookEvent full idempotency — EXECUTED (Supabase :5432, cf6a1558)
+
+**PH5-SCH-35 CONFIRMED.** `handleCheckoutComplete()` called directly with `vi.mock` for Stripe. Prisma 5.22.0. Both tests passed.
+
+- **C1 (sequential):** AuditLog entries: 1. Second call returned early; exactly one set of side effects.
+- **C2 (concurrent, barrier at Stripe retrieve):** AuditLog entries: 2 — **PH5-SCH-35 CONFIRMED**; notification calls: 2
+  - **Notification count qualification:** The service calls two functions after the transaction (`notifyCustomerBookingConfirmed` and `notifyBookingConfirmed`), one notification mock push each. 2 calls represents one complete customer/provider pair from one handler. 4 calls would indicate two complete pairs. The reported 2 may represent only one handler completing its notification path before P2028. The duplicate AuditLog evidence is authoritative.
+- Both handlers wrote AuditLog entries before the second transaction expired (P2028 on r2)
+- The pre-transaction `quote.status === 'PAID'` check does NOT prevent concurrent duplicate processing
+- **Remediation (precise):** A conditional `UPDATE Quote SET status = 'PAID' WHERE id = quoteId AND status != 'PAID'` with an affected-row check must control the rest of the transaction. 1 row affected: proceed with Booking update and AuditLog write; send notifications after commit. 0 rows affected: skip all remaining writes and notifications. Leaving the Booking update or AuditLog write unconditional while adding only the Quote conditional does not fix the race.
