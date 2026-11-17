@@ -474,10 +474,10 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
           return { result: 'gist_blocked' };
         }
         if (err.code === 'P2002') {
-          return { result: 'p2002_caught' };
+          // Any P2002 here is acceptable (idempotency key or gist-related constraint);
+          // T3 uses SlotReservation so both idempotency-key and GiST P2002s are possible.
+          return { result: 'p2002_caught', constraintTarget: (err.meta?.target as string[] | string | undefined) };
         }
-        return { result: 'error', error: err.message };
-      }
     };
 
     const [result1, result2] = await Promise.all([
@@ -683,10 +683,14 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
         return { result: 'created', bookingId: booking.id };
       } catch (err: any) {
         if (err.code === 'P2002') {
-          const stored = await prisma.bookingIdempotencyKey.findUnique({
-            where: { key: idemKey },
-          });
-          return { result: 'p2002_caught', bookingId: stored?.bookingId };
+          const target = err.meta?.target as string[] | string | undefined;
+          const targetStr = Array.isArray(target) ? target.join(',') : (target ?? '');
+          const isIdempKey = targetStr === 'BookingIdempotencyKey_pkey' || targetStr === 'BookingIdempotencyKey_key';
+          if (!isIdempKey) {
+            return { result: 'error', name: err.name, code: err.code, meta: err.meta, error: P2002 on unexpected constraint: "${targetStr}" };
+          }
+          const stored = await prisma.bookingIdempotencyKey.findUnique({ where: { key: idemKey } });
+          return { result: 'p2002_caught', bookingId: stored?.bookingId, constraintTarget: targetStr };
         }
         return {
           result: 'error',
