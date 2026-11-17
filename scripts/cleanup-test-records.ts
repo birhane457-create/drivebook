@@ -1,6 +1,10 @@
 /**
  * Cleanup leftover ph5sch* test records from the Supabase staging database.
  *
+ * SAFETY GUARD: This script deletes records. It refuses to run against
+ * production databases. Set CLEANUP_ALLOW_PRODUCTION=1 to override
+ * (only if you know exactly what you are doing).
+ *
  * Covers all entity types created by PH5-SCH-30 and PH5-SCH-35 tests:
  *   - BookingIdempotencyKey (email contains 'ph5sch')
  *   - AuditLog (actorId starts with ph5sch — from ph5sch35 Customer IDs)
@@ -18,6 +22,14 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
+  // Safety guard: refuse to run against production
+  const url = process.env.DATABASE_URL || ''
+  const blocked = ['jflrqxigfiiqednfacuf', 'zzntmozvppyzeaqautpi']
+  if (blocked.some(h => url.includes(h)) && process.env.CLEANUP_ALLOW_PRODUCTION !== '1') {
+    console.error('REFUSED: DATABASE_URL points at a production database.')
+    console.error('Set CLEANUP_ALLOW_PRODUCTION=1 to override (dangerous).')
+    process.exit(1)
+  }
   console.log('=== Cleaning leftover ph5sch test records ===\n')
 
   // Find ph5sch providers first to scope related deletions

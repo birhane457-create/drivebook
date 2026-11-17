@@ -7,6 +7,12 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 async function main() {
+  // Safety guard: warn if running against production (read-only, so warn not block)
+  const url = process.env.DATABASE_URL || ''
+  const productionHosts = ['jflrqxigfiiqednfacuf', 'zzntmozvppyzeaqautpi']
+  if (productionHosts.some(h => url.includes(h))) {
+    console.warn('⚠️  WARNING: Running against a production database (read-only check).')
+  }
   const [users, providers, bookings, idempKeys, quotes, auditLogs] = await Promise.all([
     prisma.user.count({ where: { email: { startsWith: 'ph5sch' } } }),
     prisma.provider.count({ where: { name: { startsWith: 'ph5sch' } } }),
