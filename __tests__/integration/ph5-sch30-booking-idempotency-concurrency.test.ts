@@ -284,15 +284,20 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
         });
         return { result: 'created', bookingId: booking.id };
       } catch (err: any) {
-        // Check for P2002 (unique constraint) — verify constraint target before classifying.
-        // A different unique constraint could produce the same error code.
+        // Check for P2002 (unique/primary-key constraint violation).
+        // BookingIdempotencyKey.key is the primary key with constraint name
+        // "BookingIdempotencyKey_pkey". Verify the target matches this exact
+        // constraint before classifying as an idempotency-key conflict.
+        // Any other P2002 target (a different constraint) must not be accepted
+        // as evidence that the idempotency mechanism fired.
         if (err.code === 'P2002') {
           const target = err.meta?.target as string[] | string | undefined;
           const targetStr = Array.isArray(target) ? target.join(',') : (target ?? '');
-          const isIdempKey = targetStr.includes('BookingIdempotencyKey') || targetStr.includes('key');
+          const isIdempKey = targetStr === 'BookingIdempotencyKey_pkey' ||
+            targetStr === 'BookingIdempotencyKey_key';
           if (!isIdempKey) {
-            // P2002 on a different constraint — not idempotency key evidence
-            return { result: 'error', name: err.name, code: err.code, meta: err.meta, error: `P2002 on unexpected constraint: ${targetStr}` };
+            // P2002 on a different constraint — not evidence of idempotency guard
+            return { result: 'error', name: err.name, code: err.code, meta: err.meta, error: `P2002 on unexpected constraint: "${targetStr}" — not the idempotency key` };
           }
           const stored = await prisma.bookingIdempotencyKey.findUnique({
             where: { key: idemKey },
@@ -369,8 +374,10 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
       console.log('T2: Losing request outcome:', losingResult.result);
 
       if (losingResult.result === 'p2002_caught') {
-        // Idempotency key unique constraint fired — this is the expected safe outcome.
-        console.log('✅ T2: Losing request received P2002 — uniqueness constraint fired');
+        // Idempotency key primary key constraint fired — exact expected outcome.
+        // Constraint: BookingIdempotencyKey_pkey (primary key on 'key' column)
+        console.log('✅ T2: Losing request received P2002 on BookingIdempotencyKey_pkey — idempotency key constraint fired');
+        console.log('✅ T2: Constraint target:', (losingResult as any).constraintTarget);
 
       } else if (losingResult.result === 'replayed') {
         // Initial findUnique found a key despite the barrier — race closed before tx.

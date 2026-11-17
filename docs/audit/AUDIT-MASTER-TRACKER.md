@@ -1114,7 +1114,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 
 **Version:** 1.2
 **Started:** 2026-11-15
-**Status:** FINDINGS COMPLETE — closure validation partial (see 13.3); PH5-SCH-30 unresolved; PH5-SCH-35 MEDIUM and OPEN
+**Status:** FINDINGS COMPLETE — PH5-SCH-30 CONFIRMED (dfeb6d74); PH5-SCH-35 CONFIRMED (cf6a1558, P2028 anomaly under investigation); PH5-SCH-36/37 provisional; cleanup and C2 rerun pending
 **Audit document:** `docs/audit/PHASE-5-SCHEMA-INTEGRITY-AUDIT.md`
 **Baseline commit:** 8b3b5c3c
 **Methodology:** Source and migration inspection of all 53 Prisma models. No code changes during audit. 12 groups, 37 findings.
@@ -1136,8 +1136,8 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | ID | Title | Risk | Status | Reason |
 |---|---|---|---|---|
 | PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | OPEN | Remediation: onDelete: Restrict; requires migration; Customer cascade path documented via PH5-SCH-28 |
-| PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | CONFIRMED — race executed against Supabase PostgreSQL: two bookings created with one idempotency key (T2, dfeb6d74); upsert update:{} does not abort the second transaction | Remediation: replace upsert with create + P2002 catch inside the booking transaction |
-| PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | CONFIRMED — C2 executed: AuditLog 2 entries with barrier-synchronized concurrent calls; both handlers applied side effects; pre-tx status check insufficient; Supabase :5432, prisma@5.22.0, c8bc402d | Remediation: conditional state transition inside tx with affected-row check |
+| PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | CONFIRMED (dfeb6d74) — T2: two bookings, one key; P2028 anomaly in C2 under investigation | Remediation: claim idempotency key FIRST inside transaction with `create` (not upsert); catch P2002 OUTSIDE \\\\\ (PostgreSQL aborts tx on constraint violation — catching inside cannot restore it); read winning record and replay |
+| PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | CONFIRMED (cf6a1558) — C2: AuditLog 2 entries; P2028 anomaly unresolved (rerun pending); pre-tx status check does not prevent concurrent duplicate processing | Remediation: `updateMany` on Quote with `status: { not: 'PAID' }`; if `claimed.count !== 1` skip all Booking + AuditLog writes and defer notifications until after tx commit |
 | PH5-SCH-36 | Book Later path creates duplicate Checkout Sessions on retry | MEDIUM | OPEN/PROVISIONAL — no idempotency write in Book Later branch; multiple sessions possible on Twilio retry | Impact and exploitability assessment deferred |
 | PH5-SCH-37 | BookingIdempotencyKey replay scope insufficiently bound — requires both matching key and email; stored response includes paymentToken URL | MEDIUM | OPEN/PROVISIONAL — replay validates key and email but does not bind to original booking parameters (providerId, hours, slot) | Exploitability depends on key generation; assessment deferred |
 | PH4-REG-01 | DIRECT payment mode returns 503 | LOW | DEFERRED | 503 guard confirmed in both booking paths; fix as part of DIRECT payment implementation |
