@@ -138,16 +138,43 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'Idempotency-Key does not match account' }, { status: 409 });
         }
         // PH5-SCH-37 FIX: Validate that the replay request matches the original booking parameters.
-        // Compare against data.providerId (request input) not resolvedInstructorId (not yet resolved here).
-        // This prevents the paymentToken URL from being delivered to a different booking context.
-        const storedProvider = (existing.response as any)?.providerId;
-        const storedHours = (existing.response as any)?.hours;
-        if (storedProvider && storedProvider !== data.providerId) {
+        // We compare the stored identifiers against the current request to prevent the
+        // paymentToken URL from being delivered to a different booking context.
+        //
+        // Provider identity: a request may supply either providerId OR instructorQuery.
+        // We store both in the response. On replay, we check whichever was originally supplied:
+        // - If the original used providerId: compare storedProvider to data.providerId.
+        //   If data.providerId is absent but data.instructorQuery is present, skip the check
+        //   (the provider will be re-resolved to the same ID during replay if the query matches).
+        // - storedQuery is only stored when instructorQuery was used originally.
+        const storedProvider  = (existing.response as any)?.providerId as string | undefined;
+        const storedQuery     = (existing.response as any)?.instructorQuery as string | undefined;
+        const storedHours     = (existing.response as any)?.hours;
+        const storedPkgType   = (existing.response as any)?.packageType as string | undefined;
+        const storedBookType  = (existing.response as any)?.bookingType as string | undefined;
+
+        // Provider check: only enforce when the original used an explicit providerId
+        // AND the current request also supplies a providerId.
+        if (storedProvider && data.providerId && storedProvider !== data.providerId) {
           return NextResponse.json({ error: 'Idempotency-Key does not match provider' }, { status: 409 });
         }
-        if (storedHours !== undefined && storedHours !== null && storedHours !== data.hours) {
-          return NextResponse.json({ error: 'Idempotency-Key does not match booking parameters' }, { status: 409 });
+
+        // instructorQuery check: if original was query-based, enforce query identity
+        if (storedQuery && data.instructorQuery && storedQuery !== data.instructorQuery) {
+          return NextResponse.json({ error: 'Idempotency-Key does not match instructor query' }, { status: 409 });
         }
+
+        // Material booking parameters
+        if (storedHours !== undefined && storedHours !== null && storedHours !== data.hours) {
+          return NextResponse.json({ error: 'Idempotency-Key does not match booking hours' }, { status: 409 });
+        }
+        if (storedPkgType && storedPkgType !== data.packageType) {
+          return NextResponse.json({ error: 'Idempotency-Key does not match package type' }, { status: 409 });
+        }
+        if (storedBookType && storedBookType !== data.bookingType) {
+          return NextResponse.json({ error: 'Idempotency-Key does not match booking type' }, { status: 409 });
+        }
+
         return NextResponse.json(existing.response, { status: 201 });
       }
     }
@@ -700,6 +727,9 @@ export async function POST(req: NextRequest) {
             paymentIntentId: session.payment_intent as string | null,
             providerId: resolvedInstructorId,
             hours: data.hours ?? null,
+            packageType: data.packageType,
+            bookingType: data.bookingType,
+            ...(data.instructorQuery ? { instructorQuery: data.instructorQuery } : {}),
           };
           await (prisma as any).bookingIdempotencyKey.upsert({
             where: { key: idempotencyKey },
@@ -898,6 +928,9 @@ export async function POST(req: NextRequest) {
             ...(checkoutUrl ? { checkoutUrl } : {}),
             providerId: resolvedInstructorId,
             hours: data.hours ?? null,
+            packageType: data.packageType,
+            bookingType: data.bookingType,
+            ...(data.instructorQuery ? { instructorQuery: data.instructorQuery } : {}),
           };
           await (tx as any).bookingIdempotencyKey.update({
             where: { key: idempotencyKey },
