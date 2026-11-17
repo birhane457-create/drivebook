@@ -435,7 +435,7 @@ model Transaction {
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
   payoutTransactions    PayoutTransaction[]
-  booking               Booking?            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking               Booking?            @relation(fields: [bookingId], references: [id], onDelete: Restrict)
 }
 
 model ClientWallet {
