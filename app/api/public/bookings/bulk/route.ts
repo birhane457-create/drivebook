@@ -1,4 +1,4 @@
-// @ts-nocheck
+﻿// @ts-nocheck
 import { logger } from '@/lib/logger';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -772,6 +772,22 @@ export async function POST(req: NextRequest) {
           });
         }
 
+        // PH5-SCH-30 FIX: Claim idempotency key BEFORE booking.create.
+        // Using create (not upsert) so PostgreSQL throws P2002 on duplicate,
+        // which aborts this transaction before any Booking is created.
+        // The P2002 is caught OUTSIDE the transaction (see catch block below)
+        // and the stored response is replayed to the caller.
+        if (idempotencyKey) {
+          await (tx as any).bookingIdempotencyKey.create({
+            data: {
+              key: idempotencyKey,
+              email: data.accountHolderEmail,
+              bookingId: '__pending__',
+              response: { pending: true },
+            },
+          });
+        }
+
         const newBooking = await tx.booking.create({
           data: {
             providerId: resolvedInstructorId,
@@ -821,10 +837,9 @@ export async function POST(req: NextRequest) {
           throw new Error('INVALID_PACKAGE_PRICE: Booking price should be per-lesson rate, not package total');
         }
 
-        // P2-8 FIX: Persist idempotency key inside the same transaction as booking.create.
-        // Previously stored outside/after the transaction Ã¢â‚¬â€ a crash between create and upsert
-        // would allow a retry with the same key to create a second booking.
-        // The @unique constraint on key means a concurrent duplicate throws P2002 (caught below).
+        // PH5-SCH-30 FIX (continued): Update the claimed key with real bookingId and response.
+        // The key was claimed (create) before booking.create above.
+        // Now that we have the real booking, store the response.
         if (idempotencyKey) {
           const checkoutUrl = !isShortNotice
             ? `${process.env.NEXTAUTH_URL}/booking/${newBooking.id}/payment?token=${(newBooking as any).paymentToken}`
@@ -837,12 +852,9 @@ export async function POST(req: NextRequest) {
             status: isShortNotice ? 'PENDING' : 'PENDING_PAYMENT',
             ...(checkoutUrl ? { checkoutUrl } : {}),
           };
-          await (tx as any).bookingIdempotencyKey.upsert({
+          await (tx as any).bookingIdempotencyKey.update({
             where: { key: idempotencyKey },
-            update: {},
-            create: {
-              key: idempotencyKey,
-              email: data.accountHolderEmail,
+            data: {
               bookingId: newBooking.id,
               response: idemResponse,
             },
@@ -864,12 +876,23 @@ export async function POST(req: NextRequest) {
       ) {
         return NextResponse.json({ error: 'This time slot is no longer available. Please choose another.' }, { status: 409 });
       }
-      if (err.code === 'P2002' && err.meta?.target?.includes('key')) {
-        // Concurrent duplicate idempotency key Ã¢â‚¬â€ replay stored response
-        const stored = await (prisma as any).bookingIdempotencyKey.findUnique({
-          where: { key: idempotencyKey! },
-        });
-        if (stored) return NextResponse.json(stored.response, { status: 201 });
+      if (err.code === 'P2002') {
+        // PH5-SCH-30 FIX: idempotency key create threw P2002 — another request won the race.
+        // The transaction was aborted before any Booking was created.
+        // Verify this P2002 is from the idempotency key constraint (not an unrelated constraint).
+        const target = err.meta?.target as string[] | string | undefined;
+        const targetStr = Array.isArray(target) ? target.join(',') : (target ?? '');
+        const isIdempKey = targetStr === 'BookingIdempotencyKey_pkey' || targetStr === 'BookingIdempotencyKey_key';
+        if (isIdempKey && idempotencyKey) {
+          const stored = await (prisma as any).bookingIdempotencyKey.findUnique({
+            where: { key: idempotencyKey },
+          });
+          if (stored && stored.bookingId !== '__pending__') {
+            return NextResponse.json(stored.response, { status: 201 });
+          }
+          // Key exists but response not yet written (very narrow race) — treat as conflict
+          return NextResponse.json({ error: 'Duplicate request — please retry in a moment.' }, { status: 409 });
+        }
       }
       throw err;
     }
