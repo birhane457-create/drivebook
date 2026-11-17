@@ -685,7 +685,7 @@ model BookingIdempotencyKey {
 
 **Contrast with WebhookEvent (Group 12):** WebhookEvent uses `create` + P2002 catch (correct idempotency pattern). BookingIdempotencyKey uses `upsert` with `update: {}` (broken under concurrent access).
 
-**Remediation:** Move the idempotency check inside the transaction, or use `create` (not `upsert`) and let P2002 abort the transaction.
+**Remediation:** Claim the idempotency key BEFORE creating the Booking, inside the same transaction, using `create` (not `upsert`). PostgreSQL aborts the transaction on a unique-key conflict (P2002). Catch P2002 OUTSIDE the `\` call, then read the winning idempotency record and return its stored response. The losing request must not create a Booking before losing the key claim — the `create` must precede `booking.create` within the transaction.
 
 ---
 
@@ -821,11 +821,15 @@ Test file: `__tests__/integration/ph5-sch30-booking-idempotency-concurrency.test
 - `upsert` with `update: {}` silently dropped the second insert; did not abort the second transaction
 - Two bookings were created for the same idempotency key — the race is real and reproducible
 
-**T5 outcome (10 rounds, no slot):** 10/10 single booking, 0 duplicates. Discrepancy with T2 is because same-slot rounds may serialise on the `booking.create` booking conflict; T2 uses different slots so no such serialisation point exists. PH5-SCH-30 is confirmed from T2.
+**T5 outcome (10 rounds, not 50 — reduced for Supabase latency):** 10/10 single booking, 0 duplicates.
+
+**T5 versus T2 discrepancy — qualified:** The audit document previously stated the discrepancy is because same-slot rounds serialise on `booking.create`. This is an inference, not demonstrated by query logs. The correct interpretation is: T2 demonstrates the defect can occur. T5's zero-duplicate result does not disprove the defect. The race is timing-sensitive. The exact mechanism — whether same-slot rounds serialise on `booking.create`, or Supabase's pooler introduces different scheduling, or the race window is narrow — requires query-level or transaction-level evidence to establish precisely.
+
+**Supabase environment (confirmed):** The Supabase project `jflrqxigfiiqednfacuf` contains zero providers, zero bookings, zero users, and zero transactions — confirmed by a read-only count query at 30c103ca. Despite the `DriveBook2025Prod` string in the credentials, this database is empty and is a staging/test instance, not a production database with live customer data. One leftover idempotency key (from a previous test run) was identified; cleanup attempted but blocked by intermittent connectivity.
 **PH5-SCH-30 status: CONFIRMED.** T2 executed against Supabase PostgreSQL (ap-southeast-2 pooler, pgbouncer=true, READ COMMITTED, Prisma 5.22.0, commit dfeb6d74). Result: `allBookings.length === 2` with one idempotency key. Both concurrent requests passed the initial lookup, both committed their transactions, and the `upsert` with `update: {}` silently dropped the second key insert without aborting the second booking transaction. The race is real and reproducible.
 - Scope: Prisma/database-layer reproduction against the same Supabase instance used by existing integration tests. Not a test of the complete HTTP route.
-- T5 (10 rounds, no slot): 0 duplicates — same-slot rounds may serialise on `booking.create` conflict. T2 (different slots) has no such serialisation point. T2 is the authoritative result.
-- Remediation: replace `upsert` with `create` + P2002 catch inside the booking transaction.
+- T5 (10 rounds, no slot): 0 duplicates. The discrepancy with T2 is not fully explained — same-slot serialisation on `booking.create` is a plausible but unproven mechanism. T2 is the authoritative result for the confirmed defect.
+- Remediation: claim idempotency key first inside the transaction with `create` (not `upsert`); catch P2002 OUTSIDE `\` (PostgreSQL aborts the tx on constraint violation — catching inside cannot restore it); read winning record and replay.
 
 
 **Inside transaction (tx) — correct pattern:**
@@ -894,5 +898,14 @@ Consistent with PH4-REG-01 deferral: the 503→404/501 fix will be part of the D
 - **C2 (concurrent, barrier at Stripe retrieve):** AuditLog entries: 2 — **PH5-SCH-35 CONFIRMED**; notification calls: 2
   - **Notification count qualification:** The service calls two functions after the transaction (`notifyCustomerBookingConfirmed` and `notifyBookingConfirmed`), one notification mock push each. 2 calls represents one complete customer/provider pair from one handler. 4 calls would indicate two complete pairs. The reported 2 may represent only one handler completing its notification path before P2028. The duplicate AuditLog evidence is authoritative.
 - Both handlers wrote AuditLog entries before the second transaction expired (P2028 on r2)
+- **P2028 anomaly (requires investigation):** The second handler received P2028 (transaction expired) yet 2 AuditLog entries were committed. A transaction that expires before committing should not leave its writes committed. Possible explanations: the P2028 occurred after the relevant transaction had already committed (e.g. during cleanup or a subsequent operation), or the barrier timing caused both transactions to commit before either expired. This anomaly must be investigated by rerunning C2 with a longer interactive transaction timeout and capturing complete Prisma query logs before the C2 result can be treated as fully established evidence of two independent committed transactions.
 - The pre-transaction `quote.status === 'PAID'` check does NOT prevent concurrent duplicate processing
-- **Remediation (precise):** A conditional `UPDATE Quote SET status = 'PAID' WHERE id = quoteId AND status != 'PAID'` with an affected-row check must control the rest of the transaction. 1 row affected: proceed with Booking update and AuditLog write; send notifications after commit. 0 rows affected: skip all remaining writes and notifications. Leaving the Booking update or AuditLog write unconditional while adding only the Quote conditional does not fix the race.
+- **Remediation (precise, with implementation reference):** Use `updateMany` on Quote with a conditional `status: { not: 'PAID' }` check inside the transaction. If `claimed.count !== 1`, skip all remaining writes and notifications. This follows the existing SUB-22 pattern in the subscription handler:
+  ```typescript
+  const claimed = await tx.quote.updateMany({
+    where: { id: quoteId, status: { not: 'PAID' } },
+    data: { status: 'PAID', updatedAt: new Date() },
+  });
+  if (claimed.count !== 1) return; // Another handler won — skip Booking + AuditLog
+  ```
+  Notifications must only be sent after the transaction commits successfully. The booking update and AuditLog insertion must remain inside the transaction and must not execute when `claimed.count === 0`.

@@ -284,12 +284,20 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
         });
         return { result: 'created', bookingId: booking.id };
       } catch (err: any) {
-        // Check for P2002 (unique constraint on idempotency key)
+        // Check for P2002 (unique constraint) — verify constraint target before classifying.
+        // A different unique constraint could produce the same error code.
         if (err.code === 'P2002') {
+          const target = err.meta?.target as string[] | string | undefined;
+          const targetStr = Array.isArray(target) ? target.join(',') : (target ?? '');
+          const isIdempKey = targetStr.includes('BookingIdempotencyKey') || targetStr.includes('key');
+          if (!isIdempKey) {
+            // P2002 on a different constraint — not idempotency key evidence
+            return { result: 'error', name: err.name, code: err.code, meta: err.meta, error: `P2002 on unexpected constraint: ${targetStr}` };
+          }
           const stored = await prisma.bookingIdempotencyKey.findUnique({
             where: { key: idemKey },
           });
-          return { result: 'p2002_caught', bookingId: stored?.bookingId };
+          return { result: 'p2002_caught', bookingId: stored?.bookingId, constraintTarget: targetStr };
         }
         // Retain name, code, meta and message for full constraint identification
         return {
@@ -593,13 +601,13 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
   //
   // PASS / FAIL INTERPRETATION:
   //   Each round is DIAGNOSTIC: it records the outcome but does not fail Vitest
-  //   on 2 bookings. At the end of 50 rounds, the counts are summarised.
+  //   on 2 bookings. At the end of 10 rounds, the counts are summarised.
   //   - duplicateRounds > 0 means PH5-SCH-30 is confirmed.
-  //   - duplicateRounds === 0 does not prove safety (50 rounds is not exhaustive).
+  //   - duplicateRounds === 0 does not prove safety (10 rounds is not exhaustive; increase with local PostgreSQL)
   //   A strict companion test (T5-STRICT) must be added after remediation to
   //   require exactly one booking.
 
-  it('T5: 50-round idempotency probe — no slot, same key, same request (DIAGNOSTIC)', async () => {
+  it('T5: 10-round idempotency probe — no slot, same key, same request (DIAGNOSTIC)', async () => {
     // Print resolved versions for traceability
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const prismaVersion = require('@prisma/client/package.json').version as string;
@@ -686,7 +694,7 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     for (let round = 0; round < ROUNDS; round++) {
       const roundKey = `${TEST_PREFIX}_T5_r${round}`;
       // Each round uses a unique key. Slot times use a fixed base date + hour offset
-      // so all 50 rounds produce valid timestamps (day-of-month overflows are avoided).
+      // so all 10 rounds produce valid timestamps (day-of-month overflows are avoided).
       const useNullTimes = round % 2 === 1;
       const baseMs = new Date('2027-08-01T10:00:00Z').getTime();
       const slotStart = useNullTimes ? null : new Date(baseMs + round * 60 * 60 * 1000);
@@ -746,7 +754,7 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
     }
 
     // Summary
-    console.log('\nT5 SUMMARY (50 rounds):');
+    console.log('\nT5 SUMMARY (10 rounds):');
     console.log(`  Single booking (safe): ${results.singleBooking}`);
     console.log(`  Duplicate booking (race): ${results.duplicateBooking}`);
     console.log(`  Replayed early (barrier issue): ${results.replayedEarly}`);
@@ -757,7 +765,7 @@ describe('PH5-SCH-30: BookingIdempotencyKey Concurrency', () => {
       console.error('❌ The upsert update:{} pattern does NOT prevent duplicate booking creation');
     } else {
       console.log(`\n✅ No duplicates in ${ROUNDS} rounds — idempotency held in every trial`);
-      console.log('✅ Note: 50 rounds is not exhaustive; this is evidence, not proof of safety');
+      console.log('✅ Note: 10 rounds is not exhaustive; increase ROUNDS with a local PostgreSQL instance for stronger evidence');
     }
 
     // Fail on unexpected errors (23P01, unclassified codes, booking count anomalies)
