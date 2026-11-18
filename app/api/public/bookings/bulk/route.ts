@@ -68,27 +68,43 @@ const bulkBookingSchema = z.object({
 });
 
 // PH5-SCH-37: Canonical request fingerprint for idempotency replay validation.
-// Covers all material booking parameters including scheduled slots.
-// JSON.stringify with sorted keys ensures equivalent requests produce the same string.
+// Covers all material booking parameters including scheduled slots, learner details
+// and pickup location. Any field that changes the resulting booking or its
+// intended recipient is included.
+// JSON.stringify with consistent key order ensures equivalent requests produce the same string.
 function buildRequestFingerprint(data: {
   providerId?: string;
   instructorQuery?: string;
   packageType: string;
   hours: number;
   bookingType: string;
-  scheduledBookings?: Array<{ date: string; time: string; duration: number }>;
+  scheduledBookings?: Array<{ date: string; time: string; duration: number; pickupLocation?: string; notes?: string }>;
+  registrationType?: string;
+  learnerName?: string;
+  learnerPhone?: string;
+  learnerRelationship?: string;
 }): string {
+  // Sort slots by date, then time, then duration to handle duplicates canonically
   const slots = (data.scheduledBookings ?? []).map(s => ({
     date: s.date,
     time: s.time,
     duration: s.duration,
-  })).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+    pickupLocation: s.pickupLocation ?? '',
+    notes: s.notes ?? '',
+  })).sort((a, b) => {
+    const primary = (a.date + a.time).localeCompare(b.date + b.time);
+    return primary !== 0 ? primary : a.duration - b.duration;
+  });
   const canonical = {
-    providerId:      data.providerId      ?? null,
-    instructorQuery: data.instructorQuery ?? null,
-    packageType:     data.packageType,
-    hours:           data.hours,
-    bookingType:     data.bookingType,
+    providerId:        data.providerId        ?? null,
+    instructorQuery:   data.instructorQuery   ?? null,
+    packageType:       data.packageType,
+    hours:             data.hours,
+    bookingType:       data.bookingType,
+    registrationType:  data.registrationType  ?? null,
+    learnerName:       data.learnerName       ?? null,
+    learnerPhone:      data.learnerPhone      ?? null,
+    learnerRelationship: data.learnerRelationship ?? null,
     slots,
   };
   return JSON.stringify(canonical);
@@ -182,7 +198,11 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: 'Idempotency-Key does not match original booking request' }, { status: 409 });
           }
         } else {
-          // Legacy fallback: per-field checks for records written before fingerprint was added
+          // Legacy fallback: per-field checks for records written before the fingerprint was introduced.
+          // RESIDUAL RISK: Legacy records do not contain scheduled slot data, so a replay with a
+          // changed slot date/time will not be caught. This risk expires as old records age out
+          // (they are cleaned up by the 24-hour cron). No migration or forced expiry is applied
+          // because the BookingIdempotencyKey table has no production records before this deployment.
           const storedProvider  = (existing.response as any)?.providerId as string | undefined;
           const storedQuery     = (existing.response as any)?.instructorQuery as string | undefined;
           const storedHours     = (existing.response as any)?.hours;
@@ -882,17 +902,29 @@ export async function POST(req: NextRequest) {
         // PH5-SCH-30 FIX: Claim idempotency key BEFORE booking.create.
         // Using create (not upsert) so PostgreSQL throws P2002 on duplicate,
         // which aborts this transaction before any Booking is created.
-        // The P2002 is caught OUTSIDE the transaction (see catch block below)
-        // and the stored response is replayed to the caller.
+        // The P2002 is tagged with IDEM_KEY_CONFLICT before propagating so the
+        // outer catch can distinguish it from unrelated unique constraint failures.
         if (idempotencyKey) {
-          await (tx as any).bookingIdempotencyKey.create({
-            data: {
-              key: idempotencyKey,
-              email: data.accountHolderEmail,
-              bookingId: '__pending__',
-              response: { pending: true },
-            },
-          });
+          try {
+            await (tx as any).bookingIdempotencyKey.create({
+              data: {
+                key: idempotencyKey,
+                email: data.accountHolderEmail,
+                bookingId: '__pending__',
+                response: { pending: true },
+              },
+            });
+          } catch (createErr: any) {
+            if (createErr?.code === 'P2002') {
+              // Tag this error so the outer catch knows it came specifically
+              // from the idempotency key create — not from any other constraint.
+              const tagged = new Error('IDEM_KEY_CONFLICT');
+              (tagged as any).idemKeyConflict = true;
+              (tagged as any).originalCode = createErr.code;
+              throw tagged;
+            }
+            throw createErr; // propagate unexpected errors unchanged
+          }
         }
 
         const newBooking = await tx.booking.create({
@@ -989,34 +1021,21 @@ export async function POST(req: NextRequest) {
       ) {
         return NextResponse.json({ error: 'This time slot is no longer available. Please choose another.' }, { status: 409 });
       }
-      if (err.code === 'P2002') {
-        // PH5-SCH-30 FIX: idempotency key create threw P2002 — another request won the race.
-        // The transaction was aborted before any Booking was created.
-        // Prisma 5.22.0 P2002 meta.target can be:
-        //   - ['BookingIdempotencyKey_pkey'] — constraint name (most common)
-        //   - 'BookingIdempotencyKey_pkey' — constraint name as string
-        //   - ['key'] — field name (also observed in some Prisma/connector versions)
-        //   - 'key' — field name as string
-        // Accept all of these as evidence that the idempotency key constraint fired.
-        const target = err.meta?.target as string[] | string | undefined;
-        const targetStr = Array.isArray(target) ? target.join(',') : (target ?? '');
-        const isIdempKey = targetStr === 'BookingIdempotencyKey_pkey' ||
-          targetStr === 'BookingIdempotencyKey_key' ||
-          targetStr === 'key' ||
-          targetStr.includes('BookingIdempotencyKey');
-        if (isIdempKey && idempotencyKey) {
-          logger.info('P2002 on BookingIdempotencyKey — concurrent duplicate caught', {
-            targetStr, idempotencyKey: idempotencyKey.substring(0, 20) + '...',
-          });
-          const stored = await (prisma as any).bookingIdempotencyKey.findUnique({
-            where: { key: idempotencyKey },
-          });
-          if (stored && stored.bookingId !== '__pending__') {
-            return NextResponse.json(stored.response, { status: 201 });
-          }
-          // Key exists but response not yet written (very narrow race) — treat as conflict
-          return NextResponse.json({ error: 'Duplicate request — please retry in a moment.' }, { status: 409 });
+      // PH5-SCH-30 FIX: Check for the tagged IDEM_KEY_CONFLICT error thrown by
+      // bookingIdempotencyKey.create() inside the transaction. This is unambiguous:
+      // it can only come from that one specific operation, not from any other constraint.
+      if ((err as any).idemKeyConflict && idempotencyKey) {
+        logger.info('IDEM_KEY_CONFLICT — concurrent duplicate request caught', {
+          idempotencyKey: idempotencyKey.substring(0, 20) + '...',
+        });
+        const stored = await (prisma as any).bookingIdempotencyKey.findUnique({
+          where: { key: idempotencyKey },
+        });
+        if (stored && stored.bookingId !== '__pending__') {
+          return NextResponse.json(stored.response, { status: 201 });
         }
+        // Key exists but response not yet written (very narrow race) — treat as conflict
+        return NextResponse.json({ error: 'Duplicate request — please retry in a moment.' }, { status: 409 });
       }
       throw err;
     }

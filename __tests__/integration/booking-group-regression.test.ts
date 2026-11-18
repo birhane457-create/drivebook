@@ -435,6 +435,50 @@ describe('PH5-SCH-37: Replay scope', () => {
     await cleanupBookings()
   })
 
+  it('R14: same key + different pickup location → 409', async () => {
+    const idemKey = `${TEST_PREFIX}_R14`
+    await cleanupByIdemKey(idemKey)
+
+    const r1 = await sendBooking(bookNowRequest(idemKey, {
+      scheduledBookings: [{ date: '2027-08-10', time: '10:00', duration: 60, pickupLocation: '1 Main St Perth', notes: '' }],
+    }), idemKey)
+    expect(r1.status).toBe(201)
+
+    const r2 = await sendBooking(bookNowRequest(idemKey, {
+      scheduledBookings: [{ date: '2027-08-10', time: '10:00', duration: 60, pickupLocation: '5 Other St Perth', notes: '' }],
+    }), idemKey)
+    expect(r2.status).toBe(409)
+    console.log('R14: Changed pickup location correctly rejected with 409 — PASS')
+
+    await cleanupByIdemKey(idemKey)
+    await cleanupBookings()
+  })
+
+  it('R15: same key + different learner name → 409', async () => {
+    const idemKey = `${TEST_PREFIX}_R15`
+    await cleanupByIdemKey(idemKey)
+
+    const r1 = await sendBooking(bookNowRequest(idemKey, {
+      registrationType: 'someone-else',
+      learnerName: 'Alice Smith',
+      learnerPhone: '0411111111',
+      learnerRelationship: 'child',
+    }), idemKey)
+    expect(r1.status).toBe(201)
+
+    const r2 = await sendBooking(bookNowRequest(idemKey, {
+      registrationType: 'someone-else',
+      learnerName: 'Bob Jones',
+      learnerPhone: '0411111111',
+      learnerRelationship: 'child',
+    }), idemKey)
+    expect(r2.status).toBe(409)
+    console.log('R15: Changed learner name correctly rejected with 409 — PASS')
+
+    await cleanupByIdemKey(idemKey)
+    await cleanupBookings()
+  })
+
   it('R10: original used instructorQuery → replay with same query succeeds', async () => {
     const idemKey = `${TEST_PREFIX}_R10`
     await cleanupByIdemKey(idemKey)
