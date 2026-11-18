@@ -1,4 +1,4 @@
-ï»¿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
@@ -14,7 +14,7 @@ import {
   User,
 } from 'lucide-react';
 
-// Client-side display status â†’ consistent badge styles
+// Client-side display status ? consistent badge styles
 // These are the API-transformed display statuses (not raw DB statuses)
 const CLIENT_STATUS_STYLE: Record<string, { label: string; badge: string; dot: string }> = {
   upcoming:               { label: 'Confirmed',             badge: 'bg-emerald-950/40 text-emerald-300 border border-emerald-700/50', dot: 'bg-emerald-400' },
@@ -140,7 +140,7 @@ export default function ClientBookingsPage() {
             <div>
               <h1 className="text-3xl font-bold">My Bookings</h1>
               <p className="text-blue-200 mt-2">
-                {profile.upcomingCount} upcoming â€¢ {profile.pastCount} completed
+                {profile.upcomingCount} upcoming • {profile.pastCount} completed
               </p>
             </div>
             <Link
@@ -176,7 +176,7 @@ export default function ClientBookingsPage() {
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }`}
             >
-              {/* NF-04: use upcomingCount/pastCount from API â€” not a slice of the current page */}
+              {/* NF-04: use upcomingCount/pastCount from API — not a slice of the current page */}
               Upcoming ({profile?.upcomingCount ?? 0})
             </button>
             <button
@@ -214,7 +214,7 @@ export default function ClientBookingsPage() {
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-base font-bold text-slate-50 truncate">
-                          {booking.provider.name}
+                          {booking.provider?.name ?? 'Unknown'}
                         </h3>
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-medium rounded-full mt-0.5 ${s.badge}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
@@ -238,7 +238,7 @@ export default function ClientBookingsPage() {
                     {booking.time && (
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-4 h-4 text-primary" />
-                        {booking.time}{booking.duration ? ` Â· ${booking.duration >= 60 ? `${booking.duration / 60}h` : `${booking.duration}min`}` : ''}
+                        {booking.time}{booking.duration ? ` · ${booking.duration >= 60 ? `${booking.duration / 60}h` : `${booking.duration}min`}` : ''}
                       </div>
                     )}
                     {booking.pickupAddress && (

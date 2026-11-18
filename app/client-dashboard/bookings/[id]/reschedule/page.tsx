@@ -80,7 +80,7 @@ export default function ClientReschedulePage() {
     const durationMins = booking.duration >= 1 && booking.duration <= 12
       ? booking.duration * 60  // stored as hours
       : booking.duration;       // stored as minutes
-    fetch(`/api/availability/slots?providerId=${booking.provider.id}&date=${selectedDate}&duration=${durationMins}&excludeBookingId=${bookingId}&bypassDurationCheck=true`)
+    fetch(`/api/availability/slots?providerId=${booking.provider?.id ?? ''}&date=${selectedDate}&duration=${durationMins}&excludeBookingId=${bookingId}&bypassDurationCheck=true`)
       .then(r => r.ok ? r.json() : { slots: [] })
       .then(data => setSlotsData(data.slots ?? []))
       .catch(() => setSlotsData([]))
@@ -154,7 +154,7 @@ export default function ClientReschedulePage() {
   const durationMins = booking.duration >= 1 && booking.duration <= 12
     ? booking.duration * 60 : booking.duration;
   const newPrice = selectedTime
-    ? (booking.provider.hourlyRate * durationMins / 60)
+    ? (booking.provider?.hourlyRate ?? 0 * durationMins / 60)
     : null;
   const priceDiff = newPrice !== null ? newPrice - booking.price : 0;
 
@@ -168,7 +168,7 @@ export default function ClientReschedulePage() {
           </Link>
           <div>
             <h1 className="text-lg font-bold text-gray-900">Reschedule Lesson</h1>
-            <p className="text-xs text-muted-foreground/60">{booking.provider.name}</p>
+            <p className="text-xs text-muted-foreground/60">{booking.provider?.name ?? 'Unknown'}</p>
           </div>
         </div>
       </header>

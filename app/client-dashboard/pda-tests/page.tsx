@@ -144,31 +144,31 @@ export default function ClientPDATestsPage() {
         <div className="space-y-6">
           {instructorsData.map((data) => (
             <div
-              key={data.provider.id}
+              key={data.provider?.id ?? ''}
               className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden"
             >
               {/* Instructor Header */}
               <button
                 onClick={() =>
                   setExpandedInstructor(
-                    expandedInstructor === data.provider.id ? null : data.provider.id
+                    expandedInstructor === data.provider?.id ?? '' ? null : data.provider?.id ?? ''
                   )
                 }
                 className="w-full p-6 flex items-start gap-4 hover:bg-gray-50 transition text-left"
               >
                 {/* Instructor Avatar */}
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-foreground font-bold text-lg flex-shrink-0">
-                  {data.provider.name.charAt(0).toUpperCase()}
+                  {data.provider?.name ?? 'Unknown'.charAt(0).toUpperCase()}
                 </div>
 
                 {/* Instructor Info */}
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-gray-900">{data.provider.name}</h3>
+                  <h3 className="text-lg font-bold text-gray-900">{data.provider?.name ?? 'Unknown'}</h3>
                   <div className="flex flex-wrap gap-3 mt-2 text-sm text-gray-600">
-                    {data.provider.phone && (
+                    {data.provider?.phone && (
                       <div className="flex items-center gap-1">
                         <Phone className="w-4 h-4" />
-                        {data.provider.phone}
+                        {data.provider?.phone}
                       </div>
                     )}
                     {data.provider.testPackageDuration && (
@@ -189,7 +189,7 @@ export default function ClientPDATestsPage() {
 
                 {/* Expand Arrow */}
                 <div className="text-gray-600">
-                  {expandedInstructor === data.provider.id ? (
+                  {expandedInstructor === data.provider?.id ?? '' ? (
                     <svg
                       className="w-6 h-6"
                       fill="none"
@@ -222,7 +222,7 @@ export default function ClientPDATestsPage() {
               </button>
 
               {/* Expanded Content */}
-              {expandedInstructor === data.provider.id && (
+              {expandedInstructor === data.provider?.id ?? '' && (
                 <div className="border-t border-gray-200 p-6 bg-gray-50">
                   {/* Booked Tests */}
                   {data.bookedTests.length > 0 && (
@@ -270,7 +270,7 @@ export default function ClientPDATestsPage() {
                   {data.canAddTest && (
                     <div>
                       <Link
-                        href={`/client-dashboard/pda-tests/book?providerId=${data.provider.id}`}
+                        href={`/client-dashboard/pda-tests/book?providerId=${data.provider?.id ?? ''}`}
                         className="inline-flex items-center gap-2 bg-primary text-foreground px-6 py-3 rounded-lg font-semibold hover:bg-primary/90 transition"
                       >
                         <Plus className="w-5 h-5" />
