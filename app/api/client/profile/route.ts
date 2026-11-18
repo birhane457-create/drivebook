@@ -2,6 +2,7 @@
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { getProfileBookingCounts } from '@/lib/services/profile-counts';
 
 
 export const dynamic = 'force-dynamic';
@@ -198,26 +199,9 @@ export async function GET(req: NextRequest) {
         hasMore: page < Math.ceil(total / limit),
       },
       // CP-07 FIX: derive counts from the full dataset, independent of the
-      // current page.  Business definitions preserved from the original code:
-      //   upcomingCount — CONFIRMED with endTime null or in the future
-      //   pastCount     — COMPLETED or NO_SHOW, plus CONFIRMED whose endTime
-      //                   has already passed (cron hasn't flipped them yet)
-      upcomingCount: await prisma.booking.count({
-        where: {
-          customerId: { in: clientIds },
-          status: 'CONFIRMED',
-          OR: [{ endTime: null }, { endTime: { gt: now } }],
-        },
-      }),
-      pastCount: await prisma.booking.count({
-        where: {
-          customerId: { in: clientIds },
-          OR: [
-            { status: { in: ['COMPLETED', 'NO_SHOW'] } },
-            { status: 'CONFIRMED', endTime: { not: null, lte: now } },
-          ],
-        },
-      }),
+      // current page.  Business definitions preserved from the original code.
+      // Queries live in lib/services/profile-counts.ts (shared with tests).
+      ...await getProfileBookingCounts(clientIds, now),
     });
 
   } catch (error) {

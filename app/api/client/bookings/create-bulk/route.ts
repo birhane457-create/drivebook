@@ -260,7 +260,7 @@ export async function POST(request: NextRequest) {
         isolationLevel: 'Serializable',
         timeout: 15000,
       }),
-      prisma,
+      { operationName: 'client-wallet-bulk-booking', maxRetries: 2 },
     );
 
     // Post-transaction: FinancialLedger entries per booking (non-critical)
