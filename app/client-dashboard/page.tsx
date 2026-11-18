@@ -680,13 +680,13 @@ export default function ClientDashboard() {
                                 onClick={() => setRescheduleModal({
                                   isOpen: true,
                                   bookingId: booking.id,
-                                  providerId: booking.provider?.id,
+                                  providerId: booking.provider?.id ?? '',
                                   date: booking.date,
                                   time: booking.time,
                                   duration: booking.duration * 60,
-                                  price: booking.price,
+                                  price: Number(booking.price || 0),
                                   instructor: booking.provider?.name || 'Unknown Instructor',
-                                  hourlyRate: booking.provider?.hourlyRate
+                                  hourlyRate: booking.provider?.hourlyRate ?? 0
                                 })}
                                 className="px-2 py-1 md:px-3 md:py-2 text-blue-400 border border-blue-600/60 rounded-lg hover:bg-blue-900/20 transition text-sm font-semibold flex items-center gap-1"
                               >
@@ -699,7 +699,7 @@ export default function ClientDashboard() {
                                   bookingId: booking.id,
                                   date: booking.date,
                                   instructor: booking.provider?.name || 'Unknown Instructor',
-                                  price: booking.price
+                                  price: Number(booking.price || 0)
                                 })}
                                 className="px-2 py-1 md:px-3 md:py-2 text-red-400 border border-red-600/60 rounded-lg hover:bg-red-900/20 transition text-sm font-semibold"
                               >
@@ -789,13 +789,13 @@ export default function ClientDashboard() {
                                 onClick={() => setRescheduleModal({
                                   isOpen: true,
                                   bookingId: booking.id,
-                                  providerId: booking.provider?.id,
+                                  providerId: booking.provider?.id ?? '',
                                   date: booking.date,
                                   time: booking.time,
                                   duration: booking.duration * 60,
-                                  price: booking.price,
+                                  price: Number(booking.price || 0),
                                   instructor: booking.provider?.name || 'Unknown Instructor',
-                                  hourlyRate: booking.provider?.hourlyRate
+                                  hourlyRate: booking.provider?.hourlyRate ?? 0
                                 })}
                                 className="px-3 py-1.5 text-blue-400 border border-blue-600/60 rounded-lg hover:bg-blue-900/20 transition text-sm font-semibold flex items-center gap-1 w-full justify-center"
                               >
@@ -808,7 +808,7 @@ export default function ClientDashboard() {
                                   bookingId: booking.id,
                                   date: booking.date,
                                   instructor: booking.provider?.name || 'Unknown Instructor',
-                                  price: booking.price
+                                  price: Number(booking.price || 0)
                                 })}
                                 className="px-3 py-1.5 text-red-400 border border-red-600/60 rounded-lg hover:bg-red-900/20 transition text-sm font-semibold w-full justify-center flex items-center gap-1"
                               >
