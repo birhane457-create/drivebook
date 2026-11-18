@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
@@ -223,7 +223,7 @@ export default function ClientBookingsPage() {
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="font-bold text-slate-50">${booking.price.toFixed(2)}</p>
+                      <p className="font-bold text-slate-50">${Number(booking.price || 0).toFixed(2)}</p>
                       {booking.date && (
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {new Date(booking.date).toLocaleDateString('en-AU', {
