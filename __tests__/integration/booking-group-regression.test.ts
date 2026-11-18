@@ -392,6 +392,49 @@ describe('PH5-SCH-37: Replay scope', () => {
     await cleanupBookings()
   })
 
+  it('R12: same key + different scheduled slot date → 409', async () => {
+    const idemKey = `${TEST_PREFIX}_R12`
+    await cleanupByIdemKey(idemKey)
+
+    const r1 = await sendBooking(bookNowRequest(idemKey), idemKey)
+    expect(r1.status).toBe(201)
+
+    // Same provider+hours+packageType+bookingType, different date
+    const r2 = await sendBooking(
+      bookNowRequest(idemKey, {
+        scheduledBookings: [{ date: '2027-09-15', time: '10:00', duration: 60, pickupLocation: '', notes: '' }],
+      }),
+      idemKey
+    )
+    expect(r2.status).toBe(409)
+    expect(r2.body.error).toContain('original booking request')
+    console.log('R12: Different scheduled date correctly rejected with 409 — PASS')
+
+    await cleanupByIdemKey(idemKey)
+    await cleanupBookings()
+  })
+
+  it('R13: same key + different scheduled slot time → 409', async () => {
+    const idemKey = `${TEST_PREFIX}_R13`
+    await cleanupByIdemKey(idemKey)
+
+    const r1 = await sendBooking(bookNowRequest(idemKey), idemKey)
+    expect(r1.status).toBe(201)
+
+    // Same date, different time
+    const r2 = await sendBooking(
+      bookNowRequest(idemKey, {
+        scheduledBookings: [{ date: '2027-08-10', time: '14:00', duration: 60, pickupLocation: '', notes: '' }],
+      }),
+      idemKey
+    )
+    expect(r2.status).toBe(409)
+    console.log('R13: Different scheduled time correctly rejected with 409 — PASS')
+
+    await cleanupByIdemKey(idemKey)
+    await cleanupBookings()
+  })
+
   it('R10: original used instructorQuery → replay with same query succeeds', async () => {
     const idemKey = `${TEST_PREFIX}_R10`
     await cleanupByIdemKey(idemKey)

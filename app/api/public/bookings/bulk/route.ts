@@ -67,6 +67,33 @@ const bulkBookingSchema = z.object({
   message: 'Either providerId or instructorQuery must be provided',
 });
 
+// PH5-SCH-37: Canonical request fingerprint for idempotency replay validation.
+// Covers all material booking parameters including scheduled slots.
+// JSON.stringify with sorted keys ensures equivalent requests produce the same string.
+function buildRequestFingerprint(data: {
+  providerId?: string;
+  instructorQuery?: string;
+  packageType: string;
+  hours: number;
+  bookingType: string;
+  scheduledBookings?: Array<{ date: string; time: string; duration: number }>;
+}): string {
+  const slots = (data.scheduledBookings ?? []).map(s => ({
+    date: s.date,
+    time: s.time,
+    duration: s.duration,
+  })).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  const canonical = {
+    providerId:      data.providerId      ?? null,
+    instructorQuery: data.instructorQuery ?? null,
+    packageType:     data.packageType,
+    hours:           data.hours,
+    bookingType:     data.bookingType,
+    slots,
+  };
+  return JSON.stringify(canonical);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const rawBody = await req.json();
@@ -137,42 +164,46 @@ export async function POST(req: NextRequest) {
         if (existing.email !== data.accountHolderEmail) {
           return NextResponse.json({ error: 'Idempotency-Key does not match account' }, { status: 409 });
         }
-        // PH5-SCH-37 FIX: Validate that the replay request matches the original booking parameters.
-        // We compare the stored identifiers against the current request to prevent the
-        // paymentToken URL from being delivered to a different booking context.
+        // PH5-SCH-37 FIX (complete): Compare a canonical request fingerprint stored at
+        // booking time against the current request. This catches changed scheduled slots,
+        // provider swaps, hour changes, package type changes, and booking type changes.
         //
-        // Provider identity: a request may supply either providerId OR instructorQuery.
-        // We store both in the response. On replay, we check whichever was originally supplied:
-        // - If the original used providerId: compare storedProvider to data.providerId.
-        //   If data.providerId is absent but data.instructorQuery is present, skip the check
-        //   (the provider will be re-resolved to the same ID during replay if the query matches).
-        // - storedQuery is only stored when instructorQuery was used originally.
-        const storedProvider  = (existing.response as any)?.providerId as string | undefined;
-        const storedQuery     = (existing.response as any)?.instructorQuery as string | undefined;
-        const storedHours     = (existing.response as any)?.hours;
-        const storedPkgType   = (existing.response as any)?.packageType as string | undefined;
-        const storedBookType  = (existing.response as any)?.bookingType as string | undefined;
+        // The fingerprint is a JSON-stable string of all material booking parameters.
+        // It is stored in the response under the key _reqFingerprint.
+        //
+        // If no fingerprint is stored (legacy records before this fix), fall back to
+        // the per-field checks for backward compatibility.
+        const storedFingerprint = (existing.response as any)?._reqFingerprint as string | undefined;
 
-        // Provider check: only enforce when the original used an explicit providerId
-        // AND the current request also supplies a providerId.
-        if (storedProvider && data.providerId && storedProvider !== data.providerId) {
-          return NextResponse.json({ error: 'Idempotency-Key does not match provider' }, { status: 409 });
-        }
+        if (storedFingerprint) {
+          // Build the same fingerprint from the current request and compare
+          const currentFingerprint = buildRequestFingerprint(data);
+          if (currentFingerprint !== storedFingerprint) {
+            return NextResponse.json({ error: 'Idempotency-Key does not match original booking request' }, { status: 409 });
+          }
+        } else {
+          // Legacy fallback: per-field checks for records written before fingerprint was added
+          const storedProvider  = (existing.response as any)?.providerId as string | undefined;
+          const storedQuery     = (existing.response as any)?.instructorQuery as string | undefined;
+          const storedHours     = (existing.response as any)?.hours;
+          const storedPkgType   = (existing.response as any)?.packageType as string | undefined;
+          const storedBookType  = (existing.response as any)?.bookingType as string | undefined;
 
-        // instructorQuery check: if original was query-based, enforce query identity
-        if (storedQuery && data.instructorQuery && storedQuery !== data.instructorQuery) {
-          return NextResponse.json({ error: 'Idempotency-Key does not match instructor query' }, { status: 409 });
-        }
-
-        // Material booking parameters
-        if (storedHours !== undefined && storedHours !== null && storedHours !== data.hours) {
-          return NextResponse.json({ error: 'Idempotency-Key does not match booking hours' }, { status: 409 });
-        }
-        if (storedPkgType && storedPkgType !== data.packageType) {
-          return NextResponse.json({ error: 'Idempotency-Key does not match package type' }, { status: 409 });
-        }
-        if (storedBookType && storedBookType !== data.bookingType) {
-          return NextResponse.json({ error: 'Idempotency-Key does not match booking type' }, { status: 409 });
+          if (storedProvider && data.providerId && storedProvider !== data.providerId) {
+            return NextResponse.json({ error: 'Idempotency-Key does not match provider' }, { status: 409 });
+          }
+          if (storedQuery && data.instructorQuery && storedQuery !== data.instructorQuery) {
+            return NextResponse.json({ error: 'Idempotency-Key does not match instructor query' }, { status: 409 });
+          }
+          if (storedHours !== undefined && storedHours !== null && storedHours !== data.hours) {
+            return NextResponse.json({ error: 'Idempotency-Key does not match booking hours' }, { status: 409 });
+          }
+          if (storedPkgType && storedPkgType !== data.packageType) {
+            return NextResponse.json({ error: 'Idempotency-Key does not match package type' }, { status: 409 });
+          }
+          if (storedBookType && storedBookType !== data.bookingType) {
+            return NextResponse.json({ error: 'Idempotency-Key does not match booking type' }, { status: 409 });
+          }
         }
 
         return NextResponse.json(existing.response, { status: 201 });
@@ -729,6 +760,7 @@ export async function POST(req: NextRequest) {
             hours: data.hours ?? null,
             packageType: data.packageType,
             bookingType: data.bookingType,
+            _reqFingerprint: buildRequestFingerprint(data),
             ...(data.instructorQuery ? { instructorQuery: data.instructorQuery } : {}),
           };
           await (prisma as any).bookingIdempotencyKey.upsert({
@@ -928,6 +960,7 @@ export async function POST(req: NextRequest) {
             ...(checkoutUrl ? { checkoutUrl } : {}),
             providerId: resolvedInstructorId,
             hours: data.hours ?? null,
+            _reqFingerprint: buildRequestFingerprint(data),
             packageType: data.packageType,
             bookingType: data.bookingType,
             ...(data.instructorQuery ? { instructorQuery: data.instructorQuery } : {}),
@@ -959,11 +992,22 @@ export async function POST(req: NextRequest) {
       if (err.code === 'P2002') {
         // PH5-SCH-30 FIX: idempotency key create threw P2002 — another request won the race.
         // The transaction was aborted before any Booking was created.
-        // Verify this P2002 is from the idempotency key constraint (not an unrelated constraint).
+        // Prisma 5.22.0 P2002 meta.target can be:
+        //   - ['BookingIdempotencyKey_pkey'] — constraint name (most common)
+        //   - 'BookingIdempotencyKey_pkey' — constraint name as string
+        //   - ['key'] — field name (also observed in some Prisma/connector versions)
+        //   - 'key' — field name as string
+        // Accept all of these as evidence that the idempotency key constraint fired.
         const target = err.meta?.target as string[] | string | undefined;
         const targetStr = Array.isArray(target) ? target.join(',') : (target ?? '');
-        const isIdempKey = targetStr === 'BookingIdempotencyKey_pkey' || targetStr === 'BookingIdempotencyKey_key';
+        const isIdempKey = targetStr === 'BookingIdempotencyKey_pkey' ||
+          targetStr === 'BookingIdempotencyKey_key' ||
+          targetStr === 'key' ||
+          targetStr.includes('BookingIdempotencyKey');
         if (isIdempKey && idempotencyKey) {
+          logger.info('P2002 on BookingIdempotencyKey — concurrent duplicate caught', {
+            targetStr, idempotencyKey: idempotencyKey.substring(0, 20) + '...',
+          });
           const stored = await (prisma as any).bookingIdempotencyKey.findUnique({
             where: { key: idempotencyKey },
           });
