@@ -1,7 +1,7 @@
-# Client Portal Audit — Phase 6
+﻿# Client Portal Audit — Phase 6
 
 **Version:** 1.0  
-**Status:** FINDINGS REGISTERED — runtime verification outstanding  
+**Status:** FIX-IMPLEMENTED — all 7 findings fixed in ec380043 (2026-11-18); runtime verification pending  
 **Auditor:** Independent source inspection  
 **Baseline commit:** 4dbf4e54 (after runtime error fixes)  
 **Audit rules:** docs/audit/AUDIT-PROCESS.md  
@@ -53,7 +53,7 @@ where: clientIds.length > 0
 
 **Fix direction:** When `clientIds` is empty, return an empty booking list rather than querying for `customerId: null`.
 
-**Status:** FINDING — source confirmed; not yet reproduced against test database with two accounts
+**Status:** FIX-IMPLEMENTED (`ec380043`) — runtime verification pending
 
 ---
 
@@ -72,7 +72,7 @@ where: clientIds.length > 0
 
 **Fix direction:** Use `Number(t.amount)` or Decimal arithmetic (`new Decimal(s).add(t.amount)`) consistently.
 
-**Status:** FINDING — source and JavaScript semantics confirmed; runtime test needed
+**Status:** FIX-IMPLEMENTED (`ec380043`) — runtime verification pending
 
 ---
 
@@ -93,7 +93,7 @@ Two simultaneous booking requests can both pass the same initial balance check a
 
 **Fix direction:** Read and lock the wallet balance inside the transaction, or use a conditional `updateMany` that fails if balance is insufficient (compare with the SUB-22 `updateMany` count-check pattern).
 
-**Status:** FINDING — source confirmed; concurrent test needed
+**Status:** FIX-IMPLEMENTED (`ec380043`) — runtime verification pending
 
 ---
 
@@ -117,7 +117,7 @@ The wallet booking route creates immediately confirmed, paid bookings without an
 
 **Fix direction:** Call `checkProviderEligible()` before creating the booking, identical to the pattern in the combined booking route.
 
-**Status:** FINDING — source confirmed
+**Status:** FIX-IMPLEMENTED (`ec380043`) — runtime verification pending
 
 ---
 
@@ -136,7 +136,7 @@ return new Date(year, month - 1, day, hour, minute);
 
 **Fix direction:** Use the instructor's timezone (available on the Provider record) with a timezone-aware conversion, following the pattern in `localDateTimeToUTC()` already used in the Book Now route.
 
-**Status:** FINDING — source confirmed; runtime reproduction needed to quantify production impact
+**Status:** FIX-IMPLEMENTED (`ec380043`) — runtime verification pending; runtime reproduction needed to quantify production impact
 
 ---
 
@@ -157,7 +157,7 @@ The API returns `customerRating` as the review comment instead of `customerRevie
 
 **Fix direction:** Replace `reviewComment` with `customerReview` on the write path. Return `customerReview` (not `customerRating`) on the read path.
 
-**Status:** FINDING — source confirmed; test submission needed to confirm runtime failure
+**Status:** FIX-IMPLEMENTED (`ec380043`) — runtime verification pending; test submission needed to confirm runtime failure
 
 ---
 
@@ -172,7 +172,7 @@ The endpoint paginates bookings first (e.g. 10 per page), then calculates `upcom
 
 **Fix direction:** Use separate `prisma.booking.count()` calls for upcoming and past totals, independent of the pagination query.
 
-**Status:** FINDING — source confirmed
+**Status:** FIX-IMPLEMENTED (`ec380043`) — runtime verification pending
 
 ---
 

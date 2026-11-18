@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.74 (Section 14 — Client Portal Audit findings registered)
-**Last Updated:** 2026-11-18 (v6.74)
+**Version:** 6.75 (Section 14 — Client Portal Audit findings registered)
+**Last Updated:** 2026-11-18 (v6.75 — CP-01..07 FIX-IMPLEMENTED ec380043)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1160,52 +1160,35 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 ---
 
 ## Section 14 — Phase 6: Client Portal Audit
-
-**Version:** 1.0
+**Version:** 1.1
 **Started:** 2026-11-18
-**Status:** FINDINGS REGISTERED — source-level only; runtime verification outstanding
+**Status:** FIX-IMPLEMENTED — all 7 findings fixed in ec380043; runtime verification pending
 **Audit document:** `docs/audit/CLIENT-PORTAL-AUDIT.md`
 **Baseline commit:** 4dbf4e54
-**Methodology:** Independent source inspection of all client portal routes and pages. No code changes made during this pass.
+**Fix commit:** `ec380043`
 
-### 14.1 — Finding Summary
+### 14.1 — Finding Register
 
-| ID | Risk | Title | Status |
-|-----|------|-------|--------|
-| CP-01 | HIGH | Cross-account booking disclosure via null customerId fallback | FINDING — source confirmed |
-| CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | FINDING — source confirmed |
-| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | FINDING — source confirmed |
-| CP-04 | HIGH | Missing instructor eligibility gate in wallet booking route | FINDING — source confirmed |
-| CP-05 | HIGH | Instructor timezone conversion uses server timezone | FINDING — source confirmed; runtime pending |
-| CP-06 | MEDIUM | Review persistence and display mismatch | FINDING — source confirmed |
-| CP-07 | LOW | Paginated profile endpoint returns incorrect booking counts | FINDING — source confirmed |
+| ID | Risk | Title | Fix | Fix-Verified | Status |
+|-----|------|-------|-----|-------------|--------|
+| CP-01 | HIGH | Cross-account booking disclosure via null customerId fallback | `ec380043` | PENDING | OPEN |
+| CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | `ec380043` | PENDING | OPEN |
+| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `ec380043` | PENDING | OPEN |
+| CP-04 | HIGH | Missing instructor eligibility gate in wallet booking route | `ec380043` | PENDING | OPEN |
+| CP-05 | HIGH | Instructor timezone conversion uses server timezone | `ec380043` | PENDING | OPEN |
+| CP-06 | MEDIUM | Review persistence and display mismatch | `ec380043` | PENDING | OPEN |
+| CP-07 | LOW | Paginated profile endpoint returns incorrect booking counts | `ec380043` | PENDING | OPEN |
 
 **Total: 5 HIGH, 1 MEDIUM, 1 LOW — 7 findings**
 
-### 14.2 — Remediation Order
+### 14.2 — Verification Requirements
 
-| Priority | ID | Work |
-|----------|-----|------|
-| 1 | CP-01 | Fix null customerId fallback — return empty list when no customer records |
-| 1 | CP-02 | Fix Decimal wallet arithmetic — use Number() or Decimal.add() |
-| 1 | CP-03 | Fix concurrent wallet spending — recheck balance inside transaction |
-| 1 | CP-04 | Add checkProviderEligible() to wallet booking route |
-| 2 | CP-05 | Fix timezone — use instructor timezone with localDateTimeToUTC() |
-| 2 | CP-06 | Fix reviewComment → customerReview write and read |
-| 3 | CP-07 | Fix booking counts — separate count() queries independent of pagination |
-
-### 14.3 — Verification Requirements
-
-None completed. All findings are source-level only.
-Runtime verification requirements are documented in CLIENT-PORTAL-AUDIT.md.
-
-### 14.4 — Note on Existing Protections
-
-The audit confirmed correct data isolation in: booking detail, rescheduling,
-cancellation, wallet top-up, notifications, packages and price recalculation.
-These must be preserved during remediation.
-
----
-
-**Section 14 last updated:** 2026-11-18 (4dbf4e54)
-**Master Tracker version:** v6.74
+| ID | Required test |
+|----|--------------|
+| CP-01 | Two-account test: account with no customer record cannot read bookings belonging to another account |
+| CP-02 | Wallet with multiple Decimal credits — verify balance is numeric not string-concatenated |
+| CP-03 | Concurrent booking requests against same wallet — verify only bookings within balance are confirmed |
+| CP-04 | Booking attempt against suspended/inactive instructor — verify 403 rejection |
+| CP-05 | Perth timezone: submit 9:00 AM Perth — verify stored UTC is 01:00 not 09:00 |
+| CP-06 | Submit review with comment — verify customerReview written and read back as text not number |
+| CP-07 | Account with >10 bookings — verify upcomingCount/pastCount reflect full dataset not current page |
