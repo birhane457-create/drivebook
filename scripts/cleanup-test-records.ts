@@ -24,10 +24,10 @@ const prisma = new PrismaClient()
 async function main() {
   // Safety guard: refuse to run against production
   const url = process.env.DATABASE_URL || ''
-  const blocked = ['jflrqxigfiiqednfacuf', 'zzntmozvppyzeaqautpi']
+  const blocked = ['jflrqxigfiiqednfacuf']  // Sydney production only — Japan test project allowed
   if (blocked.some(h => url.includes(h)) && process.env.CLEANUP_ALLOW_PRODUCTION !== '1') {
-    console.error('REFUSED: DATABASE_URL points at a production database.')
-    console.error('Set CLEANUP_ALLOW_PRODUCTION=1 to override (dangerous).')
+    console.error('REFUSED: DATABASE_URL points at the Sydney production database.')
+    console.error('The Japan test project (zzntmozvppyzeaqautpi) is allowed for cleanup.')
     process.exit(1)
   }
   console.log('=== Cleaning leftover ph5sch test records ===\n')

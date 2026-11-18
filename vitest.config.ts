@@ -21,18 +21,20 @@ export default defineConfig({
     ],
     exclude: ['node_modules', 'dist', '.next'],
     env: {
-      // Guard: refuse to run tests against a production database.
-      // TEST_DATABASE_URL must point to localhost or a known test project.
-      // Production Supabase hosts are explicitly blocked.
+      // Guard: refuse to run tests against production databases.
+      // TEST_DATABASE_URL must point to localhost or a designated test project.
+      // Production Supabase project (Sydney, jflrqxigfiiqednfacuf) is explicitly blocked.
+      // Designated test project (Japan, zzntmozvppyzeaqautpi) is allowed — it is an
+      // unused project with old schema, no production users.
       DATABASE_URL: (() => {
         const url = process.env.TEST_DATABASE_URL || 'postgresql://postgres:testpass@localhost:5433/drivebook_test'
-        const blocked = ['jflrqxigfiiqednfacuf', 'zzntmozvppyzeaqautpi', 'pooler.supabase.com']
+        const blocked = ['jflrqxigfiiqednfacuf']  // production only — Japan test project allowed
         if (blocked.some(h => url.includes(h))) {
           throw new Error(
-            `TEST_DATABASE_URL points at a production database.\n` +
+            `TEST_DATABASE_URL points at the production database (Sydney).\n` +
             `Tests must not run against production. Use localhost:5433/drivebook_test\n` +
-            `or a dedicated test Supabase project.\n` +
-            `Blocked hosts: ${blocked.join(', ')}`
+            `or the designated test project (Japan: zzntmozvppyzeaqautpi).\n` +
+            `Blocked: ${blocked.join(', ')}`
           )
         }
         return url

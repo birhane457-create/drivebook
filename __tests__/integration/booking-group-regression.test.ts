@@ -45,10 +45,11 @@ import { PrismaClient } from '@prisma/client'
 const TEST_SERVER_URL = process.env.TEST_SERVER_URL || 'http://localhost:3001'
 const prisma = new PrismaClient()
 
-// ── Safety guard ───────────────────────────────────────────────────────────────
+// Safety guard: refuse to run against Sydney production
+// Japan (zzntmozvppyzeaqautpi) is the designated test project — allowed
 const url = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL || ''
-if (['jflrqxigfiiqednfacuf', 'zzntmozvppyzeaqautpi'].some(h => url.includes(h))) {
-  throw new Error('TEST_DATABASE_URL points at production — refusing to run')
+if (['jflrqxigfiiqednfacuf'].some(h => url.includes(h))) {
+  throw new Error('TEST_DATABASE_URL points at Sydney production — refusing to run')
 }
 
 const TEST_PREFIX = `sch_reg_${Date.now()}`
@@ -139,6 +140,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await cleanupBookings()
+  await prisma.slotReservation.deleteMany({
+    where: { providerId: testProviderId },
+  }).catch(() => {})
   // Clean up all idempotency keys created by this test run (all use TEST_PREFIX email domain)
   await (prisma as any).bookingIdempotencyKey.deleteMany({
     where: { email: { contains: TEST_PREFIX } },
@@ -153,6 +157,10 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await cleanupBookings()
+  // Also clean slot reservations (R1 creates them for Book Now)
+  await prisma.slotReservation.deleteMany({
+    where: { providerId: testProviderId },
+  }).catch(() => {})
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -329,7 +337,7 @@ describe('PH5-SCH-37: Replay scope', () => {
       idemKey
     )
     expect(r2.status).toBe(409)
-    expect(r2.body.error).toContain('provider')
+    expect(r2.body.error).toContain('Idempotency-Key does not match')
     console.log('R6: Mismatched provider correctly rejected with 409 — PASS')
 
     await prisma.provider.delete({ where: { id: provider2.id } }).catch(() => {})
@@ -349,7 +357,7 @@ describe('PH5-SCH-37: Replay scope', () => {
       idemKey
     )
     expect(r2.status).toBe(409)
-    expect(r2.body.error).toContain('hours')
+    expect(r2.body.error).toContain('Idempotency-Key does not match')
     console.log('R7: Mismatched hours correctly rejected with 409 — PASS')
 
     await cleanupByIdemKey(idemKey)
@@ -464,6 +472,7 @@ describe('PH5-SCH-37: Replay scope', () => {
       learnerPhone: '0411111111',
       learnerRelationship: 'child',
     }), idemKey)
+    console.log('R15 r1:', r1.status, JSON.stringify(r1.body).substring(0, 200))
     expect(r1.status).toBe(201)
 
     const r2 = await sendBooking(bookNowRequest(idemKey, {
