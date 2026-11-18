@@ -44,18 +44,32 @@ export async function GET(req: NextRequest) {
     // Collect all client IDs linked to this user
     const clientIds = (user as any).customers.map((c: any) => c.id);
 
+    // CP-01 FIX: when the user has no linked Customer records, return empty
+    // rather than querying { customerId: null } which would disclose
+    // offline bookings belonging to other accounts.
+    if (clientIds.length === 0) {
+      return NextResponse.json({
+        user: {
+          name: user.name || user.email.split('@')[0],
+          email: user.email,
+          phone: '',
+          address: ''
+        },
+        bookings: [],
+        pagination: { page, limit, total: 0, pages: 0, hasMore: false },
+        upcomingCount: 0,
+        pastCount: 0,
+      });
+    }
+
     // Get total count
     const total = await prisma.booking.count({
-      where: clientIds.length > 0
-        ? { customerId: { in: clientIds } }
-        : { customerId: null },
+      where: { customerId: { in: clientIds } },
     })
 
     // Get user's bookings via customerId only
     const bookingsRaw = await prisma.booking.findMany({
-      where: clientIds.length > 0
-        ? { customerId: { in: clientIds } }
-        : { customerId: null }, // Return empty if no client IDs
+      where: { customerId: { in: clientIds } },
       include: {
         provider: {
           select: {
@@ -183,14 +197,20 @@ export async function GET(req: NextRequest) {
         pages: Math.ceil(total / limit),
         hasMore: page < Math.ceil(total / limit),
       },
-      upcomingCount: activeBookings.filter((b: any) => {
-        if (!b.startTime) return false;
-        return (b.status === 'CONFIRMED') && (!b.endTime || b.endTime > now);
-      }).length,
-      pastCount: activeBookings.filter((b: any) => {
-        return b.status === 'COMPLETED' || b.status === 'NO_SHOW' ||
-          (b.status === 'CONFIRMED' && b.endTime != null && b.endTime <= now);
-      }).length
+      // CP-07 FIX: derive counts from full dataset, not the current page.
+      upcomingCount: await prisma.booking.count({
+        where: {
+          customerId: { in: clientIds },
+          status: 'CONFIRMED',
+          OR: [{ endTime: null }, { endTime: { gt: now } }],
+        },
+      }),
+      pastCount: await prisma.booking.count({
+        where: {
+          customerId: { in: clientIds },
+          status: { in: ['COMPLETED', 'NO_SHOW'] },
+        },
+      }),
     });
 
   } catch (error) {

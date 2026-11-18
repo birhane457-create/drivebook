@@ -1,4 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -7,6 +8,8 @@ import { bulkBookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/
 import { paymentService } from '@/lib/services/payment';
 import { notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
 import { sendWalletLessonReceipt } from '@/lib/services/receipt-email';
+import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
+import { localDateTimeToUTC, resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,11 +28,9 @@ const requestSchema = z.object({
   cart: z.array(cartItemSchema).min(1).max(10)
 });
 
-function parseDateTime(dateStr: string, timeStr: string) {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const [hour, minute] = timeStr.split(':').map(Number);
-  return new Date(year, month - 1, day, hour, minute);
-}
+// CP-05 FIX: parseDateTime removed — localDateTimeToUTC() is used instead,
+// passing the instructor's timezone so that "9:00 AM Perth" is stored as
+// 01:00 UTC, not misinterpreted as 09:00 UTC (server local time).
 
 export async function POST(request: NextRequest) {
   try {
@@ -84,22 +85,34 @@ export async function POST(request: NextRequest) {
     // "Book later" wallet funds are NOT rate-locked at purchase time.
     // Each lesson is priced at the instructor's CURRENT hourlyRate at booking time.
     // Client-submitted prices are ignored entirely.
+    // CP-04 + CP-05 FIX: check provider eligibility (approval/active/subscription/docs)
+    // and capture timezone for correct UTC conversion of submitted local times.
     const providerIds = [...new Set(cartItems.map((i: any) => i.providerId))];
-    const instructors = await prisma.provider.findMany({
-      where: { id: { in: providerIds } },
-      select: { id: true, userId: true, hourlyRate: true }
-    });
-    const instructorMap = new Map(instructors.map((i: any) => [i.id, i]));
+    const eligibilityMap = new Map<string, { hourlyRate: number; timezone: string; userId: string | null }>();
+
+    for (const pid of providerIds) {
+      const eligible = await checkProviderEligible(pid, prisma);
+      if (!eligible.allowed) {
+        return NextResponse.json({ error: eligible.error, code: eligible.code }, { status: eligible.status });
+      }
+      const tz = eligible.provider.timezone
+        ? resolveTimezone(eligible.provider.timezone)
+        : (eligible.provider.state ? resolveTimezone(eligible.provider.state) : DEFAULT_TIMEZONE);
+      eligibilityMap.set(pid, {
+        hourlyRate: eligible.provider.hourlyRate,
+        timezone: tz,
+        userId: eligible.provider.userId,
+      });
+    }
 
     const recalculatedItems = cartItems.map(item => {
-      const instructor = instructorMap.get(item.providerId);
-      if (!instructor) throw new Error(`Instructor not found: ${item.providerId}`);
-      // price = current hourlyRate Ã— duration (hours) â€” rate NOT locked at wallet purchase
-      const serverPrice = parseFloat((instructor.hourlyRate * item.duration).toFixed(2));
+      const info = eligibilityMap.get(item.providerId)!;
+      // price = current hourlyRate x duration (hours) - rate NOT locked at wallet purchase
+      const serverPrice = parseFloat((info.hourlyRate * item.duration).toFixed(2));
       return { ...item, price: serverPrice };
     });
 
-    const totalCost = recalculatedItems.reduce((s: any, it: any) => s + it.price, 0);
+    const totalCost = recalculatedItems.reduce((s: number, it: any) => s + it.price, 0);
 
     // â”€â”€ Wallet balance check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const wallet = await prisma.clientWallet.findUnique({
@@ -111,8 +124,10 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const totalCredits = wallet.transactions
       .filter(t => t.type.toUpperCase() === 'CREDIT' && (!(t as any).expiresAt || new Date((t as any).expiresAt) >= now))
-      .reduce((s: any, t: any) => s + t.amount, 0);
-    const totalDebits = wallet.transactions.filter(t => t.type.toUpperCase() === 'DEBIT').reduce((s: any, t: any) => s + Math.abs(t.amount), 0);
+      .reduce((s: number, t: any) => s + Number(t.amount), 0);  // CP-02 FIX: Number() converts Prisma Decimal to number
+    const totalDebits = wallet.transactions
+      .filter(t => t.type.toUpperCase() === 'DEBIT')
+      .reduce((s: number, t: any) => s + Math.abs(Number(t.amount)), 0);  // CP-02 FIX: same
     const actualBalance = totalCredits - totalDebits;
 
     if (actualBalance < totalCost) {
@@ -132,10 +147,42 @@ export async function POST(request: NextRequest) {
     const result = await prisma.$transaction(async (tx) => {
       const created: any[] = [];
 
+      // CP-03 FIX: atomic conditional debit — only succeeds when DB balance >= totalCost.
+      // If a concurrent request already drained the wallet, count=0 and we throw,
+      // rolling back all bookings created in this transaction.
+      const walletDebit = await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: 'DEBIT',
+          amount: totalCost,
+          description: `Booked ${recalculatedItems.length} lesson${recalculatedItems.length > 1 ? 's' : ''}`,
+          status: 'CONFIRMED',
+        }
+      });
+      // Re-read confirmed credits and debits inside the transaction
+      const walletCheck = await tx.clientWallet.findUnique({
+        where: { userId: user.id },
+        include: { transactions: { where: { status: 'CONFIRMED' } } }
+      });
+      if (walletCheck) {
+        const nowInner = new Date();
+        const creditsInner = walletCheck.transactions
+          .filter((t: any) => t.type.toUpperCase() === 'CREDIT' && (!t.expiresAt || new Date(t.expiresAt) >= nowInner))
+          .reduce((s: number, t: any) => s + Number(t.amount), 0);
+        const debitsInner = walletCheck.transactions
+          .filter((t: any) => t.type.toUpperCase() === 'DEBIT')
+          .reduce((s: number, t: any) => s + Math.abs(Number(t.amount)), 0);
+        if (creditsInner - debitsInner < 0) {
+          throw new Error('Insufficient credits — concurrent booking detected');
+        }
+      }
+
+
       for (let i = 0; i < recalculatedItems.length; i++) {
         const item = recalculatedItems[i];
         const commission = commissions[i];
-        const startTime = parseDateTime(item.date, item.time);
+        // CP-05 FIX: use instructor timezone so "9:00 AM Perth" stores as 01:00 UTC, not 09:00 UTC
+        const startTime = localDateTimeToUTC(item.date, item.time, eligibilityMap.get(item.providerId)!.timezone);
         const endTime = new Date(startTime.getTime() + item.duration * 60 * 60 * 1000);
 
         // Conflict check inside transaction (atomic slot claim)
@@ -179,22 +226,13 @@ export async function POST(request: NextRequest) {
         created.push({
           booking,
           instructorName: item.instructorName,
-          instructorUserId: instructorMap.get(item.providerId)?.userId,
+          instructorUserId: eligibilityMap.get(item.providerId)?.userId,
           clientUserId: user.id,
           commission,
         });
       }
 
-      // Debit wallet using server-calculated total
-      await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: 'DEBIT',
-          amount: totalCost,
-          description: `Booked ${recalculatedItems.length} lesson${recalculatedItems.length > 1 ? 's' : ''}`,
-          status: 'CONFIRMED',
-        }
-      });
+
 
       return { created, totalCost, remaining: actualBalance - totalCost };
     }, {

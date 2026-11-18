@@ -57,6 +57,7 @@ export async function GET(req: NextRequest) {
         select: {
           id: true,
           customerRating: true,
+          customerReview: true,   // CP-06 FIX: include the text field
           reviewGivenAt: true,
           customerName: true,
           startTime: true,
@@ -67,7 +68,7 @@ export async function GET(req: NextRequest) {
       const reviews = reviewedBookings.map((b: any) => ({
         id: b.id,
         rating: b.customerRating,
-        comment: b.customerRating,
+        comment: b.customerReview,   // CP-06 FIX: was incorrectly returning customerRating (the number)
         reviewedAt: b.reviewGivenAt,
         // Mask to first name + last initial for privacy — public endpoint, no auth required
         customerName: b.customerName
@@ -122,6 +123,7 @@ export async function GET(req: NextRequest) {
       select: {
         id: true,
         customerRating: true,
+        customerReview: true,   // CP-06 FIX: include text field
         reviewGivenAt: true,
         startTime: true,
         provider: { select: { name: true } },
@@ -133,7 +135,7 @@ export async function GET(req: NextRequest) {
       id: b.id,
       instructorName: b.provider.name,
       rating: b.customerRating,
-      comment: b.customerRating,
+      comment: b.customerReview ?? null,   // CP-06 FIX: was incorrectly returning customerRating
       date: b.reviewGivenAt?.toISOString() ?? null,       // matches page field: review.date
       bookingDate: b.startTime?.toISOString() ?? null,    // matches page field: review.bookingDate
     }));
@@ -222,7 +224,7 @@ export async function POST(req: NextRequest) {
       },
       data: {
         customerRating: Math.round(rating),
-        reviewComment: comment ?? null,
+        customerReview: comment ?? null,   // CP-06 FIX: was 'reviewComment' which is not a schema field
         reviewGivenAt: now,
       } as any,
     });
