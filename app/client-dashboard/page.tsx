@@ -636,7 +636,7 @@ export default function ClientDashboard() {
                         <div key={booking.id} className="border border-slate-700 rounded-lg overflow-hidden">
                           <div className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-800 transition">
                             <div className="flex-1">
-                              <h4 className="font-semibold text-slate-100">{booking.instructor.name}</h4>
+                              <h4 className="font-semibold text-slate-100">{booking.provider?.name || 'Unknown Instructor'}</h4>
                               <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
                                 <span className="flex items-center gap-1">
                                   <Calendar className="w-4 h-4" />
@@ -666,13 +666,13 @@ export default function ClientDashboard() {
                                 onClick={() => setRescheduleModal({
                                   isOpen: true,
                                   bookingId: booking.id,
-                                  providerId: booking.instructor.id,
+                                  providerId: booking.provider?.id,
                                   date: booking.date,
                                   time: booking.time,
                                   duration: booking.duration * 60,
                                   price: booking.price,
-                                  instructor: booking.instructor.name,
-                                  hourlyRate: booking.instructor.hourlyRate
+                                  instructor: booking.provider?.name || 'Unknown Instructor',
+                                  hourlyRate: booking.provider?.hourlyRate
                                 })}
                                 className="px-2 py-1 md:px-3 md:py-2 text-blue-400 border border-blue-600/60 rounded-lg hover:bg-blue-900/20 transition text-sm font-semibold flex items-center gap-1"
                               >
@@ -684,7 +684,7 @@ export default function ClientDashboard() {
                                   isOpen: true,
                                   bookingId: booking.id,
                                   date: booking.date,
-                                  instructor: booking.instructor.name,
+                                  instructor: booking.provider?.name || 'Unknown Instructor',
                                   price: booking.price
                                 })}
                                 className="px-2 py-1 md:px-3 md:py-2 text-red-400 border border-red-600/60 rounded-lg hover:bg-red-900/20 transition text-sm font-semibold"
@@ -696,19 +696,19 @@ export default function ClientDashboard() {
                           {/* Expandable contact panel */}
                           {expandedBookingId === booking.id && (
                             <div className="border-t border-slate-700 bg-blue-900/20 px-4 py-3 flex flex-wrap gap-4 items-center">
-                              <p className="text-xs font-semibold text-blue-300 w-full">Contact {booking.instructor.name}</p>
-                              {booking.instructor.phone && (
+                              <p className="text-xs font-semibold text-blue-300 w-full">Contact {booking.provider?.name || 'Unknown Instructor'}</p>
+                              {booking.provider?.phone && (
                                 <a
-                                  href={`tel:${booking.instructor.phone}`}
+                                  href={`tel:${booking.provider?.phone}`}
                                   className="flex items-center gap-2 text-sm text-blue-300 hover:text-blue-200 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-blue-400 transition"
                                 >
                                   <Phone className="w-4 h-4" />
-                                  {booking.instructor.phone}
+                                  {booking.provider?.phone}
                                 </a>
                               )}
-                              {booking.instructor.whatsapp && (
+                              {booking.provider?.whatsapp && (
                                 <a
-                                  href={`https://wa.me/${booking.instructor.whatsapp.replace(/\D/g, '')}`}
+                                  href={`https://wa.me/${booking.provider?.whatsapp.replace(/\D/g, '')}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="flex items-center gap-2 text-sm text-green-300 hover:text-green-200 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-green-400 transition"
@@ -717,7 +717,7 @@ export default function ClientDashboard() {
                                   WhatsApp
                                 </a>
                               )}
-                              {!booking.instructor.phone && !booking.instructor.whatsapp && (
+                              {!booking.provider?.phone && !booking.provider?.whatsapp && (
                                 <p className="text-xs text-blue-700">Contact details will be shared by your instructor directly.</p>
                               )}
                             </div>
@@ -742,7 +742,7 @@ export default function ClientDashboard() {
                         <div key={booking.id} className="border-2 border-amber-600/50 bg-amber-900/20 rounded-lg overflow-hidden">
                           <div className="flex items-center justify-between p-3 md:p-4 hover:bg-amber-900/30 transition">
                             <div className="flex-1">
-                              <h4 className="font-semibold text-slate-100">{booking.instructor.name}</h4>
+                              <h4 className="font-semibold text-slate-100">{booking.provider?.name || 'Unknown Instructor'}</h4>
                               <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
                                 <span className="flex items-center gap-1">
                                   <Calendar className="w-4 h-4" />
@@ -775,13 +775,13 @@ export default function ClientDashboard() {
                                 onClick={() => setRescheduleModal({
                                   isOpen: true,
                                   bookingId: booking.id,
-                                  providerId: booking.instructor.id,
+                                  providerId: booking.provider?.id,
                                   date: booking.date,
                                   time: booking.time,
                                   duration: booking.duration * 60,
                                   price: booking.price,
-                                  instructor: booking.instructor.name,
-                                  hourlyRate: booking.instructor.hourlyRate
+                                  instructor: booking.provider?.name || 'Unknown Instructor',
+                                  hourlyRate: booking.provider?.hourlyRate
                                 })}
                                 className="px-3 py-1.5 text-blue-400 border border-blue-600/60 rounded-lg hover:bg-blue-900/20 transition text-sm font-semibold flex items-center gap-1 w-full justify-center"
                               >
@@ -793,7 +793,7 @@ export default function ClientDashboard() {
                                   isOpen: true,
                                   bookingId: booking.id,
                                   date: booking.date,
-                                  instructor: booking.instructor.name,
+                                  instructor: booking.provider?.name || 'Unknown Instructor',
                                   price: booking.price
                                 })}
                                 className="px-3 py-1.5 text-red-400 border border-red-600/60 rounded-lg hover:bg-red-900/20 transition text-sm font-semibold w-full justify-center flex items-center gap-1"
@@ -823,7 +823,7 @@ export default function ClientDashboard() {
                         >
                           <div className="flex-1">
                             <h4 className="font-semibold text-slate-100">
-                              {booking.instructor.name}
+                              {booking.provider?.name || 'Unknown Instructor'}
                             </h4>
                             <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
                               <span className="flex items-center gap-1">
@@ -839,7 +839,7 @@ export default function ClientDashboard() {
                             onClick={() => setReviewModal({
                               isOpen: true,
                               bookingId: booking.id,
-                              instructorName: booking.instructor.name
+                              instructorName: booking.provider?.name || 'Unknown Instructor'
                             })}
                             className="px-3 py-1 md:px-4 md:py-2 text-blue-400 hover:bg-blue-900/20 rounded-lg transition font-semibold flex items-center gap-1"
                           >
