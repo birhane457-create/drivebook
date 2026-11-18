@@ -197,7 +197,11 @@ export async function GET(req: NextRequest) {
         pages: Math.ceil(total / limit),
         hasMore: page < Math.ceil(total / limit),
       },
-      // CP-07 FIX: derive counts from full dataset, not the current page.
+      // CP-07 FIX: derive counts from the full dataset, independent of the
+      // current page.  Business definitions preserved from the original code:
+      //   upcomingCount — CONFIRMED with endTime null or in the future
+      //   pastCount     — COMPLETED or NO_SHOW, plus CONFIRMED whose endTime
+      //                   has already passed (cron hasn't flipped them yet)
       upcomingCount: await prisma.booking.count({
         where: {
           customerId: { in: clientIds },
@@ -208,7 +212,10 @@ export async function GET(req: NextRequest) {
       pastCount: await prisma.booking.count({
         where: {
           customerId: { in: clientIds },
-          status: { in: ['COMPLETED', 'NO_SHOW'] },
+          OR: [
+            { status: { in: ['COMPLETED', 'NO_SHOW'] } },
+            { status: 'CONFIRMED', endTime: { not: null, lte: now } },
+          ],
         },
       }),
     });
