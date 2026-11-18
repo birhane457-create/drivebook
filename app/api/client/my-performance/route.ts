@@ -53,31 +53,55 @@ export async function GET(req: NextRequest) {
     const clientIds = clients.map((c: any) => c.id);
 
     // Get all completed bookings with feedback
+    // FIX: feedbackGivenAt, instructorNotes, assessmentType, lessonTopics, passed
+    // belong to the DrivingLessonOutcome model, not Booking.
+    // Query Booking for core fields, then join DrivingLessonOutcome separately.
     const bookingsRaw = await prisma.booking.findMany({
       where: {
         customerId: { in: clientIds },
-        feedbackGivenAt: { not: null },
         status: 'COMPLETED',
-      } as any,
+      },
       select: {
         id: true,
         startTime: true,
         duration: true,
-        instructorNotes: true,
-        feedbackGivenAt: true,
-        assessmentType: true,
-        lessonTopics: true,
-        passed: true,
         provider: {
           select: { name: true, profileImage: true },
         },
-      } as any,
+      },
       orderBy: { startTime: 'desc' },
       take: 100,
     });
 
-    // Merge outcome fields from extension table (overrides Booking cols if data exists there)
-    const bookingsWithFeedback = await mergeLessonOutcomes(bookingsRaw as any);
+    // Fetch DrivingLessonOutcome records for these bookings
+    const bookingIds = bookingsRaw.map((b: any) => b.id);
+    const outcomes = await (prisma as any).drivingLessonOutcome.findMany({
+      where: {
+        bookingId: { in: bookingIds },
+        feedbackGivenAt: { not: null },
+      },
+    });
+
+    // Build a lookup map of bookingId -> outcome
+    const outcomeMap = new Map<string, any>();
+    for (const o of outcomes) {
+      outcomeMap.set(o.bookingId, o);
+    }
+
+    // Merge outcome fields onto bookings
+    const bookingsWithFeedback = bookingsRaw
+      .filter((b: any) => outcomeMap.has(b.id))
+      .map((b: any) => {
+        const o = outcomeMap.get(b.id);
+        return {
+          ...b,
+          instructorNotes: o.instructorNotes,
+          feedbackGivenAt: o.feedbackGivenAt,
+          assessmentType: o.assessmentType,
+          lessonTopics: o.lessonTopics,
+          passed: o.passed,
+        };
+      });
 
     // Get all completed bookings (count)
     const allBookings = await prisma.booking.findMany({
