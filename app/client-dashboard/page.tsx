@@ -32,9 +32,23 @@ interface Booking {
   date: string;
   time: string;
   duration: number;
-  price: number;
+  price: number | string;  // Prisma Decimal serialises as string
   status: string;
-  instructor: {
+  isPaid?: boolean;
+  isPackageBooking?: boolean;
+  packageHours?: number | null;
+  pickupAddress?: string | null;
+  notes?: string | null;
+  provider?: {
+    id: string;
+    name: string;
+    avatar?: string;
+    hourlyRate: number;
+    phone?: string | null;
+    whatsapp?: string | null;
+  };
+  // legacy alias kept for components that may still reference instructor
+  instructor?: {
     id: string;
     name: string;
     avatar?: string;
@@ -650,7 +664,7 @@ export default function ClientDashboard() {
                                   <BookOpen className="w-4 h-4" />
                                   {booking.duration}h
                                 </span>
-                                <span className="font-semibold text-slate-100">${booking.price.toFixed(2)}</span>
+                                <span className="font-semibold text-slate-100">${Number(booking.price || 0).toFixed(2)}</span>
                               </div>
                             </div>
                             <div className="flex gap-2 ml-4 items-center">
@@ -756,7 +770,7 @@ export default function ClientDashboard() {
                                   <BookOpen className="w-4 h-4" />
                                   {booking.duration}h
                                 </span>
-                                <span className="font-semibold text-slate-100">${booking.price.toFixed(2)}</span>
+                                <span className="font-semibold text-slate-100">${Number(booking.price || 0).toFixed(2)}</span>
                               </div>
                               <p className="text-xs text-amber-400 mt-2 font-semibold">
                                 <Wallet className="w-3 h-3 inline mr-1" />
@@ -831,7 +845,7 @@ export default function ClientDashboard() {
                                 {new Date(booking.date).toLocaleDateString()}
                               </span>
                               <span className="font-semibold text-slate-100">
-                                ${booking.price.toFixed(2)}
+                                ${Number(booking.price || 0).toFixed(2)}
                               </span>
                             </div>
                           </div>
