@@ -11,6 +11,7 @@ import { notifyPaymentReceived } from '@/lib/services/notifications';
 import { getNotifChannels } from '@/lib/config/platform-settings';
 import { recordPaymentCollected } from '@/lib/services/payout-service';
 import { logger } from '@/lib/logger';
+import { parseTopupMetadata } from '@/lib/services/wallet-topup-fee';
 import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-service';
 import { sendAlert } from '@/lib/services/alert-service';
 import { withSerializableRetry } from '@/lib/utils/transaction-retry';
@@ -938,17 +939,13 @@ async function handleWalletPaymentSuccess(
           throw new Error('No wallet transactions found');
         }
     
-        // Validate: Stripe received chargeAmount (topupAmount + platformFee), not topupAmount alone.
-        // Read chargeAmount from PENDING transaction metadata (sealed at intent creation).
-        // Fall back to CREDIT sum for legacy top-ups that pre-date the platform fee policy.
+        // Use shared helper to parse fee metadata — same logic as wallet-add route.
         const creditTx = transactions.find((t: any) => t.type === 'CREDIT');
-        const metaCharge = creditTx?.metadata && typeof creditTx.metadata === 'object'
-          ? (creditTx.metadata as any).chargeAmount
-          : null;
-        const expectedChargeAmount = (metaCharge && Number.isFinite(parseFloat(String(metaCharge))))
-          ? parseFloat(String(metaCharge))
-          : transactions.filter((t: any) => t.type === 'CREDIT').reduce((s: number, t: any) => s + Number(t.amount), 0);
-        const expectedCents = Math.round(expectedChargeAmount * 100);
+        const piAmountReceived = paymentIntent.amount_received / 100;
+        const topupMeta = parseTopupMetadata(creditTx?.metadata as any, piAmountReceived);
+
+        // Validate: Stripe received chargeAmount (topupAmount + platformFee).
+        const expectedCents = Math.round(topupMeta.chargeAmount * 100);
         const receivedCents = paymentIntent.amount_received;
         if (receivedCents !== expectedCents) {
           logger.error('Wallet payment amount mismatch:', { expected: expectedCents, received: receivedCents });
@@ -971,33 +968,39 @@ async function handleWalletPaymentSuccess(
         }
 
         // Write PLATFORM_FEE record if the PENDING CREDIT carried fee metadata.
-        // This is the authoritative fee record for financial reporting.
-        // The wallet balance calculation ignores PLATFORM_FEE type rows.
-        if (creditTx && creditTx.metadata && typeof creditTx.metadata === 'object') {
-          const meta = creditTx.metadata as any;
-          const feeCents = meta.platformFee ? parseFloat(String(meta.platformFee)) : 0;
-          const feePercent = meta.feePercent ? parseFloat(String(meta.feePercent)) : 0;
-          const topupAmount = meta.topupAmount ? parseFloat(String(meta.topupAmount)) : 0;
-          if (feeCents > 0) {
+        // Webhook is the authoritative confirmation path; wallet-add may have already
+        // written this record — the DB unique index on stripePaymentIntentId prevents
+        // duplicate CREDIT rows; PLATFORM_FEE has no such constraint so we guard with
+        // a findFirst before inserting.
+        if (creditTx && topupMeta.hasFeeSplit && topupMeta.platformFee > 0) {
+          const existingFee = await tx.walletTransaction.findFirst({
+            where: {
+              walletId: creditTx.walletId,
+              type: 'PLATFORM_FEE',
+              metadata: { path: ['stripePaymentIntentId'], equals: paymentIntent.id },
+            },
+            select: { id: true },
+          });
+          if (!existingFee) {
             await tx.walletTransaction.create({
               data: {
                 walletId: creditTx.walletId,
                 type: 'PLATFORM_FEE',
-                amount: feeCents,
+                amount: topupMeta.platformFee,
                 status: 'CONFIRMED',
-                description: `DriveBook platform fee — ${feePercent}% on $${topupAmount.toFixed(2)} top-up`,
+                description: `DriveBook platform fee — ${topupMeta.feePercent}% on $${topupMeta.topupAmount.toFixed(2)} top-up`,
                 metadata: {
                   stripePaymentIntentId: paymentIntent.id,
                   type: 'wallet_topup_fee',
                   topupWalletTxId: creditTx.id,
-                  creditAmount: topupAmount,
-                  chargeAmount: expectedChargeAmount,
-                  feePercent,
+                  creditAmount: topupMeta.topupAmount,
+                  chargeAmount: topupMeta.chargeAmount,
+                  feePercent: topupMeta.feePercent,
                   nonRefundable: true,
                 },
               },
             });
-            logger.info(`Platform fee recorded: $${feeCents.toFixed(2)} on wallet ${creditTx.walletId}`);
+            logger.info(`Platform fee recorded: $${topupMeta.platformFee.toFixed(2)} on wallet ${creditTx.walletId}`);
           }
         }
         // Get wallet details for logging

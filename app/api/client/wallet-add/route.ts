@@ -7,18 +7,22 @@ import { recordWalletCredit } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
 import { sendWalletTopUpReceipt } from '@/lib/services/receipt-bridge';
+import { parseTopupMetadata } from '@/lib/services/wallet-topup-fee';
+import { getPlatformPricing } from '@/lib/services/platform-pricing';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { stripeService } from '@/lib/services/stripe';
 
 
 export const dynamic = 'force-dynamic';
-// FIXED: Input validation
+
+// Input validation — amount here is the chargeAmount (topupAmount + platformFee).
+// Min/max are validated against PlatformSettings after Stripe verification, not here,
+// because wallet-add receives the charge total, not the requested top-up amount.
+// We keep a wide upper bound to avoid rejecting valid charges.
 const walletAddSchema = z.object({
   amount: z.number()
     .positive('Amount must be positive')
-    .min(10, 'Minimum top-up is $10')
-    .max(10000, 'Maximum amount is $10,000 per transaction')
     .multipleOf(0.01, 'Amount must have at most 2 decimal places'),
   paymentIntentId: z.string()
     .min(3, 'Invalid payment intent')
@@ -111,7 +115,6 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-
       // ═══════════════════════════════════════════════════════════════════════════
       // P0-01 FIX: Wallet Ownership Enforcement
       // ═══════════════════════════════════════════════════════════════════════════
@@ -226,33 +229,21 @@ export async function POST(req: NextRequest) {
     // Get current balance before transaction
     const previousBalance = await getWalletBalance(user.id);
 
-    // Read topupAmount from PaymentIntent metadata (set by wallet-topup-intent).
-    // For top-ups created after the platform fee policy (2026-11-05):
-    //   topupAmount = what goes into the wallet (e.g. $100)
-    //   chargeAmount = what the student paid (e.g. $103.60)
-    //   platformFee  = DriveBook's fee (e.g. $3.60)
-    // For legacy top-ups without metadata, credit the full amount (safe fallback).
-    const metaTopupAmount   = paymentIntent.metadata?.topupAmount   ? parseFloat(paymentIntent.metadata.topupAmount)   : null;
-    const metaPlatformFee   = paymentIntent.metadata?.platformFee   ? parseFloat(paymentIntent.metadata.platformFee)   : null;
-    const metaFeePercent    = paymentIntent.metadata?.feePercent    ? parseFloat(paymentIntent.metadata.feePercent)    : null;
-    const creditAmount      = (metaTopupAmount !== null && Number.isFinite(metaTopupAmount)) ? metaTopupAmount : amount;
-    const platformFeeAmount = (metaPlatformFee !== null && Number.isFinite(metaPlatformFee)) ? metaPlatformFee : null;
+    // Parse fee metadata using the shared helper — same logic as the webhook.
+    // piAmountReceived is the fallback for legacy top-ups without fee metadata.
+    const piAmountReceived = paymentIntent.amount_received / 100;
+    const topupMeta = parseTopupMetadata(paymentIntent.metadata, piAmountReceived);
+    const { topupAmount: creditAmount, platformFee: platformFeeAmount, chargeAmount: actualCharge, feePercent: metaFeePercent } = topupMeta;
 
-    // P0-4 FIX: recordWalletCredit uses the global prisma client (not tx) — calling it
-    // inside $transaction creates a split-brain: if walletTransaction.create rolls back,
-    // the ledger entry is already committed via a different DB connection. Move the
-    // ledger write outside the transaction and derive a stable idempotency key from
-    // paymentIntentId (not Date.now()) so it is truly idempotent on retry.
-    // Also store the walletTx id upfront for the ledger call below.
     const result = await prisma.$transaction(async (tx) => {
-      // ✅ Credit wallet with topupAmount only (not the full charge which includes platform fee)
+      // Credit wallet with topupAmount only — not the full charge amount
       const walletTx = await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
           type: 'CREDIT',
           amount: creditAmount,
           status: 'CONFIRMED',
-          description: `Added ${creditAmount.toFixed(2)} credits via ${paymentIntentId ? 'Stripe' : 'manual'}`,
+          description: `Wallet top-up $${creditAmount.toFixed(2)}`,
           expiresAt: await (async () => {
             const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing')
             const months = await getWalletCreditValidityMonths()
@@ -265,31 +256,30 @@ export async function POST(req: NextRequest) {
             type: 'wallet_topup',
             verifiedAmount: true,
             topupAmount: creditAmount,
-            chargeAmount: amount,                 // what student actually paid
-            platformFee: platformFeeAmount ?? 0,
-            feePercent: metaFeePercent ?? 0,
+            chargeAmount: actualCharge,
+            platformFee: platformFeeAmount,
+            feePercent: metaFeePercent,
           }
         }
       });
 
-      // Record platform fee as a separate non-spendable transaction so it
-      // appears in financial reporting but does not inflate the wallet balance.
+      // Record platform fee separately — non-spendable, appears in financial reporting
       let feeTx = null;
-      if (platformFeeAmount && platformFeeAmount > 0) {
+      if (topupMeta.hasFeeSplit && platformFeeAmount > 0) {
         feeTx = await tx.walletTransaction.create({
           data: {
             walletId: wallet.id,
             type: 'PLATFORM_FEE',
             amount: platformFeeAmount,
             status: 'CONFIRMED',
-            description: `DriveBook platform fee — ${metaFeePercent ?? ''}% on $${creditAmount.toFixed(2)} top-up`,
+            description: `DriveBook platform fee — ${metaFeePercent}% on $${creditAmount.toFixed(2)} top-up`,
             metadata: {
               stripePaymentIntentId: paymentIntentId,
               type: 'wallet_topup_fee',
               topupWalletTxId: walletTx.id,
               creditAmount,
-              chargeAmount: amount,
-              feePercent: metaFeePercent ?? 0,
+              chargeAmount: actualCharge,
+              feePercent: metaFeePercent,
               nonRefundable: true,
             },
           }
@@ -299,12 +289,13 @@ export async function POST(req: NextRequest) {
       return { walletTx, feeTx };
     });
 
-    // P0-4 FIX: Ledger write happens AFTER the transaction commits, using the committed
-    // walletTx.id as the idempotency key so it is safe to retry.
+    // Ledger entry records creditAmount (what the student receives in their wallet),
+    // not the charge total. The platform fee is a separate revenue line.
+    // recordWalletCredit is idempotent via paymentIntentId-based idempotency key.
     await recordWalletCredit({
       walletTransactionId: result.walletTx.id,
       userId: user.id,
-      amount,
+      amount: creditAmount,                     // FIX: was `amount` (chargeAmount) — now creditAmount
       stripePaymentIntentId: paymentIntentId,
       createdBy: session!.user!.id
     });
@@ -319,7 +310,7 @@ export async function POST(req: NextRequest) {
         customerEmail: user.email,
         receiptId: result.walletTx.id,
         paidAt: new Date(),
-        amountAdded: amount,
+        amountAdded: creditAmount,              // what goes into the wallet
         walletBalanceBefore: previousBalance.balance,
         walletBalanceAfter: newBalance.balance,
         stripeRef: paymentIntentId,

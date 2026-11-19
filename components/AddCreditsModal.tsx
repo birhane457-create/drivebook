@@ -74,6 +74,13 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
       const intentJson = await intentRes.json();
       const { clientSecret, topupAmount, platformFee, chargeAmount } = intentJson;
 
+      // Update displayed breakdown from the server's authoritative response.
+      // This ensures the breakdown shown before card entry matches what Stripe charges,
+      // even if the fee rate changed since the modal opened.
+      if (topupAmount != null && platformFee != null && chargeAmount != null) {
+        setFeePercent(intentJson.feePercent ?? feePercent);
+      }
+
       // Step 2: Confirm card payment with Stripe — card is charged chargeAmount
       const result = await stripe.confirmCardPayment(clientSecret, {
         payment_method: {
