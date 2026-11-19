@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.79 (Section 14 — Client Portal Audit findings registered)
-**Last Updated:** 2026-11-19 (v6.79 — service extraction + consolidated runtime; 37/37 tests pass 53278e4b)
+**Version:** 6.80 (Section 14 — Client Portal Audit closed with baseline comparison)
+**Last Updated:** 2026-11-19 (v6.80 — Phase 6 closure evidence and TypeScript baseline comparison)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1160,9 +1160,9 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 ---
 
 ## Section 14 — Phase 6: Client Portal Audit
-**Version:** 1.2
+**Version:** 1.3
 **Started:** 2026-11-18
-**Status:** CP-02 Decimal and CP-03 production-service corrections verified; findings remain OPEN pending reviewer
+**Status:** CLOSED — 7/7 findings accepted; runtime evidence and TypeScript baseline comparison recorded. Project-wide TypeScript remains nonzero at baseline and final; this is not a clean build.
 **Audit document:** `docs/audit/CLIENT-PORTAL-AUDIT.md`
 **Baseline commit:** 4dbf4e54
 **Fix commit:** `ec380043`
@@ -1171,13 +1171,13 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 
 | ID | Risk | Title | Fix | Fix-Verified | Status |
 |-----|------|-------|-----|-------------|--------|
-| CP-01 | HIGH | Cross-account booking disclosure via null customerId fallback | `ec380043` | CP01-R1 + CP01-R2 pass (53278e4b) — route handler test, real DB | OPEN — awaiting reviewer |
-| CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | `ec380043` | CP02-R1..R4 pass — Decimal accumulation, expiry, decimal debits, exact-cent boundary, and numeric balance return compatibility | OPEN — awaiting reviewer |
-| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `53278e4b` (extracted to lib/services/wallet-booking.ts) | CP03-SVC-CONC-01 passed on isolated PostgreSQL: P2034=1, retry attempts=2/1, one booking, one debit, final balance=$20.00 | OPEN — awaiting reviewer |
-| CP-04 | HIGH | Missing instructor eligibility gate in wallet booking route | `ec380043` | CP04-R1 pass (53278e4b) — suspended instructor returns 403 | OPEN — awaiting reviewer |
-| CP-05 | HIGH | Instructor timezone conversion uses server timezone | `ec380043` | CP05-R1..R3 pass (53278e4b) — Perth 09:00→01:00 UTC verified in DB | OPEN — awaiting reviewer |
-| CP-06 | MEDIUM | Review persistence and display mismatch | `ec380043` | CP06-R1..R3 pass (53278e4b) — customerReview written and read as text | OPEN — awaiting reviewer |
-| CP-07 | LOW | Paginated profile endpoint returns incorrect booking counts | `92dcfe88` (extracted to lib/services/profile-counts.ts; tests call production function) | 7 tests (T1..T7 incl regression guard), exit 0 — Japan Supabase direct | OPEN — awaiting reviewer |
+| CP-01 | HIGH | Cross-account booking disclosure via null customerId fallback | `ec380043` | CP01-R1 + CP01-R2 pass (53278e4b) — route handler test, real DB | CLOSED |
+| CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | `ec380043` | CP02-R1..R4 pass — Decimal accumulation, expiry, decimal debits, exact-cent boundary, and numeric balance return compatibility | CLOSED |
+| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `53278e4b` (extracted to lib/services/wallet-booking.ts) | CP03-SVC-CONC-01 passed on isolated PostgreSQL: P2034=1, retry attempts=2/1, retry balance=$20.00, one booking, one debit, final balance=$20.00 | CLOSED |
+| CP-04 | HIGH | Missing instructor eligibility gate in wallet booking route | `ec380043` | CP04-R1 pass (53278e4b) — suspended instructor returns 403 | CLOSED |
+| CP-05 | HIGH | Instructor timezone conversion uses server timezone | `ec380043` | CP05-R1..R3 pass (53278e4b) — Perth 09:00→01:00 UTC verified in DB | CLOSED |
+| CP-06 | MEDIUM | Review persistence and display mismatch | `ec380043` | CP06-R1..R3 pass (53278e4b) — customerReview written and read as text | CLOSED |
+| CP-07 | LOW | Paginated profile endpoint returns incorrect booking counts | `92dcfe88` (extracted to lib/services/profile-counts.ts; tests call production function) | 7 tests (T1..T7 incl regression guard), exit 0 — Japan Supabase direct | CLOSED |
 
 **Total: 5 HIGH, 1 MEDIUM, 1 LOW — 7 findings**
 
@@ -1192,5 +1192,12 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | CP-05 | Perth timezone: submit 9:00 AM Perth — verify stored UTC is 01:00 not 09:00 |
 | CP-06 | Submit review with comment — verify customerReview written and read back as text not number |
 | CP-07 | Account with >10 bookings — verify upcomingCount/pastCount reflect full dataset not current page |
+
+### 14.3 — Final Closure Evidence
+
+- **CP-03 production concurrency:** `npx vitest run __tests__/integration/cp-03-wallet-concurrency.test.ts -t CP03-SVC-CONC-01 --reporter=verbose` — exit 0; 1/1 passed. Output: `P2034=1; attempts=2/1; failedRequest=A; bookings=1; debits=1; balance=$20.00`. The failed request's retry reported `$20.00` available against `$60.00`; its booking and debit were rolled back.
+- **CP-02 Decimal regressions:** `npx vitest run __tests__/integration/cp-phase6-runtime.test.ts -t CP-02 --reporter=verbose` — exit 0; 4/4 passed. Executed against the designated isolated test database; the existing profile-route regression also passed.
+- **TypeScript baseline comparison:** `tsc --noEmit --pretty false` in clean worktrees at baseline `d9b7f63f04c243fc6d83225c92f021a13bbcb749` and correction commit `f7ac12d709c9c7953b261110bc0a8ba7d825249a` — exit 2 at both; 1,422 diagnostics at each; zero added or removed diagnostics when normalized by file, diagnostic code, and message. The production wallet service and booking route have zero diagnostics. This is a baseline-qualified failure, not a clean project typecheck.
+- **Execution qualification:** Runtime results and database assertions above were produced by the implementation author. The independent reviewer accepted the source and test design but did not independently execute the tests.
 
 **Section 14 last updated:** 2026-11-19
