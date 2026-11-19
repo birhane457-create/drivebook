@@ -1106,7 +1106,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 ---
 
 **Section 12 last updated:** 2026-11-14 (c1bd5c6d)  
-**Master Tracker version:** v6.73
+**Master Tracker version:** v6.95
 
 ---
 
@@ -1155,7 +1155,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 ---
 
 **Section 13 last updated:** 2026-11-15 (c2599a2e)
-**Master Tracker version:** v6.73
+**Master Tracker version:** v6.95
 
 ---
 
@@ -1172,8 +1172,8 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | ID | Risk | Title | Fix | Fix-Verified | Status |
 |-----|------|-------|-----|-------------|--------|
 | CP-01 | HIGH | Cross-account booking disclosure via null customerId fallback | `ec380043` | CP01-R1 + CP01-R2 pass (53278e4b) — route handler test, real DB | CLOSED |
-| CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | `ec380043` | CP02-R1..R4 pass — Decimal accumulation, expiry, decimal debits, exact-cent boundary, and numeric balance return compatibility | CLOSED |
-| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `53278e4b` (service extracted) + `ae15d6e9` (Correction A: production service concurrency; Correction B: Prisma.Decimal arithmetic via computeWalletBalanceDecimal) | CP03-SVC-CONC-01 at 5ee46420: P2034=1; attempts=1/2; 1 booking; 1 debit; balance=$20.00. CP02-R1..R4: Decimal accumulation, expiry, exact-cent boundary. 33/33 pass, exit 0. | CLOSED |
+| CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | `ec380043` (Number() fix) + `ae15d6e9` (Correction B: computeWalletBalanceDecimal uses Prisma.Decimal throughout; balance check uses lessThan()) | CP02-R1..R4 pass — Decimal accumulation, expiry, exact-cent boundary (0.10+0.20-0.30=0.00 exactly via Decimal), numeric return compatibility | CLOSED |
+| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `53278e4b` (service extracted to wallet-booking.ts) + `ae15d6e9` (Correction A: CP03-SVC-CONC-01 calls executeWalletBookingTransaction directly; independent PrismaClient instances; barrier-synchronised reads; genuine PostgreSQL P2034) | CP03-SVC-CONC-01 at 5ee46420: P2034=1; attempts=1/2; 1 booking; 1 debit; balance=$20.00. 33/33 pass, exit 0 — author-reported; not independently executed by reviewer. | CLOSED |
 | CP-04 | HIGH | Missing instructor eligibility gate in wallet booking route | `ec380043` | CP04-R1 pass (53278e4b) — suspended instructor returns 403 | CLOSED |
 | CP-05 | HIGH | Instructor timezone conversion uses server timezone | `ec380043` | CP05-R1..R3 pass (53278e4b) — Perth 09:00→01:00 UTC verified in DB | CLOSED |
 | CP-06 | MEDIUM | Review persistence and display mismatch | `ec380043` | CP06-R1..R3 pass (53278e4b) — customerReview written and read as text | CLOSED |
