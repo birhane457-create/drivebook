@@ -1,4 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -9,7 +10,7 @@ import { notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/servic
 import { sendWalletLessonReceipt } from '@/lib/services/receipt-email';
 import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
 import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
-import { executeWalletBookingTransaction, computeWalletBalance } from '@/lib/services/wallet-booking';
+import { executeWalletBookingTransaction, computeWalletBalanceDecimal } from '@/lib/services/wallet-booking';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,12 +124,12 @@ export async function POST(request: NextRequest) {
     if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
     const now = new Date();
-    // CP-02 FIX: computeWalletBalance uses Number() on Prisma Decimal — prevents
-    // string concatenation when multiple Decimal credits are summed.
-    const actualBalance = computeWalletBalance(wallet.transactions, now);
-    if (actualBalance < totalCost) {
+    // CP-02 FIX: Decimal arithmetic avoids precision loss across wallet transactions.
+    const actualBalance = computeWalletBalanceDecimal(wallet.transactions, now);
+    const requestedCost = new Prisma.Decimal(totalCost.toFixed(2));
+    if (actualBalance.lessThan(requestedCost)) {
       return NextResponse.json({
-        error: `Insufficient credits. You have $${actualBalance.toFixed(2)} but need $${totalCost.toFixed(2)}`
+        error: `Insufficient credits. You have $${actualBalance.toFixed(2)} but need $${requestedCost.toFixed(2)}`
       }, { status: 400 });
     }
 

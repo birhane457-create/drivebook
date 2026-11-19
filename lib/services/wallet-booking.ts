@@ -11,7 +11,7 @@
  *
  * FINANCIAL INVARIANTS enforced here:
  *   - Balance re-read inside SERIALIZABLE transaction (CP-03 fix).
- *   - Balance check includes credit expiry (CP-02 fix: Number() on Decimal).
+ *   - Balance check includes credit expiry and Decimal-safe arithmetic (CP-02 fix).
  *   - Debit written atomically with bookings; P2034 rolls all back.
  *   - Slot conflict checked per booking inside the transaction (TOCTOU-safe).
  *   - Timestamps converted using instructor timezone (CP-05 fix).
@@ -23,8 +23,7 @@
  *   - Write FinancialLedger entries (caller's responsibility).
  */
 
-import { PrismaClient } from '@prisma/client'
-import type { Prisma } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 import { withSerializableRetry } from '@/lib/utils/transaction-retry'
 import { localDateTimeToUTC } from '@/lib/utils/timezone'
 
@@ -75,23 +74,30 @@ export interface WalletBookingResult {
 
 // ── Balance calculation (extracted for testability) ───────────────────────────
 
-export function computeWalletBalance(
-  transactions: Array<{ type: string; amount: any; expiresAt?: Date | null }>,
+export function computeWalletBalanceDecimal(
+  transactions: Array<{ type: string; amount: Prisma.Decimal; expiresAt?: Date | null }>,
   asOf: Date = new Date(),
-): number {
+): Prisma.Decimal {
   const credits = transactions
     .filter(
       t =>
         t.type.toUpperCase() === 'CREDIT' &&
         (!t.expiresAt || new Date(t.expiresAt) >= asOf),
     )
-    .reduce((s, t) => s + Number(t.amount), 0)   // CP-02 FIX: Number() converts Prisma Decimal
+    .reduce((sum, t) => sum.plus(t.amount), new Prisma.Decimal(0))
 
   const debits = transactions
     .filter(t => t.type.toUpperCase() === 'DEBIT')
-    .reduce((s, t) => s + Math.abs(Number(t.amount)), 0)   // CP-02 FIX: same
+    .reduce((sum, t) => sum.plus(t.amount.abs()), new Prisma.Decimal(0))
 
-  return credits - debits
+  return credits.minus(debits)
+}
+
+export function computeWalletBalance(
+  transactions: Array<{ type: string; amount: Prisma.Decimal; expiresAt?: Date | null }>,
+  asOf: Date = new Date(),
+): number {
+  return computeWalletBalanceDecimal(transactions, asOf).toNumber()
 }
 
 // ── Core transaction ──────────────────────────────────────────────────────────
@@ -130,11 +136,12 @@ export async function executeWalletBookingTransaction(
           if (!walletInner) throw new Error('Wallet not found')
 
           const nowInner = new Date()
-          const balanceInner = computeWalletBalance(walletInner.transactions, nowInner)
+          const balanceInner = computeWalletBalanceDecimal(walletInner.transactions, nowInner)
+          const requestedCost = new Prisma.Decimal(totalCost.toFixed(2))
 
-          if (balanceInner < totalCost) {
+          if (balanceInner.lessThan(requestedCost)) {
             throw new Error(
-              `Insufficient credits. You have $${balanceInner.toFixed(2)} but need $${totalCost.toFixed(2)}`,
+              `Insufficient credits. You have $${balanceInner.toFixed(2)} but need $${requestedCost.toFixed(2)}`,
             )
           }
 
@@ -212,7 +219,7 @@ export async function executeWalletBookingTransaction(
             },
           })
 
-          return { created, totalCost, remaining: balanceInner - totalCost }
+          return { created, totalCost, remaining: balanceInner.minus(requestedCost).toNumber() }
         },
         { isolationLevel: 'Serializable', timeout: 15000 },
       ),

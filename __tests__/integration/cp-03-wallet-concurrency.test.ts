@@ -42,7 +42,9 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library'
+import { executeWalletBookingTransaction } from '@/lib/services/wallet-booking'
 import { withSerializableRetry } from '@/lib/utils/transaction-retry'
 
 const TEST_PREFIX = 'CP03'
@@ -55,6 +57,7 @@ const testPrisma = new PrismaClient({
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 type Fixture = { userId: string; walletId: string; creditTxId: string }
+type BookingFixture = Fixture & { customerId: string; providerId: string }
 
 async function createFixture(
   db: PrismaClient,
@@ -80,11 +83,45 @@ async function createFixture(
   return { userId: user.id, walletId: wallet.id, creditTxId: tx.id }
 }
 
+async function createBookingFixture(
+  db: PrismaClient,
+  initialCredit: number,
+): Promise<BookingFixture> {
+  const fixture = await createFixture(db, initialCredit)
+  const email = `CP03_${Date.now()}_${Math.random().toString(36).slice(2)}@test.invalid`
+  const customer = await db.customer.create({
+    data: {
+      user: { connect: { id: fixture.userId } },
+      name: 'CP03 production-service customer',
+      email,
+      phone: '0400000000',
+    },
+  })
+  const provider = await db.provider.create({
+    data: {
+      name: 'CP03 production-service provider',
+      phone: '0400000000',
+      hourlyRate: 60,
+      approvalStatus: 'APPROVED',
+      isActive: true,
+    },
+  })
+  return { ...fixture, customerId: customer.id, providerId: provider.id }
+}
+
 async function cleanup(db: PrismaClient, fixture: Fixture | null) {
   if (!fixture) return
   await db.walletTransaction.deleteMany({ where: { walletId: fixture.walletId } })
   await db.clientWallet.deleteMany({ where: { id: fixture.walletId } })
   await db.user.deleteMany({ where: { id: fixture.userId } })
+}
+
+async function cleanupBookingFixture(db: PrismaClient, fixture: BookingFixture | null) {
+  if (!fixture) return
+  await db.booking.deleteMany({ where: { customerId: fixture.customerId } })
+  await db.customer.deleteMany({ where: { id: fixture.customerId } })
+  await db.provider.deleteMany({ where: { id: fixture.providerId } })
+  await cleanup(db, fixture)
 }
 
 async function readBalance(db: PrismaClient, walletId: string): Promise<number> {
@@ -209,7 +246,178 @@ async function barrierSerializableDebit(
   }
 }
 
+type TransactionEvidence = { attempts: number; errors: unknown[] }
+
+function withWalletReadBarrier(
+  db: PrismaClient,
+  waitForBothReads: () => Promise<void>,
+  evidence: TransactionEvidence,
+): PrismaClient {
+  let firstReadPaused = false
+
+  return new Proxy(db, {
+    get(target, property) {
+      if (property !== '$transaction') return Reflect.get(target, property, target)
+
+      const transaction = target.$transaction.bind(target)
+      return <T>(
+        callback: (tx: Prisma.TransactionClient) => Promise<T>,
+        options?: {
+          maxWait?: number
+          timeout?: number
+          isolationLevel?: Prisma.TransactionIsolationLevel
+        },
+      ) => {
+        evidence.attempts++
+        return transaction(
+          tx =>
+            callback(
+              new Proxy(tx, {
+                get(txTarget, txProperty, txReceiver) {
+                  if (txProperty !== 'clientWallet') {
+                    return Reflect.get(txTarget, txProperty, txTarget)
+                  }
+
+                  const delegate = txTarget.clientWallet
+                  const findUnique = delegate.findUnique.bind(delegate)
+                  return new Proxy(delegate, {
+                    get(delegateTarget, method, receiver) {
+                      if (method === 'findUnique' && !firstReadPaused) {
+                        return async (...args: Parameters<typeof delegate.findUnique>) => {
+                          const wallet = await findUnique(...args)
+                          firstReadPaused = true
+                          await waitForBothReads()
+                          return wallet
+                        }
+                      }
+                      return Reflect.get(delegateTarget, method, delegateTarget)
+                    },
+                  })
+                },
+              }),
+            ),
+          options,
+        ).catch(error => {
+          evidence.errors.push(error)
+          throw error
+        })
+      }
+    },
+  })
+}
+
 // ── GROUP 1: PostgreSQL isolation with barrier ────────────────────────────────
+
+describe('CP-03 — production service under concurrent SERIALIZABLE wallet spending', () => {
+  let fixture: BookingFixture
+
+  beforeAll(async () => {
+    fixture = await createBookingFixture(testPrisma, 80)
+  })
+
+  afterAll(() => cleanupBookingFixture(testPrisma, fixture))
+
+  it('CP03-SVC-CONC-01: retries the losing booking, rejects it, and commits only one debit', async () => {
+    const dbA = new PrismaClient({
+      datasources: { db: { url: process.env.DATABASE_URL } },
+    })
+    const dbB = new PrismaClient({
+      datasources: { db: { url: process.env.DATABASE_URL } },
+    })
+
+    const bothReadsComplete = new Deferred()
+    let readCount = 0
+    const waitForBothReads = async () => {
+      readCount++
+      if (readCount === 2) bothReadsComplete.resolve()
+      await bothReadsComplete.promise
+    }
+
+    const evidenceA: TransactionEvidence = { attempts: 0, errors: [] }
+    const evidenceB: TransactionEvidence = { attempts: 0, errors: [] }
+    const serviceDbA = withWalletReadBarrier(dbA, waitForBothReads, evidenceA)
+    const serviceDbB = withWalletReadBarrier(dbB, waitForBothReads, evidenceB)
+
+    const makeInput = (time: string, label: string) => ({
+      userId: fixture.userId,
+      customerId: fixture.customerId,
+      walletId: fixture.walletId,
+      items: [{
+        providerId: fixture.providerId,
+        instructorName: 'CP03 production-service provider',
+        date: '2027-06-15',
+        time,
+        duration: 1,
+        price: 60,
+        timezone: 'Australia/Perth',
+        service: label,
+      }],
+      commissions: [{
+        totalAmount: 60,
+        platformFee: 6,
+        providerPayout: 54,
+        commissionRate: 0.1,
+        isFirstBooking: false,
+      }],
+      totalCost: 60,
+    })
+
+    try {
+      const [resultA, resultB] = await Promise.allSettled([
+        executeWalletBookingTransaction(makeInput('10:00', 'production request A'), serviceDbA),
+        executeWalletBookingTransaction(makeInput('12:00', 'production request B'), serviceDbB),
+      ])
+
+      expect([resultA.status, resultB.status].filter(status => status === 'fulfilled')).toHaveLength(1)
+      expect([resultA.status, resultB.status].filter(status => status === 'rejected')).toHaveLength(1)
+
+      const failedRequest = resultA.status === 'rejected' ? 'A' : 'B'
+      const failedResult = resultA.status === 'rejected' ? resultA : resultB
+      const committedResult =
+        resultA.status === 'fulfilled'
+          ? resultA.value
+          : resultB.status === 'fulfilled'
+            ? resultB.value
+            : null
+      expect(failedResult.status).toBe('rejected')
+      expect(committedResult).not.toBeNull()
+      expect(typeof committedResult?.remaining).toBe('number')
+      expect(committedResult?.remaining).toBe(20)
+      if (failedResult.status === 'rejected') {
+        expect(failedResult.reason).toBeInstanceOf(Error)
+        expect(failedResult.reason.message).toBe(
+          'Insufficient credits. You have $20.00 but need $60.00',
+        )
+      }
+
+      expect([evidenceA.attempts, evidenceB.attempts].sort()).toEqual([1, 2])
+      const serializationErrors = [...evidenceA.errors, ...evidenceB.errors].filter(
+        error =>
+          error instanceof PrismaClientKnownRequestError &&
+          error.code === 'P2034',
+      )
+      expect(serializationErrors).toHaveLength(1)
+
+      const bookings = await testPrisma.booking.findMany({
+        where: { customerId: fixture.customerId },
+      })
+      const debits = await testPrisma.walletTransaction.findMany({
+        where: { walletId: fixture.walletId, type: 'DEBIT', status: 'CONFIRMED' },
+      })
+      const finalBalance = await readBalance(testPrisma, fixture.walletId)
+      expect(bookings).toHaveLength(1)
+      expect(bookings[0].notes).toBe(`production request ${failedRequest === 'A' ? 'B' : 'A'}`)
+      expect(debits).toHaveLength(1)
+      expect(Number(debits[0].amount)).toBe(60)
+      expect(finalBalance).toBe(20)
+      console.log(
+        `CP03-SVC-CONC-01 DB evidence: P2034=${serializationErrors.length}; attempts=${evidenceA.attempts}/${evidenceB.attempts}; failedRequest=${failedRequest}; bookings=${bookings.length}; debits=${debits.length}; balance=$${finalBalance.toFixed(2)}`,
+      )
+    } finally {
+      await Promise.all([dbA.$disconnect(), dbB.$disconnect()])
+    }
+  })
+})
 
 describe('CP-03 Group 1 — barrier-synchronised SERIALIZABLE ($80 wallet, two $60 debits)', () => {
   let fixture: Fixture

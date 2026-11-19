@@ -72,7 +72,7 @@ import { POST as bulkPOST }    from '@/app/api/client/bookings/create-bulk/route
 import { POST as reviewPOST, GET as reviewGET } from '@/app/api/reviews/route'
 import { getServerSession }    from 'next-auth/next'
 import { validateMobileToken } from '@/lib/mobile-auth'
-import { computeWalletBalance } from '@/lib/services/wallet-booking'
+import { computeWalletBalance, computeWalletBalanceDecimal } from '@/lib/services/wallet-booking'
 import { executeWalletBookingTransaction } from '@/lib/services/wallet-booking'
 import { localDateTimeToUTC }  from '@/lib/utils/timezone'
 
@@ -236,9 +236,7 @@ describe('CP-01 — profile route: empty customer list returns empty bookings', 
 
 describe('CP-02 — computeWalletBalance: Decimal amounts sum correctly', () => {
   it('CP02-R1: two Decimal credits sum to their numeric total (not concatenated)', () => {
-    // Prisma returns Decimal objects. The old bug: 0 + "70.00" + "70.00" = "070.0070.00"
-    // The fix: Number(t.amount) in the reduce.
-    // Test with actual Decimal objects from @prisma/client/runtime/library
+    // Prisma returns Decimal objects, which must be added without coercing to strings.
     const { Decimal } = require('@prisma/client/runtime/library')
     const transactions = [
       { type: 'CREDIT', amount: new Decimal('70.00'), expiresAt: null },
@@ -247,22 +245,46 @@ describe('CP-02 — computeWalletBalance: Decimal amounts sum correctly', () => 
     const balance = computeWalletBalance(transactions)
     expect(typeof balance).toBe('number')
     expect(balance).toBe(140)
-    expect(balance).not.toBe('070.0070.00' as any)
   })
 
-  it('CP02-R2: expired credits are excluded from balance calculation', () => {
+  it('CP02-R2: decimal credits and debits retain exact cents and expired credits are excluded', () => {
     const { Decimal } = require('@prisma/client/runtime/library')
-    const past = new Date(Date.now() - 1000)
+    const asOf = new Date('2026-11-19T00:00:00.000Z')
     const transactions = [
-      { type: 'CREDIT', amount: new Decimal('100.00'), expiresAt: null },     // valid
-      { type: 'CREDIT', amount: new Decimal('50.00'),  expiresAt: past },      // expired
-      { type: 'DEBIT',  amount: new Decimal('30.00'),  expiresAt: null },
+      { type: 'CREDIT', amount: new Decimal('0.10'), expiresAt: null },
+      { type: 'CREDIT', amount: new Decimal('0.20'), expiresAt: null },
+      { type: 'CREDIT', amount: new Decimal('0.40'), expiresAt: asOf },
+      { type: 'CREDIT', amount: new Decimal('50.00'), expiresAt: new Date(asOf.getTime() - 1) },
+      { type: 'DEBIT', amount: new Decimal('0.30'), expiresAt: null },
     ]
-    const balance = computeWalletBalance(transactions)
-    expect(balance).toBe(70)   // 100 - 30 (not 150 - 30 = 120)
+    expect(computeWalletBalance(transactions, asOf)).toBe(0.4)
   })
 
-  it('CP02-R3: profile route returns numeric balance in response', async () => {
+  it('CP02-R3: decimal arithmetic preserves exact-cent boundary results', () => {
+    const { Decimal } = require('@prisma/client/runtime/library')
+    const asOf = new Date('2026-11-19T00:00:00.000Z')
+    const transactions = [
+      { type: 'CREDIT', amount: new Decimal('0.10'), expiresAt: null },
+      { type: 'CREDIT', amount: new Decimal('0.20'), expiresAt: null },
+      { type: 'DEBIT', amount: new Decimal('0.30'), expiresAt: null },
+    ]
+    const availableBalance = computeWalletBalanceDecimal(transactions.slice(0, 2), asOf)
+    expect(availableBalance.equals(new Decimal('0.30'))).toBe(true)
+    expect(availableBalance.greaterThanOrEqualTo(new Decimal('0.30'))).toBe(true)
+    expect(availableBalance.lessThan(new Decimal('0.31'))).toBe(true)
+    const exactBalance = computeWalletBalanceDecimal(transactions, asOf)
+    expect(exactBalance.greaterThanOrEqualTo(new Decimal('0.00'))).toBe(true)
+    expect(exactBalance.lessThan(new Decimal('0.01'))).toBe(true)
+    expect(computeWalletBalance(transactions, asOf)).toBe(0)
+    expect(
+      computeWalletBalance(
+        [...transactions, { type: 'CREDIT', amount: new Decimal('0.01'), expiresAt: null }],
+        asOf,
+      ),
+    ).toBe(0.01)
+  })
+
+  it('CP02-R4: profile route returns numeric balance in response', async () => {
     // Create a user with Decimal wallet credits and confirm the route returns numbers
     const f = await createFullFixture('CP02_R3')
     try {

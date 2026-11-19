@@ -1160,9 +1160,9 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 ---
 
 ## Section 14 — Phase 6: Client Portal Audit
-**Version:** 1.1
+**Version:** 1.2
 **Started:** 2026-11-18
-**Status:** FIX-IMPLEMENTED — all 7 findings fixed in ec380043; runtime verification pending
+**Status:** CP-02 Decimal and CP-03 production-service corrections verified; findings remain OPEN pending reviewer
 **Audit document:** `docs/audit/CLIENT-PORTAL-AUDIT.md`
 **Baseline commit:** 4dbf4e54
 **Fix commit:** `ec380043`
@@ -1172,8 +1172,8 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | ID | Risk | Title | Fix | Fix-Verified | Status |
 |-----|------|-------|-----|-------------|--------|
 | CP-01 | HIGH | Cross-account booking disclosure via null customerId fallback | `ec380043` | CP01-R1 + CP01-R2 pass (53278e4b) — route handler test, real DB | OPEN — awaiting reviewer |
-| CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | `ec380043` | CP02-R1..R3 pass (53278e4b) — Decimal objects confirmed numeric | OPEN — awaiting reviewer |
-| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `53278e4b` (extracted to lib/services/wallet-booking.ts; service tested directly in cp-phase6-runtime.test.ts CP03-S1..S3) | 22+3 tests, exit 0 — Japan Supabase direct | OPEN — awaiting reviewer |
+| CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | `ec380043` | CP02-R1..R4 pass — Decimal accumulation, expiry, decimal debits, exact-cent boundary, and numeric balance return compatibility | OPEN — awaiting reviewer |
+| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `53278e4b` (extracted to lib/services/wallet-booking.ts) | CP03-SVC-CONC-01 passed on isolated PostgreSQL: P2034=1, retry attempts=2/1, one booking, one debit, final balance=$20.00 | OPEN — awaiting reviewer |
 | CP-04 | HIGH | Missing instructor eligibility gate in wallet booking route | `ec380043` | CP04-R1 pass (53278e4b) — suspended instructor returns 403 | OPEN — awaiting reviewer |
 | CP-05 | HIGH | Instructor timezone conversion uses server timezone | `ec380043` | CP05-R1..R3 pass (53278e4b) — Perth 09:00→01:00 UTC verified in DB | OPEN — awaiting reviewer |
 | CP-06 | MEDIUM | Review persistence and display mismatch | `ec380043` | CP06-R1..R3 pass (53278e4b) — customerReview written and read as text | OPEN — awaiting reviewer |
@@ -1186,9 +1186,11 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | ID | Required test |
 |----|--------------|
 | CP-01 | Two-account test: account with no customer record cannot read bookings belonging to another account |
-| CP-02 | Wallet with multiple Decimal credits — verify balance is numeric not string-concatenated |
-| CP-03 | Concurrent booking requests against same wallet — verify only bookings within balance are confirmed |
+| CP-02 | Multiple Prisma.Decimal credits/debits, expiry filtering, and exact-cent balance boundary; keep profile response numeric |
+| CP-03 | Concurrent production-service requests against one wallet; observe SERIALIZABLE conflict and retry, then verify only bookings within balance are confirmed |
 | CP-04 | Booking attempt against suspended/inactive instructor — verify 403 rejection |
 | CP-05 | Perth timezone: submit 9:00 AM Perth — verify stored UTC is 01:00 not 09:00 |
 | CP-06 | Submit review with comment — verify customerReview written and read back as text not number |
 | CP-07 | Account with >10 bookings — verify upcomingCount/pastCount reflect full dataset not current page |
+
+**Section 14 last updated:** 2026-11-19
