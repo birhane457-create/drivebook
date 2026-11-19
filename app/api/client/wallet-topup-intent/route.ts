@@ -95,8 +95,9 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     // Create a PENDING wallet transaction for the top-up amount only (not chargeAmount).
-    // The webhook will confirm it when payment_intent.succeeded fires.
-    // The platform fee is recorded as a separate PLATFORM_FEE transaction in the webhook.
+    // The stripePaymentIntentId is added to the metadata after the PI is created below.
+    // Both wallet-add and the webhook confirm THIS SAME ROW — they do not create new rows.
+    // This prevents the double-credit: only one CREDIT row ever exists for one top-up.
     const wallet = await getOrCreateWallet(user.id);
     const pendingTx = await prisma.walletTransaction.create({
       data: {
@@ -110,14 +111,14 @@ export async function POST(req: NextRequest) {
           platformFee,                            // fee kept by DriveBook
           chargeAmount,                           // total charged to card
           feePercent: pricing.platformFeePercentage,
+          // stripePaymentIntentId added below after PI creation
         },
       }
     });
 
     // Charge the student amount + fee.
-    // Metadata carries topupAmount and platformFee so the webhook can:
-    //   1. confirm the CREDIT for topupAmount
-    //   2. write a separate PLATFORM_FEE record for platformFee
+    // transactionId in PI metadata allows both wallet-add and the webhook to locate
+    // the original PENDING row and confirm it atomically, without creating new rows.
     let paymentIntent;
     try {
       paymentIntent = await stripeService.createPaymentIntent({
@@ -132,6 +133,21 @@ export async function POST(req: NextRequest) {
       await prisma.walletTransaction.delete({ where: { id: pendingTx.id } }).catch(() => {});
       throw stripeError;
     }
+
+    // Seal the PaymentIntent ID into the PENDING transaction metadata so the
+    // unique index protects it from duplicate confirmation by either path.
+    await prisma.walletTransaction.update({
+      where: { id: pendingTx.id },
+      data: {
+        metadata: {
+          topupAmount: amount,
+          platformFee,
+          chargeAmount,
+          feePercent: pricing.platformFeePercentage,
+          stripePaymentIntentId: paymentIntent.paymentIntentId,
+        },
+      }
+    });
 
     return NextResponse.json({
       clientSecret: paymentIntent.clientSecret,

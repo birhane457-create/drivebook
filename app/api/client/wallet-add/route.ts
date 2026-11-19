@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -192,98 +192,130 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    // HIGH-2 FIX: Improved idempotency check using metadata instead of description
-    // Store paymentIntentId in metadata for reliable duplicate detection
-    const existingTransaction = await prisma.walletTransaction.findFirst({
+    // Idempotency: check if the original PENDING transaction has already been confirmed.
+    // The unique index on metadata->>'stripePaymentIntentId' prevents duplicate CONFIRMED
+    // CREDIT rows, but the PENDING row (created by wallet-topup-intent) doesn't have this
+    // field set yet — the update path below is the atomic guard.
+    const pendingTxId = paymentIntent.metadata?.transactionId ?? null;
+
+    const existingConfirmed = await prisma.walletTransaction.findFirst({
       where: {
         walletId: wallet.id,
         status: 'CONFIRMED',
         type: 'CREDIT',
-        metadata: {
-          path: ['stripePaymentIntentId'],
-          equals: paymentIntentId
-        }
+        metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentId }
       }
     });
 
-    if (existingTransaction) {
-      // Already credited this payment intent
-      console.warn(`Duplicate wallet-add call for paymentIntentId=${paymentIntentId}`);
+    if (existingConfirmed) {
+      console.warn(`Duplicate wallet-add call for paymentIntentId=${paymentIntentId} — already confirmed`);
       const newBalance = await getWalletBalance(user.id);
       return NextResponse.json({
         success: true,
         duplicate: true,
-        wallet: {
-          balance: newBalance.balance,
-          totalPaid: newBalance.totalPaid,
-          creditsRemaining: newBalance.balance
-        },
-        transaction: {
-          id: existingTransaction.id,
-          amount: existingTransaction.amount,
-          createdAt: existingTransaction.createdAt
-        }
+        wallet: { balance: newBalance.balance, totalPaid: newBalance.totalPaid, creditsRemaining: newBalance.balance },
+        transaction: { id: existingConfirmed.id, amount: existingConfirmed.amount, createdAt: existingConfirmed.createdAt }
       });
     }
-    
-    // Get current balance before transaction
-    const previousBalance = await getWalletBalance(user.id);
 
-    // Parse fee metadata using the shared helper — same logic as the webhook.
-    // piAmountReceived is the fallback for legacy top-ups without fee metadata.
+    // Parse fee split from PI metadata using shared helper
     const piAmountReceived = paymentIntent.amount_received / 100;
     const topupMeta = parseTopupMetadata(paymentIntent.metadata, piAmountReceived);
     const { topupAmount: creditAmount, platformFee: platformFeeAmount, chargeAmount: actualCharge, feePercent: metaFeePercent } = topupMeta;
 
-    const result = await prisma.$transaction(async (tx) => {
-      // Credit wallet with topupAmount only — not the full charge amount
-      const walletTx = await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          type: 'CREDIT',
-          amount: creditAmount,
-          status: 'CONFIRMED',
-          description: `Wallet top-up $${creditAmount.toFixed(2)}`,
-          expiresAt: await (async () => {
-            const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing')
-            const months = await getWalletCreditValidityMonths()
-            const paymentDate = new Date(paymentIntent.created * 1000)
-            paymentDate.setMonth(paymentDate.getMonth() + months)
-            return paymentDate
-          })(),
-          metadata: {
-            stripePaymentIntentId: paymentIntentId,
-            type: 'wallet_topup',
-            verifiedAmount: true,
-            topupAmount: creditAmount,
-            chargeAmount: actualCharge,
-            platformFee: platformFeeAmount,
-            feePercent: metaFeePercent,
-          }
-        }
-      });
+    const previousBalance = await getWalletBalance(user.id);
 
-      // Record platform fee separately — non-spendable, appears in financial reporting
-      let feeTx = null;
-      if (topupMeta.hasFeeSplit && platformFeeAmount > 0) {
-        feeTx = await tx.walletTransaction.create({
+    const result = await prisma.$transaction(async (tx) => {
+      const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing');
+      const months = await getWalletCreditValidityMonths();
+      const paymentDate = new Date(paymentIntent.created * 1000);
+      paymentDate.setMonth(paymentDate.getMonth() + months);
+      const expiresAt = paymentDate;
+
+      let walletTx: any;
+
+      if (pendingTxId) {
+        // PRIMARY PATH: confirm the specific PENDING row created by wallet-topup-intent.
+        // updateMany with status:'PENDING' as a WHERE condition is atomic —
+        // if the webhook races and confirms it first, count=0 and we read the
+        // already-confirmed row without writing a duplicate.
+        const updated = await tx.walletTransaction.updateMany({
+          where: { id: pendingTxId, walletId: wallet.id, status: 'PENDING' },
           data: {
-            walletId: wallet.id,
-            type: 'PLATFORM_FEE',
-            amount: platformFeeAmount,
             status: 'CONFIRMED',
-            description: `DriveBook platform fee — ${metaFeePercent}% on $${creditAmount.toFixed(2)} top-up`,
+            expiresAt,
             metadata: {
-              stripePaymentIntentId: paymentIntentId,
-              type: 'wallet_topup_fee',
-              topupWalletTxId: walletTx.id,
-              creditAmount,
+              topupAmount: creditAmount,
               chargeAmount: actualCharge,
+              platformFee: platformFeeAmount,
               feePercent: metaFeePercent,
-              nonRefundable: true,
+              stripePaymentIntentId: paymentIntentId,
+              type: 'wallet_topup',
+              verifiedAmount: true,
             },
           }
         });
+
+        walletTx = await tx.walletTransaction.findUnique({ where: { id: pendingTxId } });
+        if (!walletTx) throw new Error('Wallet transaction not found');
+        if (updated.count === 0) {
+          // Webhook already confirmed it — not an error, just return it as-is
+          console.info(`wallet-add: PENDING tx ${pendingTxId} already confirmed by webhook`);
+        }
+      } else {
+        // LEGACY FALLBACK: PI has no transactionId metadata (created before this fix).
+        walletTx = await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'CREDIT',
+            amount: creditAmount,
+            status: 'CONFIRMED',
+            description: `Wallet top-up $${creditAmount.toFixed(2)} (legacy)`,
+            expiresAt,
+            metadata: {
+              stripePaymentIntentId: paymentIntentId,
+              type: 'wallet_topup',
+              verifiedAmount: true,
+              topupAmount: creditAmount,
+              chargeAmount: actualCharge,
+              platformFee: platformFeeAmount,
+              feePercent: metaFeePercent,
+            }
+          }
+        });
+      }
+
+      // Record PLATFORM_FEE if not already written (guard by PI id + type lookup)
+      let feeTx = null;
+      if (topupMeta.hasFeeSplit && platformFeeAmount > 0) {
+        const existingFee = await tx.walletTransaction.findFirst({
+          where: {
+            walletId: wallet.id,
+            type: 'PLATFORM_FEE',
+            metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentId },
+          },
+          select: { id: true },
+        });
+        if (!existingFee) {
+          feeTx = await tx.walletTransaction.create({
+            data: {
+              walletId: wallet.id,
+              type: 'PLATFORM_FEE',
+              amount: platformFeeAmount,
+              status: 'CONFIRMED',
+              description: `DriveBook platform fee — ${metaFeePercent}% on $${creditAmount.toFixed(2)} top-up`,
+              metadata: {
+                stripePaymentIntentId: paymentIntentId,
+                type: 'wallet_topup_fee',
+                topupWalletTxId: walletTx.id,
+                creditAmount,
+                chargeAmount: actualCharge,
+                feePercent: metaFeePercent,
+                nonRefundable: true,
+              },
+            }
+          });
+        }
       }
 
       return { walletTx, feeTx };
