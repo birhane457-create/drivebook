@@ -95,8 +95,16 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Verify amount matches what Stripe has
-      const expectedCents = Math.round(amount * 100);
+      // Amount validation: compare against chargeAmount (topupAmount + platformFee),
+      // not the topupAmount alone. For legacy top-ups with no fee metadata, fall back
+      // to the submitted amount.
+      const metaChargeAmount = paymentIntent.metadata?.chargeAmount
+        ? parseFloat(paymentIntent.metadata.chargeAmount)
+        : null;
+      const expectedChargeAmount = (metaChargeAmount !== null && Number.isFinite(metaChargeAmount))
+        ? metaChargeAmount
+        : amount;
+      const expectedCents = Math.round(expectedChargeAmount * 100);
       if (paymentIntent.amount_received !== expectedCents) {
         return NextResponse.json(
           { error: 'Payment amount mismatch' },
@@ -218,6 +226,18 @@ export async function POST(req: NextRequest) {
     // Get current balance before transaction
     const previousBalance = await getWalletBalance(user.id);
 
+    // Read topupAmount from PaymentIntent metadata (set by wallet-topup-intent).
+    // For top-ups created after the platform fee policy (2026-11-05):
+    //   topupAmount = what goes into the wallet (e.g. $100)
+    //   chargeAmount = what the student paid (e.g. $103.60)
+    //   platformFee  = DriveBook's fee (e.g. $3.60)
+    // For legacy top-ups without metadata, credit the full amount (safe fallback).
+    const metaTopupAmount   = paymentIntent.metadata?.topupAmount   ? parseFloat(paymentIntent.metadata.topupAmount)   : null;
+    const metaPlatformFee   = paymentIntent.metadata?.platformFee   ? parseFloat(paymentIntent.metadata.platformFee)   : null;
+    const metaFeePercent    = paymentIntent.metadata?.feePercent    ? parseFloat(paymentIntent.metadata.feePercent)    : null;
+    const creditAmount      = (metaTopupAmount !== null && Number.isFinite(metaTopupAmount)) ? metaTopupAmount : amount;
+    const platformFeeAmount = (metaPlatformFee !== null && Number.isFinite(metaPlatformFee)) ? metaPlatformFee : null;
+
     // P0-4 FIX: recordWalletCredit uses the global prisma client (not tx) — calling it
     // inside $transaction creates a split-brain: if walletTransaction.create rolls back,
     // the ledger entry is already committed via a different DB connection. Move the
@@ -225,17 +245,14 @@ export async function POST(req: NextRequest) {
     // paymentIntentId (not Date.now()) so it is truly idempotent on retry.
     // Also store the walletTx id upfront for the ledger call below.
     const result = await prisma.$transaction(async (tx) => {
-      // ✅ P0 FIX #2: Create transaction record (no stored balance update)
+      // ✅ Credit wallet with topupAmount only (not the full charge which includes platform fee)
       const walletTx = await tx.walletTransaction.create({
         data: {
           walletId: wallet.id,
           type: 'CREDIT',
-          amount: amount,
+          amount: creditAmount,
           status: 'CONFIRMED',
-          description: `Added ${amount.toFixed(2)} credits via ${paymentIntentId ? 'Stripe' : 'manual'}`,
-          // expiresAt: calculated from the verified PaymentIntent's creation time + validity months
-          // Use paymentIntent.created (the Stripe object timestamp at payment initiation),
-          // not new Date() which would extend expiry on delayed retries.
+          description: `Added ${creditAmount.toFixed(2)} credits via ${paymentIntentId ? 'Stripe' : 'manual'}`,
           expiresAt: await (async () => {
             const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing')
             const months = await getWalletCreditValidityMonths()
@@ -246,14 +263,40 @@ export async function POST(req: NextRequest) {
           metadata: {
             stripePaymentIntentId: paymentIntentId,
             type: 'wallet_topup',
-            verifiedAmount: true
+            verifiedAmount: true,
+            topupAmount: creditAmount,
+            chargeAmount: amount,                 // what student actually paid
+            platformFee: platformFeeAmount ?? 0,
+            feePercent: metaFeePercent ?? 0,
           }
         }
       });
 
-      // Note: Audit logging removed - AuditLog model not in schema
-      
-      return { walletTx };
+      // Record platform fee as a separate non-spendable transaction so it
+      // appears in financial reporting but does not inflate the wallet balance.
+      let feeTx = null;
+      if (platformFeeAmount && platformFeeAmount > 0) {
+        feeTx = await tx.walletTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: 'PLATFORM_FEE',
+            amount: platformFeeAmount,
+            status: 'CONFIRMED',
+            description: `DriveBook platform fee — ${metaFeePercent ?? ''}% on $${creditAmount.toFixed(2)} top-up`,
+            metadata: {
+              stripePaymentIntentId: paymentIntentId,
+              type: 'wallet_topup_fee',
+              topupWalletTxId: walletTx.id,
+              creditAmount,
+              chargeAmount: amount,
+              feePercent: metaFeePercent ?? 0,
+              nonRefundable: true,
+            },
+          }
+        });
+      }
+
+      return { walletTx, feeTx };
     });
 
     // P0-4 FIX: Ledger write happens AFTER the transaction commits, using the committed

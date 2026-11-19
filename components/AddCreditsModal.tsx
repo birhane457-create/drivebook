@@ -15,11 +15,30 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
   const [amount, setAmount] = useState(initialAmount ?? '100');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [feePercent, setFeePercent] = useState<number | null>(null);
+  const [intentData, setIntentData] = useState<{
+    clientSecret: string;
+    topupAmount: number;
+    platformFee: number;
+    chargeAmount: number;
+  } | null>(null);
 
   // Sync if initialAmount changes (e.g. opened from payment link)
   useEffect(() => {
     if (initialAmount) setAmount(initialAmount);
   }, [initialAmount]);
+
+  // Fetch fee rate once so we can show the breakdown before submission
+  useEffect(() => {
+    fetch('/api/client/wallet-topup-intent')
+      .then(r => r.json())
+      .then(d => { if (d.feePercent != null) setFeePercent(d.feePercent); })
+      .catch(() => {}); // non-critical — modal still works without it
+  }, []);
+
+  const numAmount = parseFloat(amount) || 0;
+  const platformFeePreview = feePercent != null ? parseFloat((numAmount * feePercent / 100).toFixed(2)) : null;
+  const chargePreview = platformFeePreview != null ? parseFloat((numAmount + platformFeePreview).toFixed(2)) : null;
 
   const presets = [50, 100, 200, 500];
 
@@ -32,13 +51,13 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
 
     try {
       const numAmount = parseFloat(amount);
-      if (numAmount <= 0) {
+      if (numAmount <= 0 || !Number.isFinite(numAmount)) {
         setError('Please enter a valid amount');
         setLoading(false);
         return;
       }
 
-      // Step 1: Create Stripe payment intent for wallet top-up
+      // Step 1: Create Stripe payment intent — returns topupAmount, platformFee, chargeAmount
       const intentRes = await fetch('/api/client/wallet-topup-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -52,9 +71,10 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
         return;
       }
 
-      const { clientSecret } = await intentRes.json();
+      const intentJson = await intentRes.json();
+      const { clientSecret, topupAmount, platformFee, chargeAmount } = intentJson;
 
-      // Step 2: Confirm card payment with Stripe
+      // Step 2: Confirm card payment with Stripe — card is charged chargeAmount
       const result = await stripe.confirmCardPayment(clientSecret, {
         payment_method: {
           card: elements.getElement(CardNumberElement)!,
@@ -64,34 +84,22 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
       if (result.error) {
         setError(result.error.message || 'Payment failed');
       } else if (result.paymentIntent?.status === 'succeeded') {
-        // Step 3: Credit the wallet, passing the confirmed paymentIntentId
+        // Step 3: Notify wallet-add with the topupAmount (what wallet should receive).
+        // wallet-add reads chargeAmount from PI metadata for its own validation.
         const walletAddRes = await fetch('/api/client/wallet-add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            amount: numAmount,
+            amount: chargeAmount ?? numAmount,    // total charged — used for PI amount validation
             paymentIntentId: result.paymentIntent.id,
           }),
         });
 
-        // P0 FIX #5: Check wallet-add response for errors
-        // NOTE: The payment itself has already succeeded at this point (we're inside
-        // the paymentIntent.status === 'succeeded' branch). The Stripe webhook
-        // independently credits the wallet. If wallet-add fails (e.g. 403 from
-        // the ownership check because userId was not passed to the PaymentIntent),
-        // the webhook still processes the credit. So we treat wallet-add failure
-        // as a non-blocking event — the credit will arrive via the webhook.
+        // Payment already succeeded. If wallet-add fails, the webhook credits the wallet.
         if (!walletAddRes.ok) {
           console.warn('wallet-add returned non-OK; webhook will credit the wallet');
         }
 
-        const walletResult = walletAddRes.ok ? await walletAddRes.json() : null;
-        
-        if (walletResult && !walletResult.success) {
-          console.warn('wallet-add returned non-success; webhook will credit the wallet');
-        }
-
-        // Success - payment succeeded, wallet will be credited by webhook if not already
         onSuccess();
         onClose();
       }
@@ -246,6 +254,24 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
             </div>
           )}
 
+          {/* Fee breakdown — shown once amount is valid */}
+          {numAmount > 0 && chargePreview != null && (
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm space-y-1">
+              <div className="flex justify-between text-gray-600">
+                <span>Credits added to wallet</span>
+                <span>${numAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-gray-600">
+                <span>DriveBook service fee ({feePercent}%)</span>
+                <span>${platformFeePreview!.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-semibold text-gray-900 border-t border-gray-300 pt-1 mt-1">
+                <span>Total charged to card</span>
+                <span>${chargePreview.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
           {/* Info Box */}
           <div className="p-3 bg-blue-50 rounded-lg">
             <p className="text-sm text-blue-700">
@@ -274,7 +300,9 @@ export default function AddCreditsModal({ isOpen, onClose, onSuccess, initialAmo
                   Processing...
                 </>
               ) : (
-                `Add $${amount}`
+                chargePreview != null
+                  ? `Pay $${chargePreview.toFixed(2)}`
+                  : `Add $${amount}`
               )}
             </button>
           </div>

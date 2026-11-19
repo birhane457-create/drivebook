@@ -22,6 +22,22 @@ const schema = z.object({
     .multipleOf(0.01, 'Amount must have at most 2 decimal places'),
 });
 
+export async function GET(req: NextRequest) {
+  // Returns the current platform fee rate so the frontend can show the
+  // breakdown before the student submits payment.
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const pricing = await getPlatformPricing();
+    return NextResponse.json({ feePercent: pricing.platformFeePercentage });
+  } catch (error: any) {
+    console.error('Wallet fee-rate error:', error);
+    return NextResponse.json({ error: 'Failed to retrieve fee rate' }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -69,43 +85,62 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // PLATFORM FEE: charged on every wallet funding event (policy 2026-11-05).
+    // The student pays `amount + platformFee`; the wallet is credited with `amount` only.
+    // The fee is non-refundable and recorded separately in financial reporting.
+    const platformFee = parseFloat((amount * pricing.platformFeePercentage / 100).toFixed(2));
+    const chargeAmount = parseFloat((amount + platformFee).toFixed(2));
+
     const user = await prisma.user.findUnique({ where: { email: session!.user!.email } });
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    // Create a PENDING wallet transaction BEFORE the Stripe intent.
+    // Create a PENDING wallet transaction for the top-up amount only (not chargeAmount).
     // The webhook will confirm it when payment_intent.succeeded fires.
-    // Without this, the webhook has no transaction to confirm and the
-    // wallet balance never increases after a successful top-up.
+    // The platform fee is recorded as a separate PLATFORM_FEE transaction in the webhook.
     const wallet = await getOrCreateWallet(user.id);
     const pendingTx = await prisma.walletTransaction.create({
       data: {
         walletId: wallet.id,
         type: 'CREDIT',
-        amount,
+        amount,                                   // wallet credit = requested amount only
         description: `Wallet top-up — $${amount.toFixed(2)}`,
         status: 'PENDING',
+        metadata: {
+          topupAmount: amount,                    // amount to credit to wallet
+          platformFee,                            // fee kept by DriveBook
+          chargeAmount,                           // total charged to card
+          feePercent: pricing.platformFeePercentage,
+        },
       }
     });
 
-    // Pass transactionId + walletId in metadata so the webhook can find it.
-    // If Stripe fails, delete the orphaned PENDING transaction so it doesn't
-    // pollute the wallet history or confuse the webhook on retry.
+    // Charge the student amount + fee.
+    // Metadata carries topupAmount and platformFee so the webhook can:
+    //   1. confirm the CREDIT for topupAmount
+    //   2. write a separate PLATFORM_FEE record for platformFee
     let paymentIntent;
     try {
       paymentIntent = await stripeService.createPaymentIntent({
-        amount,
-        providerId: '',
+        amount: chargeAmount,                     // total charged to card
         transactionId: pendingTx.id,
         walletId: wallet.id,
+        userId: user.id,
         customerEmail: session!.user!.email,
-        description: `Wallet top-up $${amount.toFixed(2)}`,
+        description: `Wallet top-up $${amount.toFixed(2)} + $${platformFee.toFixed(2)} DriveBook fee`,
       });
     } catch (stripeError) {
       await prisma.walletTransaction.delete({ where: { id: pendingTx.id } }).catch(() => {});
       throw stripeError;
     }
 
-    return NextResponse.json({ clientSecret: paymentIntent.clientSecret });
+    return NextResponse.json({
+      clientSecret: paymentIntent.clientSecret,
+      // Return breakdown so the frontend can display it
+      topupAmount: amount,
+      platformFee,
+      chargeAmount,
+      feePercent: pricing.platformFeePercentage,
+    });
   } catch (error: any) {
     console.error('Wallet top-up intent error:', error);
     // Return 400 for validation errors (Zod), 500 for unexpected errors

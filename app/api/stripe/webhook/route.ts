@@ -938,17 +938,24 @@ async function handleWalletPaymentSuccess(
           throw new Error('No wallet transactions found');
         }
     
-        // Ã¢Å“â€¦ Validate payment amount matches transaction total (prevents underpayment fraud)
-        const expectedCents = Math.round(
-          transactions.filter((t: any) => t.type === 'CREDIT').reduce((s: number, t: any) => s + t.amount, 0) * 100
-        );
+        // Validate: Stripe received chargeAmount (topupAmount + platformFee), not topupAmount alone.
+        // Read chargeAmount from PENDING transaction metadata (sealed at intent creation).
+        // Fall back to CREDIT sum for legacy top-ups that pre-date the platform fee policy.
+        const creditTx = transactions.find((t: any) => t.type === 'CREDIT');
+        const metaCharge = creditTx?.metadata && typeof creditTx.metadata === 'object'
+          ? (creditTx.metadata as any).chargeAmount
+          : null;
+        const expectedChargeAmount = (metaCharge && Number.isFinite(parseFloat(String(metaCharge))))
+          ? parseFloat(String(metaCharge))
+          : transactions.filter((t: any) => t.type === 'CREDIT').reduce((s: number, t: any) => s + Number(t.amount), 0);
+        const expectedCents = Math.round(expectedChargeAmount * 100);
         const receivedCents = paymentIntent.amount_received;
         if (receivedCents !== expectedCents) {
-          logger.error('Ã¢ÂÅ’ Wallet payment amount mismatch:', { expected: expectedCents, received: receivedCents });
+          logger.error('Wallet payment amount mismatch:', { expected: expectedCents, received: receivedCents });
           throw new Error(`Wallet payment amount mismatch: expected ${expectedCents} cents, received ${receivedCents} cents`);
         }
-    
-        // Confirm all PENDING wallet transactions, setting expiresAt on CREDIT transactions
+
+        // Confirm all PENDING wallet transactions, setting expiresAt on CREDIT transactions.
         const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing');
         const topUpValidityMonths = await getWalletCreditValidityMonths();
         const paymentConfirmedAt = new Date(paymentIntent.created * 1000);
@@ -960,9 +967,39 @@ async function handleWalletPaymentSuccess(
             where: { id: transaction.id },
             data: { status: 'CONFIRMED', ...(expiresAt ? { expiresAt } : {}) }
           });
-          logger.info(`Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount}${expiresAt ? ` expires ${expiresAt.toISOString()}` : ''})`);;
+          logger.info(`Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount}${expiresAt ? ` expires ${expiresAt.toISOString()}` : ''})`);
         }
-    
+
+        // Write PLATFORM_FEE record if the PENDING CREDIT carried fee metadata.
+        // This is the authoritative fee record for financial reporting.
+        // The wallet balance calculation ignores PLATFORM_FEE type rows.
+        if (creditTx && creditTx.metadata && typeof creditTx.metadata === 'object') {
+          const meta = creditTx.metadata as any;
+          const feeCents = meta.platformFee ? parseFloat(String(meta.platformFee)) : 0;
+          const feePercent = meta.feePercent ? parseFloat(String(meta.feePercent)) : 0;
+          const topupAmount = meta.topupAmount ? parseFloat(String(meta.topupAmount)) : 0;
+          if (feeCents > 0) {
+            await tx.walletTransaction.create({
+              data: {
+                walletId: creditTx.walletId,
+                type: 'PLATFORM_FEE',
+                amount: feeCents,
+                status: 'CONFIRMED',
+                description: `DriveBook platform fee — ${feePercent}% on $${topupAmount.toFixed(2)} top-up`,
+                metadata: {
+                  stripePaymentIntentId: paymentIntent.id,
+                  type: 'wallet_topup_fee',
+                  topupWalletTxId: creditTx.id,
+                  creditAmount: topupAmount,
+                  chargeAmount: expectedChargeAmount,
+                  feePercent,
+                  nonRefundable: true,
+                },
+              },
+            });
+            logger.info(`Platform fee recorded: $${feeCents.toFixed(2)} on wallet ${creditTx.walletId}`);
+          }
+        }
         // Get wallet details for logging
         const wallet = await tx.clientWallet.findUnique({
           where: { id: transactions[0].walletId },
