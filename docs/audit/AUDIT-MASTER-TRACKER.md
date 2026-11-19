@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.93 (Section 14 closed; Section 15 Phase 7 in progress)
-**Last Updated:** 2026-11-19 (v6.93 — provider-local PDA validation, UTF-8 repair, and local production build)
+**Version:** 6.94 (Section 14 — CP-03 final corrections verified at 5ee46420)
+**Last Updated:** 2026-11-19 (v6.94 — Correction A and B verified at HEAD 5ee46420; Section 14 remains CLOSED)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1162,7 +1162,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 ## Section 14 — Phase 6: Client Portal Audit
 **Version:** 1.3
 **Started:** 2026-11-18
-**Status:** CLOSED — 7/7 findings accepted; runtime evidence and TypeScript baseline comparison recorded. Project-wide TypeScript remains nonzero at baseline and final; this is not a clean build.
+**Status:** CLOSED — 7/7 findings accepted. Reviewer corrections A (production-service concurrency) and B (Decimal arithmetic) addressed in ae15d6e9 and confirmed at HEAD 5ee46420. TypeScript scoped check exits with pre-existing lib/auth.ts errors only; no new errors introduced.
 **Audit document:** `docs/audit/CLIENT-PORTAL-AUDIT.md`
 **Baseline commit:** 4dbf4e54
 **Fix commit:** `ec380043`
@@ -1173,7 +1173,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 |-----|------|-------|-----|-------------|--------|
 | CP-01 | HIGH | Cross-account booking disclosure via null customerId fallback | `ec380043` | CP01-R1 + CP01-R2 pass (53278e4b) — route handler test, real DB | CLOSED |
 | CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | `ec380043` | CP02-R1..R4 pass — Decimal accumulation, expiry, decimal debits, exact-cent boundary, and numeric balance return compatibility | CLOSED |
-| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `53278e4b` (extracted to lib/services/wallet-booking.ts) | CP03-SVC-CONC-01 passed on isolated PostgreSQL: P2034=1, retry attempts=2/1, retry balance=$20.00, one booking, one debit, final balance=$20.00 | CLOSED |
+| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `53278e4b` (service extracted) + `ae15d6e9` (Correction A: production service concurrency; Correction B: Prisma.Decimal arithmetic via computeWalletBalanceDecimal) | CP03-SVC-CONC-01 at 5ee46420: P2034=1; attempts=1/2; 1 booking; 1 debit; balance=$20.00. CP02-R1..R4: Decimal accumulation, expiry, exact-cent boundary. 33/33 pass, exit 0. | CLOSED |
 | CP-04 | HIGH | Missing instructor eligibility gate in wallet booking route | `ec380043` | CP04-R1 pass (53278e4b) — suspended instructor returns 403 | CLOSED |
 | CP-05 | HIGH | Instructor timezone conversion uses server timezone | `ec380043` | CP05-R1..R3 pass (53278e4b) — Perth 09:00→01:00 UTC verified in DB | CLOSED |
 | CP-06 | MEDIUM | Review persistence and display mismatch | `ec380043` | CP06-R1..R3 pass (53278e4b) — customerReview written and read as text | CLOSED |
