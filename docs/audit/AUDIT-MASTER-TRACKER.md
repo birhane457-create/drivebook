@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.77 (Section 14 — Client Portal Audit findings registered)
-**Last Updated:** 2026-11-19 (v6.77 — final reviewer corrections; 19/19 tests pass 92dcfe88)
+**Version:** 6.78 (Section 14 — Client Portal Audit findings registered)
+**Last Updated:** 2026-11-19 (v6.78 — barrier concurrency + end-to-end retry; 22/22 tests pass ee7ad150)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1173,7 +1173,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 |-----|------|-------|-----|-------------|--------|
 | CP-01 | HIGH | Cross-account booking disclosure via null customerId fallback | `ec380043` | PENDING | OPEN |
 | CP-02 | HIGH | Decimal wallet balance arithmetic — implicit string concatenation | `ec380043` | PENDING | OPEN |
-| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `92dcfe88` (SERIALIZABLE + withSerializableRetry; retry arg fixed) | 12 tests (CONC-01..07 + RETRY-01..05), exit 0 — Japan Supabase direct | OPEN — awaiting reviewer |
+| CP-03 | HIGH | Concurrent wallet double-spending — balance outside transaction | `ee7ad150` (SERIALIZABLE; barrier-synchronised overlap proof; end-to-end retry RETRY-06) | 22 tests (CONC-01..09 + RETRY-01..06), exit 0 — Japan Supabase direct | OPEN — awaiting reviewer |
 | CP-04 | HIGH | Missing instructor eligibility gate in wallet booking route | `ec380043` | PENDING | OPEN |
 | CP-05 | HIGH | Instructor timezone conversion uses server timezone | `ec380043` | PENDING | OPEN |
 | CP-06 | MEDIUM | Review persistence and display mismatch | `ec380043` | PENDING | OPEN |
