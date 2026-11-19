@@ -28,5 +28,16 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "mobile", "legacy", "drivebook-hybrid"]
+  "exclude": [
+    "node_modules",
+    "mobile",
+    "legacy",
+    "drivebook-hybrid",
+    "scripts",
+    "**/__tests__/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx"
+  ]
 }

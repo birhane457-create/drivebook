@@ -110,6 +110,7 @@ function request(path: string, body: unknown, idempotencyKey = 'client-test-key'
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
@@ -566,6 +567,26 @@ describe('client wallet booking flow with mocked Prisma', () => {
     expect(pdaDebit.type).toBe('DEBIT')
     expect(Number(pdaDebit.amount)).toBe(169.99)
     expect(pdaDebit.status).toBe('CONFIRMED')
+  })
+
+  it('rejects a PDA time that is past in the provider timezone', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-19T17:00:00.000Z'))
+
+    const response = await createWalletBooking(request('/api/client/bookings/create-bulk', {
+      cart: [],
+      pdaBookings: [{
+        providerId: 'provider-1',
+        configId: 'config-1',
+        testCentreId: 'centre-1',
+        testDate: '2026-11-20',
+        testTime: '00:30',
+      }],
+    }))
+
+    expect(response.status).toBe(400)
+    expect(mocks.transaction).not.toHaveBeenCalled()
+    expect(mocks.pdaBookingCreate).not.toHaveBeenCalled()
   })
 
   it('rejects a PDA linked to a missing lesson before opening a transaction', async () => {

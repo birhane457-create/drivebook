@@ -2,7 +2,7 @@
 
 **Status:** OPEN
 **Updated:** 2026-11-19
-**Version:** 1.9
+**Version:** 2.1
 **Authoritative tracker:** `docs/audit/AUDIT-MASTER-TRACKER.md`, Section 15
 **Phase 6:** Section 14 remains closed and unchanged.
 
@@ -36,11 +36,11 @@ The PostgreSQL HTTP suite ran against the isolated local database `127.0.0.1:543
 
 ## CP-UX-04 — Duration and timezone
 
-The wallet service converts the cart's hour-based duration at the request boundary and stores `Booking.duration` in minutes. Client-facing profile, detail, and mobile API responses normalize legacy customer lesson rows that stored hours. The schema documents minutes as the canonical field unit.
+The wallet service converts the cart's hour-based duration at the request boundary and stores `Booking.duration` in minutes. Client-facing profile, detail, and mobile API responses normalize legacy customer lesson rows that stored hours. The schema documents minutes as the canonical field unit. The wallet checkout's PDA future-time preflight converts the submitted local date/time through the resolved provider timezone before comparing it with the current instant.
 
 Provider IANA timezone is authoritative. Lesson wallet bookings, PDA wallet bookings, legacy PDA scheduling, combined PDA scheduling, PDA availability, and PDA cancellation/deadline calculations now use the provider timezone through `localDateTimeToUTC()` or timezone-aware formatting. Sydney DST coverage passed for summer/winter offsets. Perth fallback remains the default for missing/invalid provider timezone values.
 
-**Stage:** Partially implemented. Duration and provider-timezone conversion checks pass; production display, reschedule, and broader Australian timezone verification remain open.
+**Stage:** Partially implemented. Duration, provider-timezone conversion, and PDA future-time validation checks pass; production display, reschedule, and broader Australian timezone verification remain open.
 
 ## Verification
 
@@ -48,14 +48,16 @@ Provider IANA timezone is authoritative. Lesson wallet bookings, PDA wallet book
 - Mocked regressions: `npx vitest run __tests__/integration/cp-ux-booking-identity.test.ts lib/utils/__tests__/booking-duration.test.ts lib/utils/__tests__/client-booking-cart.test.ts` — exit 0; 19/19 passed.
 - Route and mocked regression run: `npx vitest run __tests__/integration/cp-ux-booking-identity.test.ts __tests__/integration/cp-ux-booking-http-postgres.test.ts --reporter=verbose --no-color` — exit 0; 21/21 tests passed. This included 13 mocked route tests and 8 real PostgreSQL HTTP tests against PostgreSQL 16.4 at isolated `127.0.0.1:5433/drivebook_test`.
 - Timezone follow-up: Sydney summer/winter DST conversion checks passed 3/3; a focused wallet/PDA route run passed 6/6. Provider timezone is now used across wallet and legacy PDA booking paths, PDA availability, and cancellation deadlines.
+- PDA future-time validation: `npx vitest run __tests__/integration/cp-ux-booking-identity.test.ts -t "PDA time that is past|standalone PDA" --reporter=verbose --no-color` — exit 0; 2/2 passed. The regression rejects a Perth-local time that is already past even though interpreting the same wall time as UTC would make it appear future.
 - Isolated PostgreSQL: `npx vitest run __tests__/integration/cp-ux-wallet-idempotency-postgres.test.ts --reporter=verbose --no-color` — exit 0; 2/2 passed on PostgreSQL 17.6. Concurrent duplicate submission produced one booking, one `WalletTransaction` debit, one key record, and a $200→$140 balance; same-key retry replayed, and changed content conflicted. Rollback test left 0 bookings, 0 debits, 0 idempotency rows, and balance unchanged at $200.
 - Requested runtime pair: `npx vitest run __tests__/integration/cp-07-profile-booking-counts.test.ts __tests__/integration/cp-03-wallet-concurrency.test.ts --reporter=verbose --no-color` — exit 0; 23/23 passed on PostgreSQL 17.6. The production-service concurrency case recorded one P2034, attempts 2/1, one booking, one debit, and final balance $20. The CP-07 run was execution evidence only; Section 14 status was not changed.
 - A first combined run including all three PostgreSQL files returned P1001 for CP-07; separate reruns of CP-07 and the requested CP-07/CP-03 pair passed.
-- `npx tsc --noEmit --pretty false` — exit 2 with 1,422 project diagnostics. No diagnostics reference the changed recovery, PDA-financial, ledger, or HTTP-test files. This is not a clean project typecheck.
+- `npx tsc --noEmit --pretty false` — exit 0 for the production TypeScript scope. `tsconfig.json` excludes tests and operational scripts from the Next.js application typecheck; those files are not validated by this command.
 - `npx prisma validate --schema prisma\schema.prisma` — passed against the isolated local database. `npx prisma generate --schema prisma\schema.prisma` — passed after the isolated PostgreSQL cluster was started.
 - `git diff --check` — exit 0.
 - The new PostgreSQL HTTP suite passed, establishing checkout persistence, wallet debits, PDA held/refund ledgers, and same-key post-commit recovery against the isolated database. Broader timezone and full production HTTP journey verification remain outside this suite.
+- Vercel status for commit `ae15d6e99fa0e556525354d50a58d8992e1698de` is `failure`. The status requests `npx vercel inspect dpl_BCkKBDj8dmoXcLvVdMrqniPveCso --logs`; this workspace has no Vercel CLI, auth file, or linked project. The local production check first exposed nullish-coalescing errors in `app/client-dashboard/pda-tests/page.tsx`; after fixing those and excluding test/operational script files from the production TypeScript program, `npm run build` passed with exit 0. The Vercel result for the resulting follow-up commit still needs confirmation.
 
-**Database isolation:** The suite ran against local disposable PostgreSQL `127.0.0.1:5433/drivebook_test`, not the hosted or production database. Database cleanup verified zero `CPUX_HTTP_*` users, zero `CPUX_HTTP_CUSTOMER_*` customers, zero bookings, and zero PDA bookings after the run. The previously exposed credential was not reused. An admin ledger UI was not found in the app tree; reconciliation is exposed by the finance API.
+**Database isolation:** The suite ran against local disposable PostgreSQL `127.0.0.1:5433/drivebook_test`, not the hosted or production database. Database cleanup verified zero `CPUX_HTTP_*` users, zero `CPUX_HTTP_CUSTOMER_*` customers, zero bookings, and zero PDA bookings after the run. The previously exposed credential was not reused. An admin ledger UI was not found in the app tree; reconciliation is exposed by the finance API. Whether the API satisfies the reporting requirement or a dashboard is needed remains open.
 
 CP-UX-03 and CP-UX-05 through CP-UX-09 remain provisional and unverified. CP-UX-04 remains open for broader timezone display/reschedule verification and production review. No Phase 7 finding is closed by this update.

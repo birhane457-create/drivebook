@@ -9,7 +9,7 @@ import { paymentService } from '@/lib/services/payment';
 import { notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
 import { sendWalletLessonReceipt } from '@/lib/services/receipt-email';
 import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
-import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
+import { localDateTimeToUTC, resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 import {
   calculatePdaTestPrice,
   createWalletBookingRequestFingerprint,
@@ -243,7 +243,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Test centre is not available for this PDA option' }, { status: 404 });
       }
 
-      const testStart = new Date(`${item.testDate}T${item.testTime.padStart(5, '0')}:00.000Z`);
+      const timezone = eligibilityMap.get(item.providerId)!.timezone;
+      const testStart = localDateTimeToUTC(item.testDate, item.testTime.padStart(5, '0'), timezone);
       if (!Number.isFinite(testStart.getTime()) || testStart <= new Date()) {
         return NextResponse.json({ error: 'PDA test date and time must be in the future' }, { status: 400 });
       }

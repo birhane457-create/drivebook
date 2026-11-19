@@ -151,7 +151,9 @@ export default function ClientPDATestsPage() {
               <button
                 onClick={() =>
                   setExpandedInstructor(
-                    expandedInstructor === data.provider?.id ?? '' ? null : data.provider?.id ?? ''
+                    expandedInstructor === (data.provider?.id ?? '')
+                      ? null
+                      : (data.provider?.id ?? '')
                   )
                 }
                 className="w-full p-6 flex items-start gap-4 hover:bg-gray-50 transition text-left"
@@ -189,7 +191,7 @@ export default function ClientPDATestsPage() {
 
                 {/* Expand Arrow */}
                 <div className="text-gray-600">
-                  {expandedInstructor === data.provider?.id ?? '' ? (
+                  {expandedInstructor === (data.provider?.id ?? '') ? (
                     <svg
                       className="w-6 h-6"
                       fill="none"
@@ -222,7 +224,7 @@ export default function ClientPDATestsPage() {
               </button>
 
               {/* Expanded Content */}
-              {expandedInstructor === data.provider?.id ?? '' && (
+              {expandedInstructor === (data.provider?.id ?? '') && (
                 <div className="border-t border-gray-200 p-6 bg-gray-50">
                   {/* Booked Tests */}
                   {data.bookedTests.length > 0 && (

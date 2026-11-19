@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.90 (Section 14 closed; Section 15 Phase 7 in progress)
-**Last Updated:** 2026-11-19 (v6.90 — provider-timezone PDA correction and isolated verification)
+**Version:** 6.92 (Section 14 closed; Section 15 Phase 7 in progress)
+**Last Updated:** 2026-11-19 (v6.92 — provider-local PDA validation and local production build verification)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1019,7 +1019,7 @@ All 13 records have `organisationType=SOLE_TRADER` from the DB default. None wer
 
 ## Section 12 — Phase 4: API Route Audit (In Progress)
 
-**Version:** 1.4
+**Version:** 1.6
 **Started:** 2026-11-14  
 **Status:** IN PROGRESS — OTP security findings fixed and source-verified; production environment variables unverified; route-by-route audit paused  
 **Audit document:** `docs/audit/PHASE-4-API-ROUTES-AUDIT.md`  
@@ -1214,7 +1214,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 |----|------|---------|-----|-------------|--------|
 | CP-UX-01 | CRITICAL | Normal lesson checkout used inconsistent booking identity and could create an unpaid preliminary booking before wallet checkout | Worktree implementation: client cart is local until final wallet checkout; server resolves Customer from authenticated User; committed checkouts retry incomplete ledger/reporting writes without another debit | 13 mocked route tests pass; 8 isolated PostgreSQL HTTP cases pass; post-commit failure recovery verifies no second debit | OPEN |
 | CP-UX-02 | CRITICAL | Client Portal PDA pricing, payment, and independent cart-item behavior require verification | Worktree implementation: server-priced PDA and lesson bookings share one wallet debit; full PDA charge is recorded as PDA funds held; idempotent refunds and reconciliation are implemented | Isolated PostgreSQL HTTP evidence passes for PDA-only, combined checkout, full/partial/no-refund cancellation, replay, and reconciliation; timezone and broader PDA HTTP scope remain open | OPEN |
-| CP-UX-04 | HIGH | Booking duration unit differed across wallet and client-facing flows; timezone portion remained inconsistent for PDA and legacy booking routes | Worktree implementation normalizes wallet duration to minutes and normalizes legacy records; PDA wallet, legacy, combined, availability, and cancellation paths now resolve provider IANA timezone | DST and wallet/route timezone checks pass; broader display/reschedule and production verification remain open | OPEN |
+| CP-UX-04 | HIGH | Booking duration unit differed across wallet and client-facing flows; PDA local-time checks were not consistently provider-timezone aware | Implementation normalizes wallet duration to minutes and legacy records; PDA wallet, legacy, combined, availability, cancellation, and checkout future-time validation use provider IANA timezone | DST and wallet/route timezone checks pass; provider-local past-time regression passes; broader display/reschedule and production verification remain open | OPEN |
 
 Standalone PDA booking is intended product behavior, not a defect. The Client Portal supports lesson-only, PDA-only, and combined checkout. In the combined cart, removing a lesson detaches but preserves its PDA item; removing a PDA leaves the lesson intact. The legacy `/api/pda-bookings` route remains for existing callers.
 
