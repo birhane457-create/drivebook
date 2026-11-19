@@ -8,8 +8,8 @@ import { paymentService } from '@/lib/services/payment';
 import { notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/services/notifications';
 import { sendWalletLessonReceipt } from '@/lib/services/receipt-email';
 import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
-import { localDateTimeToUTC, resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
-import { withSerializableRetry } from '@/lib/utils/transaction-retry';
+import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
+import { executeWalletBookingTransaction, computeWalletBalance } from '@/lib/services/wallet-booking';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
     const totalCost = recalculatedItems.reduce((s: number, it: any) => s + it.price, 0);
 
     // â”€â”€ Wallet balance check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Fast-fail: check balance before pre-computing commissions
     const wallet = await prisma.clientWallet.findUnique({
       where: { userId: user.id },
       include: { transactions: { where: { status: 'CONFIRMED' } } }
@@ -122,14 +123,9 @@ export async function POST(request: NextRequest) {
     if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 });
 
     const now = new Date();
-    const totalCredits = wallet.transactions
-      .filter(t => t.type.toUpperCase() === 'CREDIT' && (!(t as any).expiresAt || new Date((t as any).expiresAt) >= now))
-      .reduce((s: number, t: any) => s + Number(t.amount), 0);  // CP-02 FIX: Number() converts Prisma Decimal to number
-    const totalDebits = wallet.transactions
-      .filter(t => t.type.toUpperCase() === 'DEBIT')
-      .reduce((s: number, t: any) => s + Math.abs(Number(t.amount)), 0);  // CP-02 FIX: same
-    const actualBalance = totalCredits - totalDebits;
-
+    // CP-02 FIX: computeWalletBalance uses Number() on Prisma Decimal — prevents
+    // string concatenation when multiple Decimal credits are summed.
+    const actualBalance = computeWalletBalance(wallet.transactions, now);
     if (actualBalance < totalCost) {
       return NextResponse.json({
         error: `Insufficient credits. You have $${actualBalance.toFixed(2)} but need $${totalCost.toFixed(2)}`
@@ -143,126 +139,31 @@ export async function POST(request: NextRequest) {
       commissions.push(commission);
     }
 
-    // â”€â”€ Minimal transaction: slot claim + booking create + wallet debit â”€â”€â”€â”€â”€â”€â”€â”€
-    // CP-03 FIX: SERIALIZABLE isolation is the correct mechanism here.
-    //
-    // Under READ COMMITTED, two concurrent transactions can each read the
-    // wallet's committed transactions (not seeing each other's uncommitted
-    // debit) and both conclude the balance is sufficient. Both then write a
-    // debit and both succeed — resulting in overspend.
-    //
-    // Under SERIALIZABLE, PostgreSQL detects the read-then-write cycle on
-    // the same WalletTransaction rows between the two concurrent transactions
-    // and aborts one with a serialization failure (Prisma: P2034).
-    // withSerializableRetry retries on P2034 — the retry re-reads the balance
-    // after the first transaction commits, sees the debit, and throws
-    // 'Insufficient credits', rolling back all bookings for that request.
-    //
-    // Financial invariant: balance is re-computed inside the SERIALIZABLE
-    // transaction from the confirmed WalletTransaction rows. The debit is
-    // written inside the same transaction. If balance < totalCost after
-    // adding this debit, the transaction throws, rolling back bookings too.
-    const result = await withSerializableRetry(
-      () => prisma.$transaction(async (tx) => {
-        const created: any[] = [];
-
-        // Re-read balance inside SERIALIZABLE transaction.
-        // This read participates in the serialization check — PostgreSQL will
-        // detect if another concurrent transaction modifies these rows and
-        // abort one of the two transactions with P2034.
-        const walletInner = await tx.clientWallet.findUnique({
-          where: { userId: user.id },
-          include: { transactions: { where: { status: 'CONFIRMED' } } },
-        });
-        if (!walletInner) throw new Error('Wallet not found');
-
-        const nowInner = new Date();
-        const creditsInner = walletInner.transactions
-          .filter((t: any) => t.type.toUpperCase() === 'CREDIT' && (!t.expiresAt || new Date(t.expiresAt) >= nowInner))
-          .reduce((s: number, t: any) => s + Number(t.amount), 0);
-        const debitsInner = walletInner.transactions
-          .filter((t: any) => t.type.toUpperCase() === 'DEBIT')
-          .reduce((s: number, t: any) => s + Math.abs(Number(t.amount)), 0);
-        const balanceInner = creditsInner - debitsInner;
-
-        if (balanceInner < totalCost) {
-          throw new Error(`Insufficient credits. You have $${balanceInner.toFixed(2)} but need $${totalCost.toFixed(2)}`);
-        }
-
-        for (let i = 0; i < recalculatedItems.length; i++) {
-          const item = recalculatedItems[i];
-          const commission = commissions[i];
-          // CP-05 FIX: use instructor timezone so "9:00 AM Perth" stores as 01:00 UTC, not 09:00 UTC
-          const startTime = localDateTimeToUTC(item.date, item.time, eligibilityMap.get(item.providerId)!.timezone);
-          const endTime = new Date(startTime.getTime() + item.duration * 60 * 60 * 1000);
-
-          // Conflict check inside transaction (atomic slot claim)
-          const conflict = await tx.booking.findFirst({
-            where: {
-              providerId: item.providerId,
-              status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] },
-              OR: [
-                { startTime: { lte: startTime }, endTime: { gt: startTime } },
-                { startTime: { lt: endTime }, endTime: { gte: endTime } },
-                { startTime: { gte: startTime }, endTime: { lte: endTime } }
-              ]
-            },
-            select: { id: true }
-          });
-          if (conflict) throw new Error(`Time slot no longer available for ${item.instructorName} at ${item.date} ${item.time}`);
-
-          const booking = await tx.booking.create({
-            data: {
-              provider: { connect: { id: item.providerId } },
-              customer: { connect: { id: client.id } },
-              bookingType: 'LESSON',
-              status: 'CONFIRMED',
-              startTime,
-              endTime,
-              duration: item.duration,
-              pickupAddress: item.pickupLocation || null,
-              price: item.price,
-              platformFee: commission.platformFee,
-              providerPayout: commission.providerPayout,
-              commissionRate: commission.commissionRate,
-              isFirstBooking: commission.isFirstBooking,
-              notes: item.service || null,
-              createdBy: 'customer',
-              originalStartTime: startTime,
-              isPaid: true,
-              paidAt: new Date(),
-            } as any
-          });
-
-          created.push({
-            booking,
-            instructorName: item.instructorName,
-            instructorUserId: eligibilityMap.get(item.providerId)?.userId,
-            clientUserId: user.id,
-            commission,
-          });
-        }
-
-        // Write the debit inside the same SERIALIZABLE transaction.
-        // If this transaction is aborted (P2034), all bookings above roll back too.
-        await tx.walletTransaction.create({
-          data: {
-            walletId: walletInner.id,
-            type: 'DEBIT',
-            amount: totalCost,
-            description: `Booked ${recalculatedItems.length} lesson${recalculatedItems.length > 1 ? 's' : ''}`,
-            status: 'CONFIRMED',
-          }
-        });
-
-        return { created, totalCost, remaining: balanceInner - totalCost };
-      }, {
-        isolationLevel: 'Serializable',
-        timeout: 15000,
-      }),
-      { operationName: 'client-wallet-bulk-booking', maxRetries: 2 },
+    // ── Delegate to shared production service ─────────────────────────────
+    // executeWalletBookingTransaction owns all CP-03/05 financial invariants:
+    //   - Balance re-read inside SERIALIZABLE transaction
+    //   - Slot conflict check per booking
+    //   - Booking + debit written atomically
+    //   - withSerializableRetry wraps the whole transaction
+    const result = await executeWalletBookingTransaction(
+      {
+        userId:       user.id,
+        customerId:   client.id,
+        walletId:     wallet.id,
+        items:        recalculatedItems.map((item, i) => ({
+          ...item,
+          timezone: eligibilityMap.get(item.providerId)!.timezone,
+        })),
+        commissions,
+        totalCost,
+      },
+      prisma,
     );
 
+    // Restore instructorUserId from eligibilityMap (service sets it to null)
+    for (const c of result.created) {
+      c.instructorUserId = eligibilityMap.get(c.booking.providerId)?.userId ?? null;
+    }
     // Post-transaction: FinancialLedger entries per booking (non-critical)
     for (const c of result.created) {
       try {

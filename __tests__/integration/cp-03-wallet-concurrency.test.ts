@@ -316,11 +316,25 @@ describe('CP-03 Group 1 — boundary: balance exactly equals debit', () => {
   afterAll(() => cleanup(testPrisma, fixture))
 
   it('CP03-CONC-08: single debit equal to balance succeeds', async () => {
-    const readDone = new Deferred()
-    const proceed = new Deferred()
-    proceed.resolve()   // no barrier needed for single tx
-    const o = await barrierSerializableDebit(fixture.walletId, 60, readDone, proceed)
-    expect(o.status).toBe('committed')
+    // Single sequential transaction — no barrier needed
+    const id = await testPrisma.$transaction(
+      async (tx) => {
+        const w = await tx.clientWallet.findUnique({
+          where: { id: fixture.walletId },
+          include: { transactions: { where: { status: 'CONFIRMED' } } },
+        })
+        if (!w) throw new Error('Wallet not found')
+        const credits = w.transactions.filter((t: any) => t.type.toUpperCase() === 'CREDIT').reduce((s: number, t: any) => s + Number(t.amount), 0)
+        const debits  = w.transactions.filter((t: any) => t.type.toUpperCase() === 'DEBIT' ).reduce((s: number, t: any) => s + Math.abs(Number(t.amount)), 0)
+        if (credits - debits < 60) throw new Error('Insufficient credits')
+        const d = await tx.walletTransaction.create({
+          data: { walletId: fixture.walletId, type: 'DEBIT', amount: 60, status: 'CONFIRMED', description: 'CONC-08 boundary' },
+        })
+        return d.id
+      },
+      { isolationLevel: 'Serializable', timeout: 10000 },
+    )
+    expect(typeof id).toBe('string')
     expect(await readBalance(testPrisma, fixture.walletId)).toBe(0)
   })
 })
@@ -331,12 +345,27 @@ describe('CP-03 Group 1 — debit exceeds balance', () => {
   afterAll(() => cleanup(testPrisma, fixture))
 
   it('CP03-CONC-09: single debit exceeding balance is rejected; no debit row written', async () => {
-    const readDone = new Deferred()
-    const proceed = new Deferred()
-    proceed.resolve()
-    const o = await barrierSerializableDebit(fixture.walletId, 60, readDone, proceed)
-    expect(o.status).toBe('aborted')
-    if (o.status === 'aborted') expect(o.error).toMatch(/Insufficient/i)
+    try {
+      await testPrisma.$transaction(
+        async (tx) => {
+          const w = await tx.clientWallet.findUnique({
+            where: { id: fixture.walletId },
+            include: { transactions: { where: { status: 'CONFIRMED' } } },
+          })
+          if (!w) throw new Error('Wallet not found')
+          const credits = w.transactions.filter((t: any) => t.type.toUpperCase() === 'CREDIT').reduce((s: number, t: any) => s + Number(t.amount), 0)
+          const debits  = w.transactions.filter((t: any) => t.type.toUpperCase() === 'DEBIT' ).reduce((s: number, t: any) => s + Math.abs(Number(t.amount)), 0)
+          if (credits - debits < 60) throw new Error('Insufficient credits')
+          await tx.walletTransaction.create({
+            data: { walletId: fixture.walletId, type: 'DEBIT', amount: 60, status: 'CONFIRMED', description: 'CONC-09' },
+          })
+        },
+        { isolationLevel: 'Serializable', timeout: 10000 },
+      )
+      throw new Error('Should have thrown')
+    } catch (err: any) {
+      expect(err.message).toMatch(/Insufficient/i)
+    }
     const debits = await testPrisma.walletTransaction.findMany({
       where: { walletId: fixture.walletId, type: 'DEBIT' },
     })
