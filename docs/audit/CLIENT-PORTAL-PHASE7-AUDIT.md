@@ -2,7 +2,7 @@
 
 **Status:** OPEN
 **Updated:** 2026-11-19
-**Version:** 2.1
+**Version:** 2.2
 **Authoritative tracker:** `docs/audit/AUDIT-MASTER-TRACKER.md`, Section 15
 **Phase 6:** Section 14 remains closed and unchanged.
 
@@ -56,7 +56,8 @@ Provider IANA timezone is authoritative. Lesson wallet bookings, PDA wallet book
 - `npx prisma validate --schema prisma\schema.prisma` — passed against the isolated local database. `npx prisma generate --schema prisma\schema.prisma` — passed after the isolated PostgreSQL cluster was started.
 - `git diff --check` — exit 0.
 - The new PostgreSQL HTTP suite passed, establishing checkout persistence, wallet debits, PDA held/refund ledgers, and same-key post-commit recovery against the isolated database. Broader timezone and full production HTTP journey verification remain outside this suite.
-- Vercel status for commit `ae15d6e99fa0e556525354d50a58d8992e1698de` is `failure`. The status requests `npx vercel inspect dpl_BCkKBDj8dmoXcLvVdMrqniPveCso --logs`; this workspace has no Vercel CLI, auth file, or linked project. The local production check first exposed nullish-coalescing errors in `app/client-dashboard/pda-tests/page.tsx`; after fixing those and excluding test/operational script files from the production TypeScript program, `npm run build` passed with exit 0. The Vercel result for the resulting follow-up commit still needs confirmation.
+- Vercel status for commit `647c501f47321e26629a178544681c786c8fcfe9` is `failure`. The supplied logs identify invalid UTF-8 in `app/client-dashboard/bookings/page.tsx`; three legacy Windows-1252 punctuation bytes were replaced with their intended Unicode characters. With the dev server stopped to avoid `.next` contention, `npm run build` passed with exit 0. A new Vercel result for the UTF-8 repair commit is still required; this workspace has no Vercel CLI, auth file, or linked project.
+- Earlier local build attempts overlapped an active Next dev server and failed while moving or loading `.next` artifacts. After stopping the explicitly approved dev process, the serialized production build completed successfully.
 
 **Database isolation:** The suite ran against local disposable PostgreSQL `127.0.0.1:5433/drivebook_test`, not the hosted or production database. Database cleanup verified zero `CPUX_HTTP_*` users, zero `CPUX_HTTP_CUSTOMER_*` customers, zero bookings, and zero PDA bookings after the run. The previously exposed credential was not reused. An admin ledger UI was not found in the app tree; reconciliation is exposed by the finance API. Whether the API satisfies the reporting requirement or a dashboard is needed remains open.
 

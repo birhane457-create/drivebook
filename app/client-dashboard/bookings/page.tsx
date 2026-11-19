@@ -140,7 +140,7 @@ export default function ClientBookingsPage() {
             <div>
               <h1 className="text-3xl font-bold">My Bookings</h1>
               <p className="text-blue-200 mt-2">
-                {profile.upcomingCount} upcoming • {profile.pastCount} completed
+                {profile.upcomingCount} upcoming â€¢ {profile.pastCount} completed
               </p>
             </div>
             <Link
@@ -176,7 +176,7 @@ export default function ClientBookingsPage() {
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }`}
             >
-              {/* NF-04: use upcomingCount/pastCount from API — not a slice of the current page */}
+              {/* NF-04: use upcomingCount/pastCount from API â€” not a slice of the current page */}
               Upcoming ({profile?.upcomingCount ?? 0})
             </button>
             <button
@@ -238,7 +238,7 @@ export default function ClientBookingsPage() {
                     {booking.time && (
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-4 h-4 text-primary" />
-                        {booking.time}{booking.duration ? ` · ${booking.duration >= 60 ? `${booking.duration / 60}h` : `${booking.duration}min`}` : ''}
+                        {booking.time}{booking.duration ? ` Â· ${booking.duration >= 60 ? `${booking.duration / 60}h` : `${booking.duration}min`}` : ''}
                       </div>
                     )}
                     {booking.pickupAddress && (
