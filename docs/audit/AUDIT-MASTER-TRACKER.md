@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.80 (Section 14 — Client Portal Audit closed with baseline comparison)
-**Last Updated:** 2026-11-19 (v6.80 — Phase 6 closure evidence and TypeScript baseline comparison)
+**Version:** 6.90 (Section 14 closed; Section 15 Phase 7 in progress)
+**Last Updated:** 2026-11-19 (v6.90 — provider-timezone PDA correction and isolated verification)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1019,7 +1019,7 @@ All 13 records have `organisationType=SOLE_TRADER` from the DB default. None wer
 
 ## Section 12 — Phase 4: API Route Audit (In Progress)
 
-**Version:** 1.2  
+**Version:** 1.4
 **Started:** 2026-11-14  
 **Status:** IN PROGRESS — OTP security findings fixed and source-verified; production environment variables unverified; route-by-route audit paused  
 **Audit document:** `docs/audit/PHASE-4-API-ROUTES-AUDIT.md`  
@@ -1112,7 +1112,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 
 ## Section 13 — Phase 5: Schema Integrity Audit
 
-**Version:** 1.2
+**Version:** 1.4
 **Started:** 2026-11-15
 **Status:** FINDINGS COMPLETE — PH5-SCH-30 CONFIRMED (dfeb6d74, T5 reconfirmed b501811b); PH5-SCH-35 CONFIRMED (cf6a1558, P2028 anomaly under investigation); cleanup executed (b501811b, zero records deleted); C2 rerun with query logs pending
 **Audit document:** `docs/audit/PHASE-5-SCHEMA-INTEGRITY-AUDIT.md`
@@ -1201,3 +1201,47 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 - **Execution qualification:** Runtime results and database assertions above were produced by the implementation author. The independent reviewer accepted the source and test design but did not independently execute the tests.
 
 **Section 14 last updated:** 2026-11-19
+
+## Section 15 — Phase 7: Client Portal UX and Functional Consistency
+**Version:** 1.3
+**Started:** 2026-11-19
+**Status:** OPEN — no Phase 7 finding is closed; Section 14 remains unchanged.
+**Audit document:** `docs/audit/CLIENT-PORTAL-PHASE7-AUDIT.md`
+
+### 15.1 — Finding Register
+
+| ID | Risk | Finding | Fix | Fix-Verified | Status |
+|----|------|---------|-----|-------------|--------|
+| CP-UX-01 | CRITICAL | Normal lesson checkout used inconsistent booking identity and could create an unpaid preliminary booking before wallet checkout | Worktree implementation: client cart is local until final wallet checkout; server resolves Customer from authenticated User; committed checkouts retry incomplete ledger/reporting writes without another debit | 13 mocked route tests pass; 8 isolated PostgreSQL HTTP cases pass; post-commit failure recovery verifies no second debit | OPEN |
+| CP-UX-02 | CRITICAL | Client Portal PDA pricing, payment, and independent cart-item behavior require verification | Worktree implementation: server-priced PDA and lesson bookings share one wallet debit; full PDA charge is recorded as PDA funds held; idempotent refunds and reconciliation are implemented | Isolated PostgreSQL HTTP evidence passes for PDA-only, combined checkout, full/partial/no-refund cancellation, replay, and reconciliation; timezone and broader PDA HTTP scope remain open | OPEN |
+| CP-UX-04 | HIGH | Booking duration unit differed across wallet and client-facing flows; timezone portion remained inconsistent for PDA and legacy booking routes | Worktree implementation normalizes wallet duration to minutes and normalizes legacy records; PDA wallet, legacy, combined, availability, and cancellation paths now resolve provider IANA timezone | DST and wallet/route timezone checks pass; broader display/reschedule and production verification remain open | OPEN |
+
+Standalone PDA booking is intended product behavior, not a defect. The Client Portal supports lesson-only, PDA-only, and combined checkout. In the combined cart, removing a lesson detaches but preserves its PDA item; removing a PDA leaves the lesson intact. The legacy `/api/pda-bookings` route remains for existing callers.
+
+The Client Portal checkout pages send and reuse an `Idempotency-Key` for retries of an unchanged payload while the page remains mounted. The route prefixes the key with the database-resolved User ID, checks the stored account email, fingerprints the parsed request, and rejects changed content. `BookingIdempotencyKey.key` is a primary key. The production service claims and completes the key in the same SERIALIZABLE transaction as all bookings and the wallet debit; a key-claim collision replays the stored response. Mocked tests cover HTTP 409 for payload mismatch and the P2002 claim-collision path. Prior PostgreSQL service tests verify simultaneous duplicate submissions, replay, changed-content conflict, and rollback. The cleanup cron purges records older than 24 hours on a daily schedule; retries beyond that retention are not guaranteed to replay, and client keys currently survive only while the page remains mounted.
+
+Post-commit financial recovery now runs on both initial checkout and same-key replay. A recovery failure returns an explicit `503 FINANCIAL_RECORDS_PENDING`; retries resume idempotent ledger/reporting work without repeating the committed booking or wallet debit. PDA accounting records the full paid amount as a customer-wallet-liability to `PDA_FUNDS_HELD` entry; it does not recognize instructor payout, platform revenue, or a platform fee. Refunds credit the wallet and reverse held funds; booking status remains separate from financial status. A finance-protected reconciliation API reports wallet/refund versus ledger balances.
+
+The HTTP PostgreSQL suite ran against isolated local PostgreSQL 16.4 at `127.0.0.1:5433/drivebook_test` and passed eight tests: lesson-only, PDA-only, combined checkout, duplicate/replay/changed-content behavior, post-commit failure and recovery, full refund/replay, partial refund, and no-refund cancellation. Reconciliation assertions passed in the PDA checkout/refund cases. Post-run cleanup found zero test users, customers, bookings, and PDA bookings.
+
+**Database isolation qualification:** The test database was confirmed by the user as isolated. The audit did not independently verify Supabase project separation or production-data absence; this remains a provenance qualification, not a claim of independent environment verification.
+
+CP-UX-03 and CP-UX-05 through CP-UX-09 remain provisional and unverified in this pass. CP-UX-04 remains open for broader timezone display/reschedule and production verification. No finding is marked `FIX-VERIFIED` or `CLOSED`.
+
+### 15.2 — Verification Evidence and Limitations
+
+- **Mocked regressions:** `npx vitest run __tests__/integration/cp-ux-booking-identity.test.ts lib/utils/__tests__/booking-duration.test.ts lib/utils/__tests__/client-booking-cart.test.ts` — exit 0; 19/19 passed.
+- **Idempotency PostgreSQL:** `npx vitest run __tests__/integration/cp-ux-wallet-idempotency-postgres.test.ts --reporter=verbose --no-color` — exit 0; 2/2 passed on PostgreSQL 17.6. Concurrent duplicate service calls yielded one booking, one `WalletTransaction` debit, one key record, and balance $200→$140; same-key retry replayed; changed content conflicted. Rollback left 0 bookings, 0 debits, 0 idempotency rows, and balance $200→$200.
+- **Requested CP-07/CP-03 pair:** `npx vitest run __tests__/integration/cp-07-profile-booking-counts.test.ts __tests__/integration/cp-03-wallet-concurrency.test.ts --reporter=verbose --no-color` — exit 0; 23/23 passed on PostgreSQL 17.6. CP03-SVC-CONC-01 observed P2034=1, attempts=2/1, one booking, one debit, final balance $20. CP-07 execution did not change Section 14 status.
+- **Transient failure:** The initial combined run of the three PostgreSQL files returned P1001 for CP-07; separate CP-07 and requested-pair reruns passed.
+- **TypeScript:** `npx tsc --noEmit --pretty false` — exit 2 with 1,422 project diagnostics; no diagnostic references the changed recovery, PDA-financial, ledger, or HTTP-test files. This is not a clean project typecheck.
+- **Patch hygiene:** `git diff --check` — exit 0.
+- **HTTP and mocked route suite:** `npx vitest run __tests__/integration/cp-ux-booking-identity.test.ts __tests__/integration/cp-ux-booking-http-postgres.test.ts --reporter=verbose --no-color` — exit 0; 21/21 tests passed across the two files. PostgreSQL 16.4 ran at isolated `127.0.0.1:5433/drivebook_test`; 13 route/mock tests and 8 HTTP/PostgreSQL tests passed.
+- **Database cleanup:** Post-run fixture verification found zero `CPUX_HTTP_*` users, zero `CPUX_HTTP_CUSTOMER_*` customers, zero bookings, and zero PDA bookings.
+- **Timezone follow-up:** Provider-IANA timezone conversion is used by wallet lesson/PDA booking, legacy PDA booking, combined PDA booking, PDA availability, and PDA cancellation deadline paths. DST checks for Sydney summer/winter and Perth/no-DST passed 3/3. A focused route run passed 6/6, including normal lesson checkout and conflicting PDA-slot rejection.
+- **Prisma:** `npx prisma validate --schema prisma\schema.prisma` — passed against the isolated local database; `npx prisma generate --schema prisma\schema.prisma` — passed after the test cluster was started.
+- **Database evidence scope:** The isolated HTTP suite passed. It established route persistence, PDA held/refund records, cancellation, reconciliation, and post-commit recovery without another wallet debit. Production HTTP journey, timezone, and database isolation provenance remain outside the scope of this pass.
+- **Credential/isolation:** The run used only local PostgreSQL `127.0.0.1:5433/drivebook_test`. The previously exposed credential was not reused.
+- **Scope:** Phase 6 Section 14 remains closed and unchanged; the requested runtime tests were run without changing Phase 6 finding statuses.
+
+**Section 15 last updated:** 2026-11-19

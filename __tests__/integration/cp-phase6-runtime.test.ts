@@ -87,7 +87,10 @@ const testPrisma = new PrismaClient({
 function makeRequest(url: string, body?: unknown, method = body ? 'POST' : 'GET'): NextRequest {
   return new NextRequest(`http://localhost${url}`, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': `cp6-${Date.now()}-${Math.random()}`,
+    },
     body: body ? JSON.stringify(body) : undefined,
   })
 }
@@ -481,6 +484,13 @@ describe('CP-04 — bulk booking route: suspended instructor is rejected', () =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('CP-05 — timezone conversion: Perth 09:00 → UTC 01:00', () => {
+  it('CP05-R0: Sydney 09:00 resolves through provider timezone across DST boundaries', () => {
+    const winter = localDateTimeToUTC('2027-07-15', '09:00', 'Australia/Sydney')
+    const summer = localDateTimeToUTC('2027-01-15', '09:00', 'Australia/Sydney')
+    expect(winter.toISOString()).toBe('2027-07-14T23:00:00.000Z')
+    expect(summer.toISOString()).toBe('2027-01-14T22:00:00.000Z')
+  })
+
   it('CP05-R1: localDateTimeToUTC Perth 09:00 stores as 01:00 UTC', () => {
     const result = localDateTimeToUTC('2027-01-15', '09:00', 'Australia/Perth')
     // Perth = UTC+8 (no DST). 09:00 Perth = 01:00 UTC.

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
 import { getDisplayName } from '@/lib/utils/account';
+import { toBookingDurationMinutes } from '@/lib/utils/booking-duration';
 
 
 export const dynamic = 'force-dynamic';
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
       instructorImage: booking.provider.profileImage,
       startTime: booking.startTime.toISOString(),
       endTime: booking.endTime.toISOString(),
-      duration: booking.duration,
+      duration: toBookingDurationMinutes(booking.duration, booking.createdBy, booking.bookingType),
       status: booking.status,
       bookingType: booking.bookingType,
       price: booking.price,

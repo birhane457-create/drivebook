@@ -10,9 +10,41 @@ import { notifyBookingRequest, notifyClientBookingConfirmed } from '@/lib/servic
 import { sendWalletLessonReceipt } from '@/lib/services/receipt-email';
 import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
 import { resolveTimezone, DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
-import { executeWalletBookingTransaction, computeWalletBalanceDecimal } from '@/lib/services/wallet-booking';
+import {
+  calculatePdaTestPrice,
+  createWalletBookingRequestFingerprint,
+  executeWalletBookingTransaction,
+  computeWalletBalanceDecimal,
+  readWalletBookingIdempotencyState,
+  WalletBookingIdempotencyConflict,
+} from '@/lib/services/wallet-booking';
+import { completeWalletBookingFinancialRecords } from '@/lib/services/wallet-booking-post-commit';
 
 export const dynamic = 'force-dynamic';
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+
+function financialRecordsPendingResponse() {
+  return NextResponse.json({
+    error: 'Checkout committed, but financial records are still processing. Retry with the same Idempotency-Key.',
+    code: 'FINANCIAL_RECORDS_PENDING',
+    checkoutStatus: 'COMMITTED',
+    financialRecordsStatus: 'PENDING',
+    fullyProcessed: false,
+  }, { status: 503 });
+}
+
+const pdaDetailsSchema = z.object({
+  configId: z.string().min(1),
+  testCentreId: z.string().min(1),
+  testDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  testTime: z.string().regex(/^([0-1]?\d|2[0-3]):[0-5]\d$/),
+  expectedPrice: z.number().nonnegative().optional(),
+});
+
+const pdaBookingSchema = pdaDetailsSchema.extend({
+  providerId: z.string().min(1),
+  parentBookingIndex: z.number().int().nonnegative().max(9).optional(),
+});
 
 const cartItemSchema = z.object({
   providerId: z.string().min(1),
@@ -23,10 +55,32 @@ const cartItemSchema = z.object({
   price: z.number().nonnegative(), // client hint only â€” server recalculates
   pickupLocation: z.string().min(0).max(300).optional(),
   service: z.string().min(0).max(500).optional(),
+  pdaTest: pdaDetailsSchema.optional(),
 });
 
 const requestSchema = z.object({
-  cart: z.array(cartItemSchema).min(1).max(10)
+  cart: z.array(cartItemSchema).max(10).default([]),
+  pdaBookings: z.array(pdaBookingSchema).max(10).default([]),
+}).superRefine((data, context) => {
+  if (data.cart.length === 0 && data.pdaBookings.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Add at least one lesson or PDA test',
+    });
+  }
+
+  data.pdaBookings.forEach((booking, index) => {
+    if (
+      booking.parentBookingIndex !== undefined &&
+      booking.parentBookingIndex >= data.cart.length
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['pdaBookings', index, 'parentBookingIndex'],
+        message: 'PDA booking parent lesson was not found',
+      });
+    }
+  });
 });
 
 // CP-05 FIX: parseDateTime removed — localDateTimeToUTC() is used instead,
@@ -38,6 +92,14 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const clientIdempotencyKey = request.headers.get('Idempotency-Key')?.trim();
+    if (!clientIdempotencyKey) {
+      return NextResponse.json({ error: 'Idempotency-Key is required' }, { status: 400 });
+    }
+    if (clientIdempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+      return NextResponse.json({ error: 'Idempotency-Key too long' }, { status: 400 });
     }
 
     const rateLimitId = getRateLimitIdentifier(
@@ -79,8 +141,51 @@ export async function POST(request: NextRequest) {
     const user = await prisma.user.findUnique({ where: { email: session!.user!.email } });
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const client = await prisma.customer.findFirst({ where: { userId: user.id } });
+    const idempotency = {
+      key: `client-wallet:${user.id}:${clientIdempotencyKey}`,
+      email: user.email,
+      requestFingerprint: createWalletBookingRequestFingerprint(parsed.data),
+    };
+    const existingIdempotencyRecord = await prisma.bookingIdempotencyKey.findUnique({
+      where: { key: idempotency.key },
+    });
+    if (existingIdempotencyRecord) {
+      try {
+        const stored = readWalletBookingIdempotencyState(existingIdempotencyRecord, idempotency);
+        if (stored.financialRecordsStatus !== 'COMPLETED') {
+          try {
+            await completeWalletBookingFinancialRecords({
+              idempotency,
+              userId: user.id,
+              responseBody: stored.body,
+              walletTransactionId: stored.walletTransactionId,
+            });
+          } catch (error) {
+            console.error('[Wallet checkout] Financial recovery failed:', error);
+            return financialRecordsPendingResponse();
+          }
+        }
+        return NextResponse.json(stored.body);
+      } catch (error) {
+        if (error instanceof WalletBookingIdempotencyConflict) {
+          return NextResponse.json({ error: error.message }, { status: 409 });
+        }
+        throw error;
+      }
+    }
+
+    const client = await prisma.customer.findFirst({
+      where: { userId: user.id },
+      orderBy: { id: 'desc' },
+    });
     if (!client) return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+
+    const pdaRequests = [
+      ...cartItems.flatMap((item, parentBookingIndex) => item.pdaTest
+        ? [{ ...item.pdaTest, providerId: item.providerId, parentBookingIndex }]
+        : []),
+      ...parsed.data.pdaBookings,
+    ];
 
     // â”€â”€ Fetch current instructor rates (server-side price recalculation) â”€â”€â”€â”€â”€â”€â”€
     // "Book later" wallet funds are NOT rate-locked at purchase time.
@@ -88,7 +193,10 @@ export async function POST(request: NextRequest) {
     // Client-submitted prices are ignored entirely.
     // CP-04 + CP-05 FIX: check provider eligibility (approval/active/subscription/docs)
     // and capture timezone for correct UTC conversion of submitted local times.
-    const providerIds = [...new Set(cartItems.map((i: any) => i.providerId))];
+    const providerIds = [...new Set([
+      ...cartItems.map(item => item.providerId),
+      ...pdaRequests.map(item => item.providerId),
+    ])];
     const eligibilityMap = new Map<string, { hourlyRate: number; timezone: string; userId: string | null }>();
 
     for (const pid of providerIds) {
@@ -113,7 +221,62 @@ export async function POST(request: NextRequest) {
       return { ...item, price: serverPrice };
     });
 
-    const totalCost = recalculatedItems.reduce((s: number, it: any) => s + it.price, 0);
+    const resolvedPdaBookings = [];
+    for (const item of pdaRequests) {
+      const config = await prisma.pDATestConfig.findUnique({
+        where: { id: item.configId },
+        include: {
+          testCentres: {
+            where: { testCentreId: item.testCentreId },
+            select: { testCentreId: true },
+          },
+        },
+      });
+
+      if (!config || !config.isActive) {
+        return NextResponse.json({ error: 'PDA test option not found or inactive' }, { status: 404 });
+      }
+      if (config.providerId !== item.providerId) {
+        return NextResponse.json({ error: 'PDA test option does not belong to this instructor' }, { status: 403 });
+      }
+      if (config.testCentres.length === 0) {
+        return NextResponse.json({ error: 'Test centre is not available for this PDA option' }, { status: 404 });
+      }
+
+      const testStart = new Date(`${item.testDate}T${item.testTime.padStart(5, '0')}:00.000Z`);
+      if (!Number.isFinite(testStart.getTime()) || testStart <= new Date()) {
+        return NextResponse.json({ error: 'PDA test date and time must be in the future' }, { status: 400 });
+      }
+
+      const pdaPrice = calculatePdaTestPrice(config.price, config.discountPercent);
+      if (
+        item.expectedPrice !== undefined &&
+        pdaPrice.toFixed(2) !== new Prisma.Decimal(item.expectedPrice).toFixed(2)
+      ) {
+        return NextResponse.json({
+          error: 'PDA test price changed. Review the updated price before booking.',
+          configId: item.configId,
+          currentPrice: pdaPrice.toNumber(),
+        }, { status: 409 });
+      }
+
+      resolvedPdaBookings.push({
+        ...item,
+        timezone: eligibilityMap.get(item.providerId)!.timezone,
+        durationMinutes: config.durationMinutes,
+        price: pdaPrice.toNumber(),
+        discountPercent: config.discountPercent == null ? null : Number(config.discountPercent),
+      });
+    }
+
+    const totalCostDecimal = recalculatedItems.reduce(
+      (sum, item) => sum.plus(item.price),
+      new Prisma.Decimal(0),
+    ).plus(resolvedPdaBookings.reduce(
+      (sum, item) => sum.plus(item.price),
+      new Prisma.Decimal(0),
+    ));
+    const totalCost = Number(totalCostDecimal.toFixed(2));
 
     // â”€â”€ Wallet balance check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Fast-fail: check balance before pre-computing commissions
@@ -151,62 +314,40 @@ export async function POST(request: NextRequest) {
         userId:       user.id,
         customerId:   client.id,
         walletId:     wallet.id,
-        items:        recalculatedItems.map((item, i) => ({
+        items:        recalculatedItems.map(({ pdaTest, ...item }) => ({
           ...item,
           timezone: eligibilityMap.get(item.providerId)!.timezone,
         })),
+        pdaBookings:  resolvedPdaBookings,
         commissions,
         totalCost,
+        idempotency,
       },
       prisma,
     );
+
+    try {
+      await completeWalletBookingFinancialRecords({
+        idempotency,
+        userId: user.id,
+        responseBody: result.responseBody,
+        walletTransactionId: result.walletTransactionId,
+      });
+    } catch (error) {
+      console.error('[Wallet checkout] Financial recovery failed:', error);
+      return financialRecordsPendingResponse();
+    }
+
+    if (result.replayed) {
+      return NextResponse.json(result.responseBody);
+    }
 
     // Restore instructorUserId from eligibilityMap (service sets it to null)
     for (const c of result.created) {
       c.instructorUserId = eligibilityMap.get(c.booking.providerId)?.userId ?? null;
     }
-    // Post-transaction: FinancialLedger entries per booking (non-critical)
-    for (const c of result.created) {
-      try {
-        const { recordBookingPayment } = await import('@/lib/services/ledger-operations');
-        const ledgerFee = parseFloat((c.commission.totalAmount - c.commission.providerPayout).toFixed(2));
-        await recordBookingPayment({
-          bookingId: c.booking.id,
-          userId: user.id,
-          providerId: c.booking.providerId,
-          totalAmount: c.commission.totalAmount,
-          platformFee: ledgerFee,
-          providerPayout: c.commission.providerPayout,
-          createdBy: user.id,
-        });
-      } catch (e: any) {
-        if (!e?.message?.includes('idempotency')) {
-          console.error('[FinancialLedger] create-bulk recordBookingPayment failed:', e?.message);
-        }
-      }
-    }
-
     // â”€â”€ Post-transaction: transaction records + notifications + receipts â”€â”€â”€â”€â”€â”€â”€
     for (const c of result.created) {
-      try {
-        await prisma.transaction.create({
-          data: {
-            bookingId: c.booking.id,
-            providerId: c.booking.providerId,
-            type: 'BOOKING_PAYMENT',
-            amount: c.commission.totalAmount,
-            platformFee: c.commission.platformFee,
-            providerPayout: c.commission.providerPayout,
-            commissionRate: c.commission.commissionRate,
-            status: 'COMPLETED',
-            description: `Booking payment - ${c.commission.isFirstBooking ? 'First booking' : 'Repeat booking'}`,
-            metadata: { isFirstBooking: c.commission.isFirstBooking },
-          },
-        });
-      } catch (e) {
-        console.error('[Transaction record] Failed:', e);
-      }
-
       try {
         if (c.instructorUserId && c.booking.startTime) {
           await notifyBookingRequest(c.instructorUserId, user.name || session!.user!.email, c.booking.id, new Date(c.booking.startTime));
@@ -219,7 +360,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const durationHours = typeof c.booking.duration === 'number' ? c.booking.duration : 1;
+        const durationHours = typeof c.booking.duration === 'number' ? c.booking.duration / 60 : 1;
         const hourlyRate = durationHours > 0 ? c.booking.price / durationHours : c.booking.price;
         const walletAfter = result.remaining - result.created.slice(result.created.indexOf(c) + 1).reduce((s: number, x: any) => s + x.booking.price, 0);
         await sendWalletLessonReceipt({
@@ -242,21 +383,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      bookings: result.created.map((c: any) => ({
-        id: c.booking.id,
-        date: c.booking.startTime.toISOString().split('T')[0],
-        time: `${String(new Date(c.booking.startTime).getHours()).padStart(2, '0')}:${String(new Date(c.booking.startTime).getMinutes()).padStart(2, '0')}`,
-        instructor: c.instructorName
-      })),
-      totalCost: result.totalCost,
-      remainingBalance: result.remaining
-    });
+    return NextResponse.json(result.responseBody);
   } catch (error) {
     console.error('=== BOOKING CREATION ERROR ===', error);
+    if (error instanceof WalletBookingIdempotencyConflict) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     const message = error instanceof Error ? error.message : 'Unknown error';
-    const status = message.startsWith('Insufficient') || message.startsWith('Time slot') ? 400 : 500;
+    const status = message.startsWith('Insufficient')
+      ? 400
+      : message.startsWith('Time slot') || message.startsWith('PDA test slot')
+        ? 409
+        : message.startsWith('PDA test date')
+          ? 400
+          : 500;
     return NextResponse.json({ error: 'Failed to create bookings', details: message }, { status });
   }
 }

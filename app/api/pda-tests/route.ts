@@ -7,6 +7,7 @@ import { checkProviderEligible } from '@/lib/booking/checkProviderEligible';
 import { z } from 'zod';
 import { requireActiveSubscription } from '@/lib/middleware/subscriptionValidation';
 import { availabilityService } from '@/lib/services/availability';
+import { localDateTimeToUTC, resolveTimezone } from '@/lib/utils/timezone';
 
 export const dynamic = 'force-dynamic';
 
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
     const { mergeDrivingProfile } = await import('@/lib/extensions/driving/providerProfile');
     const instructorCore = await prisma.provider.findUnique({
       where: { id: session!.user!.providerId },
-      select: { id: true },
+      select: { id: true, timezone: true },
     });
     if (!instructorCore) return NextResponse.json({ error: 'Instructor not found' }, { status: 404 });
     const instructor = await mergeDrivingProfile(instructorCore.id, instructorCore as any) as any;
@@ -146,10 +147,12 @@ export async function POST(req: NextRequest) {
       ? instructor.testPackageDuration
       : 165;
 
-    // Build start/end times — parse as UTC to avoid server timezone shifting the date.
-    // The frontend sends YYYY-MM-DD + HH:mm in the instructor's local context;
-    // we treat that as a wall-clock time stored without TZ conversion.
-    const startTime = new Date(`${data.testDate}T${data.testTime}:00.000Z`);
+    // Convert the instructor-local wall time to UTC using provider timezone.
+    const startTime = localDateTimeToUTC(
+      data.testDate,
+      data.testTime,
+      resolveTimezone(instructorCore.timezone),
+    );
     if (isNaN(startTime.getTime())) {
       return NextResponse.json({ error: 'Invalid date or time format' }, { status: 400 });
     }

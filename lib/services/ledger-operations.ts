@@ -13,6 +13,7 @@ import {
   buildAccount,
   LedgerEntry,
   ReferenceType,
+  createLedgerEntriesIdempotently,
 } from './ledger';
 import { Decimal } from '@prisma/client/runtime/library';
 import {
@@ -132,7 +133,96 @@ export async function recordBookingPayment(params: {
     },
   ];
 
-  return createLedgerEntries(entries);
+  return createLedgerEntriesIdempotently(entries);
+}
+
+export async function recordPdaFundsHeld(params: {
+  pdaBookingId: string;
+  customerId: string;
+  userId: string;
+  providerId: string;
+  walletTransactionId: string;
+  amount: number | Decimal;
+  currency?: string;
+  createdBy?: string;
+}) {
+  const amount = toNumber(toDecimal(params.amount));
+  if (amount <= 0) throw new Error('PDA funds-held amount must be positive');
+
+  return createLedgerEntriesIdempotently([{
+    debitAccount: buildAccount(AccountType.CLIENT_WALLET, params.userId),
+    creditAccount: buildAccount(AccountType.PDA_FUNDS_HELD),
+    amount,
+    description: `PDA funds held for booking #${params.pdaBookingId}`,
+    idempotencyKey: `pda-${params.pdaBookingId}-funds-held`,
+    referenceType: ReferenceType.PDA_BOOKING,
+    referenceId: params.pdaBookingId,
+    pdaBookingId: params.pdaBookingId,
+    walletTransactionId: params.walletTransactionId,
+    customerId: params.customerId,
+    userId: params.userId,
+    providerId: params.providerId,
+    entryType: 'PDA_FUNDS_HELD',
+    status: 'HELD',
+    currency: params.currency ?? 'AUD',
+    metadata: {
+      type: 'PDA_FUNDS_HELD',
+      pdaBookingId: params.pdaBookingId,
+      customerId: params.customerId,
+      providerId: params.providerId,
+      originalWalletTransactionId: params.walletTransactionId,
+      amount,
+      currency: params.currency ?? 'AUD',
+    },
+    createdBy: params.createdBy ?? 'SYSTEM',
+  }])
+}
+
+export async function recordPdaFundsRefund(params: {
+  refundId: string;
+  pdaBookingId: string;
+  customerId: string;
+  userId: string;
+  providerId: string;
+  originalWalletTransactionId: string;
+  refundWalletTransactionId: string;
+  amount: number | Decimal;
+  currency?: string;
+  createdBy?: string;
+}) {
+  const amount = toNumber(toDecimal(params.amount));
+  if (amount <= 0) throw new Error('PDA refund amount must be positive');
+
+  return createLedgerEntriesIdempotently([{
+    debitAccount: buildAccount(AccountType.PDA_FUNDS_HELD),
+    creditAccount: buildAccount(AccountType.CLIENT_WALLET, params.userId),
+    amount,
+    description: `PDA refund for booking #${params.pdaBookingId}`,
+    idempotencyKey: `pda-refund-${params.refundId}`,
+    referenceType: ReferenceType.PDA_REFUND,
+    referenceId: params.refundId,
+    pdaBookingId: params.pdaBookingId,
+    pdaRefundId: params.refundId,
+    walletTransactionId: params.originalWalletTransactionId,
+    customerId: params.customerId,
+    userId: params.userId,
+    providerId: params.providerId,
+    entryType: 'PDA_REFUND',
+    status: 'POSTED',
+    currency: params.currency ?? 'AUD',
+    metadata: {
+      type: 'PDA_REFUND',
+      pdaBookingId: params.pdaBookingId,
+      pdaRefundId: params.refundId,
+      customerId: params.customerId,
+      providerId: params.providerId,
+      originalWalletTransactionId: params.originalWalletTransactionId,
+      refundWalletTransactionId: params.refundWalletTransactionId,
+      amount,
+      currency: params.currency ?? 'AUD',
+    },
+    createdBy: params.createdBy ?? 'SYSTEM',
+  }])
 }
 
 // ============================================

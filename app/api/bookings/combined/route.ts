@@ -5,11 +5,11 @@ import { prisma } from '@/lib/prisma'
 import { checkProviderEligible } from '@/lib/booking/checkProviderEligible'
 import { bookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
 import { z } from 'zod'
+import { localDateTimeToUTC, resolveTimezone } from '@/lib/utils/timezone'
 
 export const dynamic = 'force-dynamic'
 
 const combinedBookingSchema = z.object({
-  customerId: z.string().min(1, 'Client ID required'),
   providerId: z.string().min(1, 'Instructor ID required'),
   
   // Lesson booking
@@ -42,7 +42,6 @@ const combinedBookingSchema = z.object({
  * 
  * Request body:
  * {
- *   customerId: string
  *   providerId: string
  *   lesson?: {
  *     startTime: ISO datetime
@@ -104,7 +103,8 @@ export async function POST(req: NextRequest) {
     }
 
     const client = await prisma.customer.findFirst({
-      where: { id: data.customerId, userId: user.id }
+      where: { userId: user.id },
+      orderBy: { id: 'desc' },
     })
 
     if (!client) {
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
       const lessonBooking = await prisma.booking.create({
         data: {
           providerId: data.providerId,
-          customerId: data.customerId,
+          customerId: client.id,
           customerName: client.name || 'Unknown',
           customerPhone: client.phone || '',
           customerEmail: user.email,
@@ -220,9 +220,11 @@ export async function POST(req: NextRequest) {
       }
 
       // Parse test date and time
-      const [year, month, day] = data.pdaTest.testDate.split('-').map(Number)
-      const [hour, minute] = data.pdaTest.testTime.split(':').map(Number)
-      const testDateTime = new Date(year, month - 1, day, hour, minute)
+      const testDateTime = localDateTimeToUTC(
+        data.pdaTest.testDate,
+        data.pdaTest.testTime,
+        resolveTimezone(instructor.timezone),
+      )
 
       // Verify test date is in the future
       if (testDateTime < new Date()) {
@@ -241,8 +243,16 @@ export async function POST(req: NextRequest) {
           providerId: data.providerId,
           testCentreId: data.pdaTest.testCentreId,
           testDate: {
-            gte: new Date(testStart.toDateString()),
-            lt: new Date(new Date(testStart).setDate(testStart.getDate() + 1))
+            gte: testDateTime,
+            lt: localDateTimeToUTC(
+              (() => {
+                const next = new Date(`${data.pdaTest.testDate}T12:00:00Z`)
+                next.setUTCDate(next.getUTCDate() + 1)
+                return next.toISOString().slice(0, 10)
+              })(),
+              '00:00',
+              resolveTimezone(instructor.timezone),
+            ),
           },
           status: { in: ['PENDING', 'CONFIRMED'] }
         },
@@ -279,7 +289,7 @@ export async function POST(req: NextRequest) {
       const pdaBooking = await prisma.pDATestBooking.create({
         data: {
           providerId: data.providerId,
-          customerId: data.customerId,
+          customerId: client.id,
           configId: data.pdaTest.configId,
           testCentreId: data.pdaTest.testCentreId,
           testDate: testDateTime,

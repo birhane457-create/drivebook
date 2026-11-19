@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, AlertCircle, Loader2, Calendar, Clock, MapPin, CheckCircle } from 'lucide-react';
@@ -27,7 +27,7 @@ interface Instructor {
 }
 
 export default function BookPDATestPage() {
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
   const providerId = searchParams?.get('providerId') || '';
@@ -35,15 +35,12 @@ export default function BookPDATestPage() {
   const [instructor, setInstructor] = useState<Instructor | null>(null);
   const [pdaConfigs, setPdaConfigs] = useState<PDAConfig[]>([]);
   const [selectedConfig, setSelectedConfig] = useState<PDAConfig | null>(null);
-  const [formData, setFormData] = useState<{
-    testCentreId: string;
-    testDate: string;
-    testTime: string;
-  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [successDetails, setSuccessDetails] = useState<{ price: number; remainingBalance: number } | null>(null);
+  const checkoutRequestRef = useRef<{ signature: string; key: string } | null>(null);
 
   // Check auth
   useEffect(() => {
@@ -95,7 +92,7 @@ export default function BookPDATestPage() {
     testDate: string;
     testTime: string;
   }) => {
-    if (!selectedConfig || !session?.user?.id || !providerId) {
+    if (!selectedConfig || !providerId) {
       setError('Missing required information');
       return;
     }
@@ -104,25 +101,47 @@ export default function BookPDATestPage() {
     setError(null);
 
     try {
-      const res = await fetch('/api/pda-bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customerId: session!.user!.id,
+      const checkoutBody = {
+        cart: [],
+        pdaBookings: [{
+          providerId,
           configId: selectedConfig.id,
           testCentreId: data.testCentreId,
           testDate: data.testDate,
           testTime: data.testTime,
-        }),
+          expectedPrice: selectedConfig.discountPercent
+            ? Number((selectedConfig.price * (1 - selectedConfig.discountPercent / 100)).toFixed(2))
+            : selectedConfig.price,
+        }],
+      };
+      const signature = JSON.stringify(checkoutBody);
+      const idempotencyKey = checkoutRequestRef.current?.signature === signature
+        ? checkoutRequestRef.current.key
+        : crypto.randomUUID();
+      checkoutRequestRef.current = { signature, key: idempotencyKey };
+      const res = await fetch('/api/client/bookings/create-bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey,
+        },
+        body: JSON.stringify(checkoutBody),
       });
 
       if (!res.ok) {
         const errorData = await res.json();
+        if (res.status === 409 && typeof errorData.currentPrice === 'number') {
+          setError(`The PDA price changed to $${errorData.currentPrice.toFixed(2)}. Reload this page to review the updated price.`);
+          return;
+        }
         throw new Error(errorData.error || 'Failed to book PDA test');
       }
 
       const result = await res.json();
-      setFormData(data);
+      setSuccessDetails({
+        price: Number(result.pdaBookings?.[0]?.price ?? 0),
+        remainingBalance: Number(result.remainingBalance ?? 0),
+      });
       setSuccess(true);
 
       // Redirect to PDA tests page after 2 seconds
@@ -198,7 +217,12 @@ export default function BookPDATestPage() {
           <div className="bg-green-900/20 border border-green-700/50 rounded-2xl p-8 text-center mb-8">
             <CheckCircle className="w-16 h-16 mx-auto mb-4 text-green-500" />
             <h2 className="text-2xl font-bold text-foreground mb-2">Booking Confirmed!</h2>
-            <p className="text-foreground mb-6">Your PDA test has been booked successfully.</p>
+            <p className="text-foreground mb-2">
+              Your PDA test has been booked and your wallet was charged ${successDetails?.price.toFixed(2)}.
+            </p>
+            <p className="text-sm text-muted-foreground mb-6">
+              Wallet balance remaining: ${successDetails?.remainingBalance.toFixed(2)}
+            </p>
             <p className="text-sm text-muted-foreground">Redirecting to PDA tests page...</p>
           </div>
         )}

@@ -64,6 +64,7 @@ model Customer {
   user                 User?            @relation(fields: [userId], references: [id])
   pdaTestBookings      PDATestBooking[]
   quotes               Quote[]
+  financialLedgerEntries FinancialLedger[]
   
   @@index([preferredProviderId, deletedAt])
   @@index([email, deletedAt])
@@ -319,7 +320,7 @@ model Booking {
   status                String    @default("PENDING")
   startTime             DateTime?
   endTime               DateTime?
-  duration              Float?
+  duration              Float?    // Minutes
   price                 Decimal   @default(0) @db.Decimal(12, 2)
   platformFee           Decimal   @default(0) @db.Decimal(12, 2)
   providerPayout        Decimal   @default(0) @db.Decimal(12, 2)
@@ -463,6 +464,10 @@ model WalletTransaction {
   // Null = no expiry (DEBIT, PLATFORM_SUBSIDY, pre-policy legacy CREDITs).
   expiresAt   DateTime?
   wallet      ClientWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  pdaBookings PDATestBooking[]
+  pdaLedgerEntries FinancialLedger[]
+  originalPdaRefunds PDARefund[] @relation("PDARefundOriginalDebit")
+  pdaRefundCredits PDARefund[] @relation("PDARefundWalletCredit")
 
   @@index([walletId, expiresAt])
 }
@@ -763,11 +768,14 @@ model PDATestBooking {
   customerId      String
   configId        String
   testCentreId    String
+  walletTransactionId String?
   testDate        DateTime
   testTime        String
   price           Decimal       @db.Decimal(12, 2)
   discountPercent Decimal?      @db.Decimal(5, 2)
   status          String        @default("PENDING")
+  financialStatus String        @default("PENDING")
+  currency        String        @default("AUD")
   result          String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -777,12 +785,37 @@ model PDATestBooking {
   config          PDATestConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
   provider        Provider      @relation(fields: [providerId], references: [id], onDelete: Cascade)
   testCentre      TestCentre    @relation(fields: [testCentreId], references: [id])
+  walletTransaction WalletTransaction? @relation(fields: [walletTransactionId], references: [id], onDelete: Restrict)
+  financialLedgerEntries FinancialLedger[]
+  refunds         PDARefund[]
 
   @@index([providerId, testDate])
   @@index([customerId])
+  @@index([walletTransactionId])
+  @@index([financialStatus])
   @@index([configId])
   @@index([testCentreId])
   @@index([status])
+}
+
+model PDARefund {
+  id                       String           @id @default(cuid())
+  idempotencyKey           String           @unique
+  pdaBookingId             String
+  originalWalletTransactionId String
+  refundWalletTransactionId   String?          @unique
+  amount                   Decimal          @db.Decimal(12, 2)
+  currency                 String           @default("AUD")
+  reason                   String?
+  status                   String           @default("PENDING")
+  createdAt                DateTime         @default(now())
+  pdaBooking               PDATestBooking   @relation(fields: [pdaBookingId], references: [id], onDelete: Restrict)
+  originalWalletTransaction WalletTransaction @relation("PDARefundOriginalDebit", fields: [originalWalletTransactionId], references: [id], onDelete: Restrict)
+  refundWalletTransaction   WalletTransaction? @relation("PDARefundWalletCredit", fields: [refundWalletTransactionId], references: [id], onDelete: Restrict)
+  financialLedgerEntries    FinancialLedger[]
+
+  @@index([pdaBookingId, createdAt])
+  @@index([originalWalletTransactionId])
 }
 
 model BookingIdempotencyKey {
@@ -931,15 +964,30 @@ model FinancialLedger {
   description    String
   idempotencyKey String   @unique
   bookingId      String?
+  pdaBookingId   String?
+  pdaRefundId    String?
+  walletTransactionId String?
+  customerId     String?
   transactionId  String?
   payoutId       String?
   userId         String?
   providerId     String?
+  entryType      String   @default("GENERAL")
+  status         String   @default("POSTED")
+  currency       String   @default("AUD")
   metadata       Json?
   createdBy      String   @default("SYSTEM")
   createdAt      DateTime @default(now())
+  pdaBooking     PDATestBooking? @relation(fields: [pdaBookingId], references: [id], onDelete: Restrict)
+  pdaRefund      PDARefund? @relation(fields: [pdaRefundId], references: [id], onDelete: Restrict)
+  walletTransaction WalletTransaction? @relation(fields: [walletTransactionId], references: [id], onDelete: Restrict)
+  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
   @@index([bookingId])
+  @@index([pdaBookingId])
+  @@index([pdaRefundId])
+  @@index([walletTransactionId])
+  @@index([customerId])
   @@index([providerId])
   @@index([userId])
   @@index([createdAt])

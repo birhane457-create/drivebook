@@ -1,9 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import {
+  calculateBookingCartTotal,
+  detachPdaFromRemovedLesson,
+  removePdaFromCart,
+} from '@/lib/utils/client-booking-cart';
+import type { PdaCartItem } from '@/lib/utils/client-booking-cart';
 import {
   MapPin,
   Clock,
@@ -89,6 +95,8 @@ export default function BookLessonPage() {
   
   // Cart
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [pdaCart, setPdaCart] = useState<PdaCartItem[]>([]);
+  const checkoutRequestRef = useRef<{ signature: string; key: string } | null>(null);
   
   // UI State
   const [searchLoading, setSearchLoading] = useState(false);
@@ -115,7 +123,6 @@ export default function BookLessonPage() {
     testDate: string;
     testTime: string;
   } | null>(null);
-  const [pdaLoading, setPdaLoading] = useState(false);
 
   // Check auth
   useEffect(() => {
@@ -290,17 +297,7 @@ export default function BookLessonPage() {
 
   const goToPdaForm = () => {
     if (!selectedInstructor) return;
-    const firstDurationMinutes = selectedInstructor.allowedDurations?.[0] ?? 60;
-    const durationHours = firstDurationMinutes / 60;
-    setSelectedService({
-      duration: durationHours,
-      price: selectedInstructor.hourlyRate * durationHours,
-    });
-    setAddPDAToBooking(true);
-    if (pdaConfigs.length > 0 && !selectedPDAConfig) {
-      setSelectedPDAConfig(pdaConfigs[0]);
-    }
-    setStep('details');
+    router.push(`/client-dashboard/pda-tests/book?providerId=${encodeURIComponent(selectedInstructor.id)}`);
   };
 
   const checkAvailability = async () => {
@@ -424,7 +421,8 @@ export default function BookLessonPage() {
   };
 
   const removeFromCart = (id: string) => {
-    setCart(cart.filter(item => item.id !== id));
+    setCart(current => current.filter(item => item.id !== id));
+    setPdaCart(current => detachPdaFromRemovedLesson(current, id));
   };
 
   const addToCombinedCart = async () => {
@@ -438,104 +436,89 @@ export default function BookLessonPage() {
       return;
     }
 
-    if (!await validatePickupLocation()) {
+    if (!await validatePickupLocation()) return;
+
+    const duplicate = cart.find(item =>
+      item.providerId === selectedInstructor.id &&
+      item.date === selectedDate &&
+      item.time === selectedTime
+    );
+    if (duplicate) {
+      setError(`You already have a booking with ${selectedInstructor.name} on ${selectedDate} at ${selectedTime} in your cart`);
       return;
     }
 
-    // Check credits
-    let totalPrice = selectedService.price;
-    if (addPDAToBooking && selectedPDAConfig) {
-      const pdaPrice = selectedPDAConfig.discountPercent
-        ? selectedPDAConfig.price * (1 - selectedPDAConfig.discountPercent / 100)
-        : selectedPDAConfig.price;
-      totalPrice += pdaPrice;
-    }
-
-    if (walletBalance < totalPrice) {
+    const pdaPrice = addPDAToBooking && selectedPDAConfig
+      ? selectedPDAConfig.discountPercent
+        ? Number((selectedPDAConfig.price * (1 - selectedPDAConfig.discountPercent / 100)).toFixed(2))
+        : selectedPDAConfig.price
+      : 0;
+    const newPdaItems = addPDAToBooking && selectedPDAConfig && pdaFormData
+      ? [...pdaCart, {
+          price: pdaPrice,
+        }]
+      : pdaCart;
+    const newCartTotal = calculateBookingCartTotal(
+      [...cart, { price: selectedService.price }],
+      newPdaItems,
+    );
+    if (walletBalance < newCartTotal) {
       setError(
-        `Insufficient credits. You need $${totalPrice.toFixed(2)} but only have $${walletBalance.toFixed(2)}`
+        `Insufficient credits. You need $${newCartTotal.toFixed(2)} but only have $${walletBalance.toFixed(2)}`
       );
       return;
     }
 
-    // Create combined booking
-    setPdaLoading(true);
-    try {
-      const startTime = new Date(`${selectedDate}T${selectedTime}`);
-      const bookingPayload: any = {
-        customerId: session?.user?.id || '',
-        providerId: selectedInstructor.id,
-        lesson: {
-          startTime: startTime.toISOString(),
-          duration: selectedService.duration * 60,
-          pickupAddress: pickupLocation
-        }
-      };
+    const testCentre = addPDAToBooking && selectedPDAConfig && pdaFormData
+      ? selectedPDAConfig.testCentres.find(centre => centre.id === pdaFormData.testCentreId)
+      : undefined;
+    const lessonCartId = Math.random().toString(36);
+    const cartItem: CartItem = {
+      id: lessonCartId,
+      providerId: selectedInstructor.id,
+      instructorName: selectedInstructor.name,
+      date: selectedDate,
+      time: selectedTime,
+      duration: selectedService.duration,
+      price: selectedService.price,
+      pickupLocation,
+      service: `${selectedService.duration}h Lesson`,
+    };
 
-      if (addPDAToBooking && selectedPDAConfig && pdaFormData) {
-        bookingPayload.pdaTest = {
-          configId: selectedPDAConfig.id,
-          testCentreId: pdaFormData.testCentreId,
-          testDate: pdaFormData.testDate,
-          testTime: pdaFormData.testTime
-        };
-      }
-
-      const res = await fetch('/api/bookings/combined', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bookingPayload)
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to create booking');
-      }
-
-      const bookingData = await res.json();
-
-      // Add to cart (simulated for now)
-      const cartItem: CartItem = {
+    setCart(current => [...current, cartItem]);
+    if (addPDAToBooking && selectedPDAConfig && pdaFormData) {
+      setPdaCart(current => [...current, {
         id: Math.random().toString(36),
         providerId: selectedInstructor.id,
         instructorName: selectedInstructor.name,
-        date: selectedDate,
-        time: selectedTime,
-        duration: selectedService.duration,
-        price: selectedService.price,
-        pickupLocation,
-        service: `${selectedService.duration}h Lesson`,
-      };
-
-      setCart([...cart, cartItem]);
-      setError(null);
-
-      // Refresh wallet
-      await loadClientData();
-
-      // Reset form
-      setSelectedService(null);
-      setSelectedDate('');
-      setSelectedTime('');
-      setPickupLocation(clientLocation);
-      setAddPDAToBooking(false);
-      setSelectedPDAConfig(null);
-      setPdaFormData(null);
-      setStep('services');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Booking failed');
-    } finally {
-      setPdaLoading(false);
+        configId: selectedPDAConfig.id,
+        configName: selectedPDAConfig.name,
+        testCentreId: pdaFormData.testCentreId,
+        testCentreName: testCentre?.name ?? 'Test centre',
+        testDate: pdaFormData.testDate,
+        testTime: pdaFormData.testTime,
+        price: pdaPrice,
+        parentLessonId: lessonCartId,
+      }]);
     }
+    setError(null);
+    setSelectedService(null);
+    setSelectedDate('');
+    setSelectedTime('');
+    setPickupLocation(clientLocation);
+    setAddPDAToBooking(false);
+    setSelectedPDAConfig(null);
+    setPdaFormData(null);
+    setStep('services');
   };
 
   const proceedToPayment = () => {
-    if (cart.length === 0) {
-      setError('Add at least one lesson to cart');
+    if (cart.length === 0 && pdaCart.length === 0) {
+      setError('Add at least one lesson or PDA test to cart');
       return;
     }
 
-    const totalPrice = cart.reduce((sum: any, item: any) => sum + item.price, 0);
+    const totalPrice = cartTotal;
     if (walletBalance < totalPrice) {
       setError(`Need additional $${(totalPrice - walletBalance).toFixed(2)}`);
       return;
@@ -544,7 +527,7 @@ export default function BookLessonPage() {
     setStep('payment');
   };
 
-  const cartTotal = cart.reduce((sum: any, item: any) => sum + item.price, 0);
+  const cartTotal = calculateBookingCartTotal(cart, pdaCart);
   const remainingBalance = walletBalance - cartTotal;
 
   if (status === 'loading') {
@@ -871,8 +854,8 @@ export default function BookLessonPage() {
                           className="w-full p-3 border-2 border-amber-700/50 bg-amber-900/20 rounded-lg hover:border-amber-500 hover:bg-amber-900/30 transition text-left flex items-center justify-between"
                         >
                           <div>
-                            <span className="font-semibold text-foreground">Book PDA Test Package</span>
-                            <p className="text-xs text-muted-foreground">Go to PDA form and schedule test details</p>
+                            <span className="font-semibold text-foreground">Book a PDA Test Only</span>
+                            <p className="text-xs text-muted-foreground">Book a PDA test without adding a lesson</p>
                           </div>
                           <Zap className="w-4 h-4 text-amber-400" />
                         </button>
@@ -1033,7 +1016,7 @@ export default function BookLessonPage() {
                               config={selectedPDAConfig}
                               providerId={selectedInstructor.id}
                               onSubmit={(data) => setPdaFormData(data)}
-                              isLoading={pdaLoading}
+                              isLoading={false}
                             />
                           </div>
                         )}
@@ -1058,20 +1041,11 @@ export default function BookLessonPage() {
                   </button>
                   <button
                     onClick={addToCombinedCart}
-                    disabled={!selectedDate || !selectedTime || !pickupLocation || pdaLoading || (addPDAToBooking && !pdaFormData)}
+                    disabled={!selectedDate || !selectedTime || !pickupLocation || (addPDAToBooking && !pdaFormData)}
                     className="flex-1 px-4 py-3 bg-emerald-600 text-foreground rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2 transition"
                   >
-                    {pdaLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Booking...
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingCart className="w-4 h-4" />
-                        Add to Cart
-                      </>
-                    )}
+                    <ShoppingCart className="w-4 h-4" />
+                    Add to Cart
                   </button>
                 </div>
               </div>
@@ -1087,6 +1061,15 @@ export default function BookLessonPage() {
                       <div className="font-semibold text-foreground">{item.instructorName}</div>
                       <div className="text-sm text-muted-foreground">
                         {item.date} at {item.time} • {item.service}
+                      </div>
+                      <div className="text-right font-bold text-primary">${item.price.toFixed(2)}</div>
+                    </div>
+                  ))}
+                  {pdaCart.map((item) => (
+                    <div key={item.id} className="p-4 border border-border bg-secondary/50 rounded-lg">
+                      <div className="font-semibold text-foreground">PDA test: {item.configName}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {item.instructorName} · {item.testDate} at {item.testTime} · {item.testCentreName}
                       </div>
                       <div className="text-right font-bold text-primary">${item.price.toFixed(2)}</div>
                     </div>
@@ -1107,16 +1090,53 @@ export default function BookLessonPage() {
                       setError(null);
 
                       console.log('Submitting cart with items:', cart.length);
+                      const checkoutBody = {
+                        cart,
+                        pdaBookings: pdaCart.map(item => {
+                          const parentBookingIndex = item.parentLessonId
+                            ? cart.findIndex(lesson => lesson.id === item.parentLessonId)
+                            : -1;
+                          return {
+                            providerId: item.providerId,
+                            configId: item.configId,
+                            testCentreId: item.testCentreId,
+                            testDate: item.testDate,
+                            testTime: item.testTime,
+                            expectedPrice: item.price,
+                            ...(parentBookingIndex >= 0 ? { parentBookingIndex } : {}),
+                          };
+                        }),
+                      };
+                      const signature = JSON.stringify(checkoutBody);
+                      const idempotencyKey = checkoutRequestRef.current?.signature === signature
+                        ? checkoutRequestRef.current.key
+                        : crypto.randomUUID();
+                      checkoutRequestRef.current = { signature, key: idempotencyKey };
                       const res = await fetch('/api/client/bookings/create-bulk', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ cart }),
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Idempotency-Key': idempotencyKey,
+                        },
+                        body: JSON.stringify(checkoutBody),
                       });
 
                       const data = await res.json();
                       console.log('Booking API response:', data);
 
                       if (!res.ok) {
+                        if (
+                          res.status === 409 &&
+                          typeof data.currentPrice === 'number' &&
+                          typeof data.configId === 'string'
+                        ) {
+                          setPdaCart(current => current.map(item =>
+                            item.configId === data.configId
+                              ? { ...item, price: data.currentPrice }
+                              : item,
+                          ));
+                          throw new Error(`PDA price changed to $${data.currentPrice.toFixed(2)}. Review the updated total and confirm again.`);
+                        }
                         throw new Error(data.error || 'Booking failed');
                       }
 
@@ -1129,6 +1149,8 @@ export default function BookLessonPage() {
                       
                       // Clear cart
                       setCart([]);
+                      setPdaCart([]);
+                      checkoutRequestRef.current = null;
                       
                       // Also refresh from API to be sure - with longer wait
                       console.log('Refreshing wallet data...');
@@ -1176,8 +1198,8 @@ export default function BookLessonPage() {
                 Your Cart
               </h3>
 
-              {cart.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No lessons added yet</p>
+              {cart.length === 0 && pdaCart.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No bookings added yet</p>
               ) : (
                 <>
                   <div className="space-y-3 mb-4 max-h-96 overflow-y-auto">
@@ -1191,6 +1213,29 @@ export default function BookLessonPage() {
                           </div>
                           <button
                             onClick={() => removeFromCart(item.id)}
+                            className="text-destructive hover:text-destructive transition"
+                          >
+                            <XIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {pdaCart.map(item => (
+                      <div key={item.id} className="p-3 bg-secondary/50 border border-border rounded-lg">
+                        <div className="flex items-start justify-between">
+                          <div className="text-sm flex-1">
+                            <p className="font-semibold text-foreground">PDA: {item.configName}</p>
+                            <p className="text-xs text-muted-foreground">{item.instructorName} · ${item.price.toFixed(2)}</p>
+                            <p className="text-xs text-muted-foreground/60">
+                              {item.testDate} @ {item.testTime} · {item.testCentreName}
+                            </p>
+                            {item.parentLessonId && (
+                              <p className="mt-1 text-xs text-muted-foreground">Booked with lesson</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => setPdaCart(current => removePdaFromCart(current, item.id))}
+                            aria-label={`Remove PDA test ${item.configName}`}
                             className="text-destructive hover:text-destructive transition"
                           >
                             <XIcon className="w-4 h-4" />
@@ -1269,7 +1314,7 @@ export default function BookLessonPage() {
                     </div>
                   )}
 
-                  {cart.length > 0 && walletBalance >= cartTotal && (
+                  {(cart.length > 0 || pdaCart.length > 0) && walletBalance >= cartTotal && (
                     <button
                       onClick={proceedToPayment}
                       className="w-full mt-4 px-4 py-3 bg-primary text-foreground rounded-lg font-semibold hover:bg-primary/90 transition"

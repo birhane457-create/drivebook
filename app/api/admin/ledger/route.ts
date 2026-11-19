@@ -6,6 +6,7 @@ import { getPlatformLedger } from '@/lib/services/ledger-service';
 
 import { requirePermission } from '@/lib/auth/requireRole';
 import { PERM } from '@/lib/rbac/permissions';
+import { getPdaFundsHeldReconciliation } from '@/lib/services/pda-financial-operations';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
@@ -17,14 +18,15 @@ export async function GET(req: NextRequest) {
   const take = Math.min(parseInt(searchParams.get('limit') ?? '50'), 200);
   const type = searchParams.get('type'); // optional filter
 
-  const [ledger, entries] = await Promise.all([
+  const [ledger, entries, pdaFundsHeld] = await Promise.all([
     getPlatformLedger(),
     prisma.ledgerEntry.findMany({
       where: type ? { type } : undefined,
       orderBy: { createdAt: 'desc' },
       take,
     }),
+    getPdaFundsHeldReconciliation(),
   ]);
 
-  return NextResponse.json({ ledger, entries });
+  return NextResponse.json({ ledger, entries, pdaFundsHeld });
 }

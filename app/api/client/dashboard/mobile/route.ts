@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateMobileToken } from '@/lib/mobile-auth';
 import { prisma } from '@/lib/prisma';
 import { getDisplayName } from '@/lib/utils/account';
+import { toBookingDurationMinutes } from '@/lib/utils/booking-duration';
 
 
 export const dynamic = 'force-dynamic';
@@ -110,7 +111,7 @@ export async function GET(req: NextRequest) {
       date: booking.startTime.toISOString().split('T')[0],
       time: booking.startTime.toISOString().split('T')[1].substring(0, 5),
       location: booking.pickupAddress || 'Location TBD',
-      duration: booking.duration,
+      duration: toBookingDurationMinutes(booking.duration, booking.createdBy, booking.bookingType),
     }));
 
     // Format current instructor

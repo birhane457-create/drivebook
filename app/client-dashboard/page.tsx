@@ -26,6 +26,7 @@ import StripeProvider from '../../components/StripeProvider';
 import RescheduleModal from '../../components/RescheduleModal';
 import CancelDialog from '../../components/CancelDialog';
 import ReviewModal from '../../components/ReviewModal';
+import { formatDurationMinutes } from '@/lib/utils/booking-duration';
 
 interface Booking {
   id: string;
@@ -662,7 +663,7 @@ export default function ClientDashboard() {
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <BookOpen className="w-4 h-4" />
-                                  {booking.duration}h
+                                  {formatDurationMinutes(booking.duration)}
                                 </span>
                                 <span className="font-semibold text-slate-100">${Number(booking.price || 0).toFixed(2)}</span>
                               </div>
@@ -683,7 +684,7 @@ export default function ClientDashboard() {
                                   providerId: booking.provider?.id ?? '',
                                   date: booking.date,
                                   time: booking.time,
-                                  duration: booking.duration * 60,
+                                  duration: booking.duration,
                                   price: Number(booking.price || 0),
                                   instructor: booking.provider?.name || 'Unknown Instructor',
                                   hourlyRate: booking.provider?.hourlyRate ?? 0
@@ -768,7 +769,7 @@ export default function ClientDashboard() {
                                 </span>
                                 <span className="flex items-center gap-1">
                                   <BookOpen className="w-4 h-4" />
-                                  {booking.duration}h
+                                  {formatDurationMinutes(booking.duration)}
                                 </span>
                                 <span className="font-semibold text-slate-100">${Number(booking.price || 0).toFixed(2)}</span>
                               </div>
@@ -792,7 +793,7 @@ export default function ClientDashboard() {
                                   providerId: booking.provider?.id ?? '',
                                   date: booking.date,
                                   time: booking.time,
-                                  duration: booking.duration * 60,
+                                  duration: booking.duration,
                                   price: Number(booking.price || 0),
                                   instructor: booking.provider?.name || 'Unknown Instructor',
                                   hourlyRate: booking.provider?.hourlyRate ?? 0

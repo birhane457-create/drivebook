@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { addMinutes, format, parse } from 'date-fns'
+import { addMinutes } from 'date-fns'
+import { formatLocalTime, localDateTimeToUTC, resolveTimezone } from '@/lib/utils/timezone'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,14 +9,6 @@ interface TimeSlot {
   time: string
   available: boolean
   reason?: string
-}
-
-// Parse HH:mm string into a UTC Date on the given YYYY-MM-DD date string.
-// Using an explicit UTC midnight anchor avoids date-fns parse() shifting
-// the result by the server's local timezone offset.
-function parseTimeUTC(hhMm: string, dateStr: string): Date {
-  const [h, m] = hhMm.split(':').map(Number)
-  return new Date(`${dateStr}T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00.000Z`)
 }
 
 export async function GET(req: NextRequest) {
@@ -57,18 +50,10 @@ export async function GET(req: NextRequest) {
       }, { status: 404 })
     }
 
-    // Build UTC day boundaries from the YYYY-MM-DD string directly — no local TZ involvement
-    const dayStart = new Date(`${date}T00:00:00.000Z`)
-    const dayEnd   = new Date(`${date}T23:59:59.999Z`)
-
-    // Day-of-week from UTC date (format with explicit UTC offset)
-    const dayName = format(dayStart, 'EEEE').toLowerCase()
-    const duration = config.durationMinutes
-
-    // Get instructor's working hours and buffer settings
     const instructor = await prisma.provider.findUnique({
       where: { id: providerId },
       select: {
+        timezone: true,
         workingHours: true,
         bookingBufferMinutes: true,
         enableTravelTime: true,
@@ -79,6 +64,15 @@ export async function GET(req: NextRequest) {
     if (!instructor) {
       return NextResponse.json({ error: 'Instructor not found' }, { status: 404 })
     }
+
+    const timezone = resolveTimezone(instructor.timezone)
+    const dayStart = localDateTimeToUTC(date, '00:00', timezone)
+    const dayEnd = localDateTimeToUTC(date, '23:59', timezone)
+    const dayName = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'long',
+    }).format(dayStart).toLowerCase()
+    const duration = config.durationMinutes
 
     const bookingBufferMinutes = (instructor as any).bookingBufferMinutes || 15
     const enableTravelTime = (instructor as any).enableTravelTime || false
@@ -142,9 +136,16 @@ export async function GET(req: NextRequest) {
 
     pdaBookings.forEach((booking: any) => {
       if (!booking.testTime) return
-      // Extract date string from stored UTC Date, then combine with HH:mm — all UTC
-      const bookingDateStr = new Date(booking.testDate).toISOString().slice(0, 10)
-      const testDateTime = parseTimeUTC(booking.testTime, bookingDateStr)
+      const testDateTime = localDateTimeToUTC(
+        new Intl.DateTimeFormat('en-CA', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(booking.testDate),
+        booking.testTime,
+        timezone,
+      )
       const testDurationMinutes = booking.config.durationMinutes
       const testEnd = addMinutes(testDateTime, testDurationMinutes)
       blockedRanges.push({ start: testDateTime, end: testEnd, reason: 'Other PDA test scheduled' })
@@ -153,13 +154,13 @@ export async function GET(req: NextRequest) {
 
     blockedRanges.sort((a: any, b: any) => a.start.getTime() - b.start.getTime())
 
-    // Generate available slots — parse working hours as UTC on this date
+    // Generate available slots in UTC, converted from provider-local wall times
     const slots: TimeSlot[] = []
     const slotInterval = 30
 
     for (const workSlot of daySlots) {
-      const workStart = parseTimeUTC(workSlot.start, date)
-      const workEnd   = parseTimeUTC(workSlot.end,   date)
+      const workStart = localDateTimeToUTC(date, workSlot.start, timezone)
+      const workEnd   = localDateTimeToUTC(date, workSlot.end, timezone)
 
       let currentTime = workStart
 
@@ -174,7 +175,7 @@ export async function GET(req: NextRequest) {
         )
 
         if (!hasConflict) {
-          slots.push({ time: format(currentTime, 'HH:mm'), available: true })
+          slots.push({ time: formatLocalTime(currentTime, timezone), available: true })
         }
 
         currentTime = addMinutes(currentTime, slotInterval)

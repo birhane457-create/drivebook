@@ -4,11 +4,11 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { getWalletBalance } from '@/lib/services/wallet-helpers'
+import { localDateTimeToUTC, resolveTimezone } from '@/lib/utils/timezone'
 
 export const dynamic = 'force-dynamic'
 
 const pdaBookingSchema = z.object({
-  customerId: z.string().min(1),
   configId: z.string().min(1),
   testCentreId: z.string().min(1),
   testDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -38,7 +38,8 @@ export async function POST(req: NextRequest) {
 
     // Get client by ID and verify it belongs to user
     const client = await prisma.customer.findFirst({
-      where: { id: data.customerId, userId: user.id }
+      where: { userId: user.id },
+      orderBy: { id: 'desc' },
     })
 
     if (!client) {
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
     const config = await prisma.pDATestConfig.findUnique({
       where: { id: data.configId },
       include: {
-        provider: { select: { id: true, name: true } },
+        provider: { select: { id: true, name: true, timezone: true } },
         testCentres: {
           where: {
             testCentreId: data.testCentreId
@@ -77,7 +78,12 @@ export async function POST(req: NextRequest) {
     const testCentre = config.testCentres[0].testCentre
 
     // Parse test date and time — build UTC datetime directly to avoid server TZ shift
-    const startTime = new Date(`${data.testDate}T${data.testTime.padStart(5,'0')}:00.000Z`);
+    const timezone = resolveTimezone(config.provider.timezone)
+    const startTime = localDateTimeToUTC(
+      data.testDate,
+      data.testTime.padStart(5,'0'),
+      timezone,
+    )
     if (isNaN(startTime.getTime())) {
       return NextResponse.json({ error: 'Invalid date or time' }, { status: 400 });
     }
@@ -120,14 +126,21 @@ export async function POST(req: NextRequest) {
           where: {
             providerId: config.providerId,
             testCentreId: data.testCentreId,
-            testDate: { gte: new Date(`${data.testDate}T00:00:00.000Z`), lt: new Date(`${data.testDate}T23:59:59.999Z`) },
+            testDate: {
+              gte: localDateTimeToUTC(data.testDate, '00:00', timezone),
+              lt: localDateTimeToUTC(data.testDate, '23:59', timezone),
+            },
             status: { in: ['PENDING', 'PENDING_PAYMENT', 'CONFIRMED'] }
           },
           include: { config: { select: { durationMinutes: true } } }
         });
 
         if (conflict && conflict.testTime) {
-          const conflictStart = new Date(`${data.testDate}T${conflict.testTime.padStart(5,'0')}:00.000Z`);
+          const conflictStart = localDateTimeToUTC(
+            data.testDate,
+            conflict.testTime.padStart(5,'0'),
+            timezone,
+          )
           const conflictEnd = new Date(conflictStart.getTime() + (conflict.config?.durationMinutes || 180) * 60 * 1000);
           if (
             (testStart >= conflictStart && testStart < conflictEnd) ||
@@ -141,7 +154,7 @@ export async function POST(req: NextRequest) {
         return tx.pDATestBooking.create({
           data: {
             providerId: config.providerId,
-            customerId: data.customerId,
+            customerId: client.id,
             configId: data.configId,
             testCentreId: data.testCentreId,
             testDate: testDateTime,

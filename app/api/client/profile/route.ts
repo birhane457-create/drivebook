@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getProfileBookingCounts } from '@/lib/services/profile-counts';
+import { toBookingDurationMinutes } from '@/lib/utils/booking-duration';
 
 
 export const dynamic = 'force-dynamic';
@@ -125,6 +126,7 @@ export async function GET(req: NextRequest) {
         address: clientRecord?.defaultPickupAddress || ''
       },
       bookings: activeBookings.map((b: any) => {
+        const durationMinutes = toBookingDurationMinutes(b.duration, b.createdBy, b.bookingType);
         // Map database status to frontend display status
         // Rule: only use time-based fallback for CONFIRMED bookings that the
         // cron hasn't processed yet (endTime passed but still CONFIRMED).
@@ -158,7 +160,7 @@ export async function GET(req: NextRequest) {
           id: b.id,
           date: b.startTime ? b.startTime.toISOString().split('T')[0] : null,
           time: b.startTime ? b.startTime.toISOString().split('T')[1].substring(0, 5) : null,
-          duration: b.duration || null,
+          duration: durationMinutes,
           status: displayStatus,
           dbStatus: b.status,
           pickupAddress: (b as any).pickupAddress || null,
@@ -170,7 +172,7 @@ export async function GET(req: NextRequest) {
             const raw = b as any;
             if (raw.isPackageBooking) {
               const lockedRate = raw.lockedHourlyRate ?? b.provider.hourlyRate;
-              const durationHours = (b.duration ?? 60) / 60;
+              const durationHours = (durationMinutes ?? 60) / 60;
               const expectedPrice = lockedRate * durationHours;
               // If price suspiciously high (>150% of expected), assume package total bug
               if (b.price > expectedPrice * 1.5) {

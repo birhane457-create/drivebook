@@ -37,6 +37,7 @@ import {
 export enum AccountType {
   CLIENT_WALLET = 'CLIENT_WALLET',
   PLATFORM_ESCROW = 'PLATFORM_ESCROW',
+  PDA_FUNDS_HELD = 'PDA_FUNDS_HELD',
   PLATFORM_REVENUE = 'PLATFORM_REVENUE',
   INSTRUCTOR_PAYABLE = 'INSTRUCTOR_PAYABLE',
   INSTRUCTOR_PAID = 'INSTRUCTOR_PAID',
@@ -45,6 +46,8 @@ export enum AccountType {
 
 export enum ReferenceType {
   BOOKING = 'BOOKING',
+  PDA_BOOKING = 'PDA_BOOKING',
+  PDA_REFUND = 'PDA_REFUND',
   PAYOUT = 'PAYOUT',
   REFUND = 'REFUND',
   WALLET_CREDIT = 'WALLET_CREDIT',
@@ -65,12 +68,19 @@ export interface LedgerEntry {
   referenceType?: string;
   referenceId?: string;
   bookingId?: string;
+  pdaBookingId?: string;
+  pdaRefundId?: string;
+  walletTransactionId?: string;
+  customerId?: string;
   transactionId?: string;
   payoutId?: string;
   userId?: string;
   providerId?: string;
   metadata?: any;
   createdBy?: string;
+  entryType?: string;
+  status?: string;
+  currency?: string;
 }
 
 // ============================================
@@ -155,6 +165,77 @@ export async function createLedgerEntries(entries: LedgerEntry[]) {
   }
 }
 
+/**
+ * Atomically insert missing ledger entries and tolerate retries by idempotency key.
+ */
+export async function createLedgerEntriesIdempotently(entries: LedgerEntry[]) {
+  if (entries.length === 0) return { success: true, entries: [] }
+
+  const keys = entries.map(entry => entry.idempotencyKey)
+  if (new Set(keys).size !== keys.length) {
+    throw new Error('Ledger entry idempotency keys must be unique within a batch')
+  }
+  if (entries.some(entry => entry.amount <= 0)) {
+    throw new Error('Ledger amounts must be positive')
+  }
+
+  await prisma.financialLedger.createMany({
+    data: entries.map(entry => ({
+      debitAccount: entry.debitAccount,
+      creditAccount: entry.creditAccount,
+      amount: entry.amount,
+      description: entry.description,
+      idempotencyKey: entry.idempotencyKey,
+      bookingId: entry.bookingId,
+      pdaBookingId: entry.pdaBookingId,
+      pdaRefundId: entry.pdaRefundId,
+      walletTransactionId: entry.walletTransactionId,
+      customerId: entry.customerId,
+      transactionId: entry.transactionId,
+      payoutId: entry.payoutId,
+      userId: entry.userId,
+      providerId: entry.providerId,
+      entryType: entry.entryType,
+      status: entry.status,
+      currency: entry.currency,
+      metadata: entry.metadata || {},
+      createdBy: entry.createdBy || 'SYSTEM',
+    })),
+    skipDuplicates: true,
+  })
+
+  const existing = await prisma.financialLedger.findMany({
+    where: { idempotencyKey: { in: keys } },
+  })
+  const byKey = new Map(existing.map(entry => [entry.idempotencyKey, entry]))
+
+  for (const expected of entries) {
+    const stored = byKey.get(expected.idempotencyKey)
+    if (!stored) throw new Error(`Ledger entry was not persisted: ${expected.idempotencyKey}`)
+    if (
+      stored.debitAccount !== expected.debitAccount ||
+      stored.creditAccount !== expected.creditAccount ||
+      !new Prisma.Decimal(stored.amount).equals(expected.amount) ||
+      stored.bookingId !== (expected.bookingId ?? null) ||
+      stored.pdaBookingId !== (expected.pdaBookingId ?? null) ||
+      stored.pdaRefundId !== (expected.pdaRefundId ?? null) ||
+      stored.walletTransactionId !== (expected.walletTransactionId ?? null) ||
+      stored.customerId !== (expected.customerId ?? null) ||
+      stored.providerId !== (expected.providerId ?? null) ||
+      stored.entryType !== (expected.entryType ?? 'GENERAL') ||
+      stored.status !== (expected.status ?? 'POSTED') ||
+      stored.currency !== (expected.currency ?? 'AUD')
+    ) {
+      throw new Error(`Ledger idempotency key has conflicting data: ${expected.idempotencyKey}`)
+    }
+  }
+
+  return {
+    success: true,
+    entries: entries.map(entry => byKey.get(entry.idempotencyKey)!),
+  }
+}
+
 // ============================================
 // ACCOUNT HELPERS
 // ============================================
@@ -164,6 +245,7 @@ export async function createLedgerEntries(entries: LedgerEntry[]) {
  */
 export function buildAccount(type: AccountType, entityId?: string): string {
   if (type === AccountType.PLATFORM_ESCROW || 
+      type === AccountType.PDA_FUNDS_HELD ||
       type === AccountType.PLATFORM_REVENUE || 
       type === AccountType.STRIPE_CLEARING) {
     return `${type}:platform`;

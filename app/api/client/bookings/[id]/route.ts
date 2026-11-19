@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { mergeLessonOutcome } from '@/lib/extensions/driving/lessonOutcome';
+import { toBookingDurationMinutes } from '@/lib/utils/booking-duration';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,7 +95,7 @@ export async function GET(
       time: booking.startTime ? booking.startTime.toISOString().split('T')[1].substring(0, 5) : null,
       endTime: booking.endTime ? booking.endTime.toISOString() : null,
       startTime: booking.startTime ? booking.startTime.toISOString() : null,
-      duration: booking.duration || null,
+      duration: toBookingDurationMinutes(booking.duration, booking.createdBy, booking.bookingType),
       status: displayStatus,
       dbStatus: booking.status,
       price,
