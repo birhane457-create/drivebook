@@ -14,7 +14,7 @@ async function main() {
   // 1. Register Super Admin
   console.log('📋 Creating Super Admin...')
   const adminEmail = 'admin@drivebook.com.au'
-  const adminPassword = 'Admin123!'
+  const adminPassword = 'adminpass!'
   
   try {
     // Check if admin already exists
@@ -53,7 +53,7 @@ async function main() {
   // 2. Register Provider (Driving Instructor)
   console.log('📋 Creating Provider (Driving Instructor)...')
   const providerEmail = 'instructor@drivebook.com.au'
-  const providerPassword = 'Provider123!'
+  const providerPassword = 'propass!'
   const providerName = 'John Smith'
   const providerPhone = '+61412345678'
 
