@@ -1,11 +1,11 @@
 PAY-H-04 Production Preflight
 Timestamp: 2026-09-23T07:35:27.675Z
-DB host: db.ikhqphbbilrocsghjyda.supabase.co (credentials redacted)
+DB host: db.addtheurl.supabase.co (credentials redacted)
 
 NOTE: The original committed version of this file contained a database password
 in the connection string on line 3. That credential has been removed from this
 file in commit [see git log]. The password appeared as:
-  postgresql://postgres:***REDACTED***@db.ikhqphbbilrocsghjyda.supabase.co/...
+  postgresql://postgres:***REDACTED***@db.addurl.supabase.co/...
 The Supabase database password should be rotated as a precaution since it
 appeared in a committed audit document.
 
