@@ -11,7 +11,7 @@ import { notifyPaymentReceived } from '@/lib/services/notifications';
 import { getNotifChannels } from '@/lib/config/platform-settings';
 import { recordPaymentCollected } from '@/lib/services/payout-service';
 import { logger } from '@/lib/logger';
-import { parseTopupMetadata } from '@/lib/services/wallet-topup-fee';
+import { parseTopupMetadata, confirmWalletTopup } from '@/lib/services/wallet-topup-fee';
 import { appendLedgerEntry, incrementLedger } from '@/lib/services/ledger-service';
 import { sendAlert } from '@/lib/services/alert-service';
 import { withSerializableRetry } from '@/lib/utils/transaction-retry';
@@ -939,71 +939,37 @@ async function handleWalletPaymentSuccess(
           throw new Error('No wallet transactions found');
         }
     
-        // Use shared helper to parse fee metadata — same logic as wallet-add route.
-        const creditTx = transactions.find((t: any) => t.type === 'CREDIT');
-        const piAmountReceived = paymentIntent.amount_received / 100;
-        const topupMeta = parseTopupMetadata(creditTx?.metadata as any, piAmountReceived);
+        // Delegate to shared confirmation service — same function as wallet-add.
+        // Owns: amount validation, PENDING-state guard, tx state verification,
+        // and PLATFORM_FEE idempotency. Fix C: webhook now uses conditional
+        // updateMany(status:'PENDING') instead of unconditional update.
+        const pendingTxId = transactionId ?? null;
+        const walletIdForConfirm = transactions[0]?.walletId;
+        if (!walletIdForConfirm) throw new Error('No walletId on transaction');
 
-        // Validate: Stripe received chargeAmount (topupAmount + platformFee).
-        const expectedCents = Math.round(topupMeta.chargeAmount * 100);
-        const receivedCents = paymentIntent.amount_received;
-        if (receivedCents !== expectedCents) {
-          logger.error('Wallet payment amount mismatch:', { expected: expectedCents, received: receivedCents });
-          throw new Error(`Wallet payment amount mismatch: expected ${expectedCents} cents, received ${receivedCents} cents`);
-        }
+        const confirmation = await confirmWalletTopup(
+          tx as any,
+          walletIdForConfirm,
+          paymentIntent.id,
+          paymentIntent.amount_received / 100,
+          paymentIntent.metadata as any,
+          pendingTxId,
+          paymentIntent.created,
+          async () => {
+            const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing');
+            return getWalletCreditValidityMonths();
+          },
+        );
 
-        // Confirm all PENDING wallet transactions, setting expiresAt on CREDIT transactions.
-        const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing');
-        const topUpValidityMonths = await getWalletCreditValidityMonths();
-        const paymentConfirmedAt = new Date(paymentIntent.created * 1000);
-        for (const transaction of transactions) {
-          const expiresAt = transaction.type === 'CREDIT'
-            ? new Date(new Date(paymentConfirmedAt).setMonth(paymentConfirmedAt.getMonth() + topUpValidityMonths))
-            : null;
-          await tx.walletTransaction.update({
-            where: { id: transaction.id },
-            data: { status: 'CONFIRMED', ...(expiresAt ? { expiresAt } : {}) }
-          });
-          logger.info(`Wallet transaction confirmed: ${transaction.id} (${transaction.type} ${transaction.amount}${expiresAt ? ` expires ${expiresAt.toISOString()}` : ''})`);
-        }
+        logger.info(
+          `Wallet top-up confirmed via webhook: ${confirmation.walletTxId} ` +
+          `credit=$${confirmation.creditAmount.toFixed(2)} ` +
+          `fee=$${confirmation.feeAmount.toFixed(2)} ` +
+          `alreadyConfirmed=${confirmation.wasAlreadyConfirmed}`
+        );
+        confirmedTransactions = [confirmation.walletTxId];
 
-        // Write PLATFORM_FEE record if the PENDING CREDIT carried fee metadata.
-        // Webhook is the authoritative confirmation path; wallet-add may have already
-        // written this record — the DB unique index on stripePaymentIntentId prevents
-        // duplicate CREDIT rows; PLATFORM_FEE has no such constraint so we guard with
-        // a findFirst before inserting.
-        if (creditTx && topupMeta.hasFeeSplit && topupMeta.platformFee > 0) {
-          const existingFee = await tx.walletTransaction.findFirst({
-            where: {
-              walletId: creditTx.walletId,
-              type: 'PLATFORM_FEE',
-              metadata: { path: ['stripePaymentIntentId'], equals: paymentIntent.id },
-            },
-            select: { id: true },
-          });
-          if (!existingFee) {
-            await tx.walletTransaction.create({
-              data: {
-                walletId: creditTx.walletId,
-                type: 'PLATFORM_FEE',
-                amount: topupMeta.platformFee,
-                status: 'CONFIRMED',
-                description: `DriveBook platform fee — ${topupMeta.feePercent}% on $${topupMeta.topupAmount.toFixed(2)} top-up`,
-                metadata: {
-                  stripePaymentIntentId: paymentIntent.id,
-                  type: 'wallet_topup_fee',
-                  topupWalletTxId: creditTx.id,
-                  creditAmount: topupMeta.topupAmount,
-                  chargeAmount: topupMeta.chargeAmount,
-                  feePercent: topupMeta.feePercent,
-                  nonRefundable: true,
-                },
-              },
-            });
-            logger.info(`Platform fee recorded: $${topupMeta.platformFee.toFixed(2)} on wallet ${creditTx.walletId}`);
-          }
-        }
-        // Get wallet details for logging
+                // Get wallet details for logging
         const wallet = await tx.clientWallet.findUnique({
           where: { id: transactions[0].walletId },
           include: { user: true }

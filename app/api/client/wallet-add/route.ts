@@ -7,7 +7,7 @@ import { recordWalletCredit } from '@/lib/services/ledger-operations';
 import { getAccountBalance, buildAccount, AccountType } from '@/lib/services/ledger';
 import { getWalletBalance, getOrCreateWallet } from '@/lib/services/wallet-helpers';
 import { sendWalletTopUpReceipt } from '@/lib/services/receipt-bridge';
-import { parseTopupMetadata } from '@/lib/services/wallet-topup-fee';
+import { parseTopupMetadata, confirmWalletTopup, TopupConfirmationError } from '@/lib/services/wallet-topup-fee';
 import { getPlatformPricing } from '@/lib/services/platform-pricing';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -192,140 +192,48 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    // Idempotency: check if the original PENDING transaction has already been confirmed.
-    // The unique index on metadata->>'stripePaymentIntentId' prevents duplicate CONFIRMED
-    // CREDIT rows, but the PENDING row (created by wallet-topup-intent) doesn't have this
-    // field set yet — the update path below is the atomic guard.
-    const pendingTxId = paymentIntent.metadata?.transactionId ?? null;
-
+    // Fast-path idempotency: if already confirmed by an earlier call, return it now.
     const existingConfirmed = await prisma.walletTransaction.findFirst({
       where: {
-        walletId: wallet.id,
-        status: 'CONFIRMED',
-        type: 'CREDIT',
+        walletId: wallet.id, status: 'CONFIRMED', type: 'CREDIT',
         metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentId }
       }
     });
-
     if (existingConfirmed) {
-      console.warn(`Duplicate wallet-add call for paymentIntentId=${paymentIntentId} — already confirmed`);
-      const newBalance = await getWalletBalance(user.id);
+      const newBal = await getWalletBalance(user.id);
       return NextResponse.json({
-        success: true,
-        duplicate: true,
-        wallet: { balance: newBalance.balance, totalPaid: newBalance.totalPaid, creditsRemaining: newBalance.balance },
+        success: true, duplicate: true,
+        wallet: { balance: newBal.balance, totalPaid: newBal.totalPaid, creditsRemaining: newBal.balance },
         transaction: { id: existingConfirmed.id, amount: existingConfirmed.amount, createdAt: existingConfirmed.createdAt }
       });
     }
 
-    // Parse fee split from PI metadata using shared helper
-    const piAmountReceived = paymentIntent.amount_received / 100;
-    const topupMeta = parseTopupMetadata(paymentIntent.metadata, piAmountReceived);
-    const { topupAmount: creditAmount, platformFee: platformFeeAmount, chargeAmount: actualCharge, feePercent: metaFeePercent } = topupMeta;
-
     const previousBalance = await getWalletBalance(user.id);
+    const pendingTxId = paymentIntent.metadata?.transactionId ?? null;
 
-    const result = await prisma.$transaction(async (tx) => {
-      const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing');
-      const months = await getWalletCreditValidityMonths();
-      const paymentDate = new Date(paymentIntent.created * 1000);
-      paymentDate.setMonth(paymentDate.getMonth() + months);
-      const expiresAt = paymentDate;
+    // Delegate to the shared confirmation service. Both wallet-add and the webhook
+    // call this function so the confirmation logic is defined exactly once.
+    const confirmation = await confirmWalletTopup(
+      prisma,
+      wallet.id,
+      paymentIntentId,
+      paymentIntent.amount_received / 100,
+      paymentIntent.metadata,
+      pendingTxId,
+      paymentIntent.created,
+      async () => {
+        const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing');
+        return getWalletCreditValidityMonths();
+      },
+    );
 
-      let walletTx: any;
+    const { walletTxId, creditAmount } = confirmation;
 
-      if (pendingTxId) {
-        // PRIMARY PATH: confirm the specific PENDING row created by wallet-topup-intent.
-        // updateMany with status:'PENDING' as a WHERE condition is atomic —
-        // if the webhook races and confirms it first, count=0 and we read the
-        // already-confirmed row without writing a duplicate.
-        const updated = await tx.walletTransaction.updateMany({
-          where: { id: pendingTxId, walletId: wallet.id, status: 'PENDING' },
-          data: {
-            status: 'CONFIRMED',
-            expiresAt,
-            metadata: {
-              topupAmount: creditAmount,
-              chargeAmount: actualCharge,
-              platformFee: platformFeeAmount,
-              feePercent: metaFeePercent,
-              stripePaymentIntentId: paymentIntentId,
-              type: 'wallet_topup',
-              verifiedAmount: true,
-            },
-          }
-        });
-
-        walletTx = await tx.walletTransaction.findUnique({ where: { id: pendingTxId } });
-        if (!walletTx) throw new Error('Wallet transaction not found');
-        if (updated.count === 0) {
-          // Webhook already confirmed it — not an error, just return it as-is
-          console.info(`wallet-add: PENDING tx ${pendingTxId} already confirmed by webhook`);
-        }
-      } else {
-        // LEGACY FALLBACK: PI has no transactionId metadata (created before this fix).
-        walletTx = await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            type: 'CREDIT',
-            amount: creditAmount,
-            status: 'CONFIRMED',
-            description: `Wallet top-up $${creditAmount.toFixed(2)} (legacy)`,
-            expiresAt,
-            metadata: {
-              stripePaymentIntentId: paymentIntentId,
-              type: 'wallet_topup',
-              verifiedAmount: true,
-              topupAmount: creditAmount,
-              chargeAmount: actualCharge,
-              platformFee: platformFeeAmount,
-              feePercent: metaFeePercent,
-            }
-          }
-        });
-      }
-
-      // Record PLATFORM_FEE if not already written (guard by PI id + type lookup)
-      let feeTx = null;
-      if (topupMeta.hasFeeSplit && platformFeeAmount > 0) {
-        const existingFee = await tx.walletTransaction.findFirst({
-          where: {
-            walletId: wallet.id,
-            type: 'PLATFORM_FEE',
-            metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentId },
-          },
-          select: { id: true },
-        });
-        if (!existingFee) {
-          feeTx = await tx.walletTransaction.create({
-            data: {
-              walletId: wallet.id,
-              type: 'PLATFORM_FEE',
-              amount: platformFeeAmount,
-              status: 'CONFIRMED',
-              description: `DriveBook platform fee — ${metaFeePercent}% on $${creditAmount.toFixed(2)} top-up`,
-              metadata: {
-                stripePaymentIntentId: paymentIntentId,
-                type: 'wallet_topup_fee',
-                topupWalletTxId: walletTx.id,
-                creditAmount,
-                chargeAmount: actualCharge,
-                feePercent: metaFeePercent,
-                nonRefundable: true,
-              },
-            }
-          });
-        }
-      }
-
-      return { walletTx, feeTx };
-    });
-
-    // Ledger entry records creditAmount (what the student receives in their wallet),
+        // Ledger entry records creditAmount (what the student receives in their wallet),
     // not the charge total. The platform fee is a separate revenue line.
     // recordWalletCredit is idempotent via paymentIntentId-based idempotency key.
     await recordWalletCredit({
-      walletTransactionId: result.walletTx.id,
+      walletTransactionId: walletTxId,
       userId: user.id,
       amount: creditAmount,                     // FIX: was `amount` (chargeAmount) — now creditAmount
       stripePaymentIntentId: paymentIntentId,
@@ -340,7 +248,7 @@ export async function POST(req: NextRequest) {
       await sendWalletTopUpReceipt({
         customerName: user.name || user.email,
         customerEmail: user.email,
-        receiptId: result.walletTx.id,
+        receiptId: walletTxId,
         paidAt: new Date(),
         amountAdded: creditAmount,              // what goes into the wallet
         walletBalanceBefore: previousBalance.balance,
@@ -371,9 +279,9 @@ export async function POST(req: NextRequest) {
         creditsRemaining: newBalance.balance
       },
       transaction: {
-        id: result.walletTx.id,
-        amount: result.walletTx.amount,
-        createdAt: result.walletTx.createdAt
+        id: walletTxId,
+        amount: creditAmount,
+        createdAt: new Date()
       },
       ledger: {
         balance: ledgerBalance,
