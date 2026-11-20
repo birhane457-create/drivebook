@@ -59,7 +59,7 @@ After running the registration script, you can login with:
 
 **Provider (Instructor):**
 - Email: `instructor@drivebook.com.au`
-- Password: `Provider123!`
+- Password: `pass---!`
 - Dashboard: `http://localhost:3000/dashboard`
 
 📝 See [docs/TEST_USERS.md](./docs/TEST_USERS.md) for full details.
