@@ -5,9 +5,9 @@ import { PrismaClient } from '@prisma/client';
 import * as https from 'https';
 
 const PRODUCTION_URL = 'https://drivebook-wheat.vercel.app';
-const ADMIN_EMAIL    = 'mm12-prod-verify-admin@test.internal';
-const ADMIN_PASSWORD = 'mm12-prod-verify-pass-2026';
-const CUSTOMER_ID    = 'cmuf0o34w000521w11mcc1mc4';
+const ADMIN_EMAIL    = 'testadminemi';
+const ADMIN_PASSWORD = 'pass';
+const CUSTOMER_ID    = 'customerid';
 
 function req(url, options = {}) {
   return new Promise((resolve, reject) => {
