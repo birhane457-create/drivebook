@@ -215,17 +215,19 @@ export async function POST(req: NextRequest) {
     // call this function so the confirmation logic is defined exactly once.
     const confirmation = await confirmWalletTopup(
       prisma,
-      wallet.id,
-      paymentIntentId,
-      paymentIntent.amount_received / 100,
-      paymentIntent.metadata,
-      pendingTxId,
-      paymentIntent.created,
-      async () => {
-        const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing');
-        return getWalletCreditValidityMonths();
+      {
+        walletId:          wallet.id,
+        paymentIntentId,
+        piAmountReceived:  paymentIntent.amount_received / 100,
+        piMeta:            paymentIntent.metadata,
+        pendingTxId,
+        piCreatedAt:       paymentIntent.created,
+        getValidityMonths: async () => {
+          const { getWalletCreditValidityMonths } = await import('@/lib/services/platform-pricing');
+          return getWalletCreditValidityMonths();
+        },
       },
-    );
+    )
 
     const { walletTxId, creditAmount } = confirmation;
 
