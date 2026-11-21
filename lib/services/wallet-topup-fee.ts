@@ -52,7 +52,16 @@ export function parseTopupMetadata(
   const rawCharge  = meta.chargeAmount  != null ? parseFloat(meta.chargeAmount)  : NaN
   const rawPercent = meta.feePercent    != null ? parseFloat(meta.feePercent)    : NaN
 
-  if (!Number.isFinite(rawTopup) || !Number.isFinite(rawFee) || !Number.isFinite(rawCharge)) {
+  const anyPresent = meta.topupAmount != null || meta.platformFee != null || meta.chargeAmount != null
+  const allValid   = !Number.isNaN(rawTopup) && !Number.isNaN(rawFee) && !Number.isNaN(rawCharge)
+
+  if (anyPresent && !allValid) {
+    throw new TopupConfirmationError(
+      'PaymentIntent metadata contains partial fee split — cannot determine wallet credit amount safely',
+      'PARTIAL_METADATA',
+    )
+  }
+  if (!allValid) {
     return { topupAmount: fallback, platformFee: 0, chargeAmount: fallback, feePercent: 0, hasFeeSplit: false }
   }
 

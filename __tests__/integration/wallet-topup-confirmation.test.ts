@@ -16,7 +16,7 @@
  * T8  Legacy PI (no fee metadata): credited without fee record; P2002 on duplicate
  * T9  Webhook transaction-client path: confirmWalletTopupInTx inside $transaction
  * T10 Barrier-synchronised concurrent confirmWalletTopupInTx: one primary
- * parseTopupMetadata unit tests
+ * parseTopupMetadata unit tests (fail-closed on partial metadata)
  *
  * DATABASE: Japan Supabase direct (port 5432, SERIALIZABLE supported)
  */
@@ -57,8 +57,6 @@ async function cleanup(fixture: Fixture | null) {
 }
 
 async function createPendingCreditTx(walletId: string, piId: string, amount = 100, fee = 3.60) {
-  // stripePaymentIntentId is NOT set on PENDING rows — it is added after PI creation.
-  // The unique index fires on this field, so it must be absent until confirmation.
   return db.walletTransaction.create({
     data: {
       walletId,
@@ -71,7 +69,7 @@ async function createPendingCreditTx(walletId: string, piId: string, amount = 10
         platformFee: fee,
         chargeAmount: amount + fee,
         feePercent: 3.6,
-        _pendingPiId: piId,  // test-only reference; not the indexed field
+        _pendingPiId: piId,
       },
     },
   })
@@ -96,15 +94,7 @@ async function countRows(walletId: string, type: string) {
   return db.walletTransaction.count({ where: { walletId, type, status: 'CONFIRMED' } })
 }
 
-// Helper to build ConfirmTopupInput objects
-function makeInput(
-  walletId: string,
-  piId: string,
-  txId: string,
-  amount = 100,
-  fee = 3.60,
-  created?: number,
-) {
+function makeInput(walletId: string, piId: string, txId: string, amount = 100, fee = 3.60, created?: number) {
   return {
     walletId,
     paymentIntentId:   piId,
@@ -133,7 +123,6 @@ function makeLegacyInput(walletId: string, piId: string, amount = 50) {
 describe('T1: normal $100 top-up', () => {
   let fixture: Fixture
   let pendingTx: any
-
   beforeAll(async () => {
     fixture = await createFixture('T1')
     pendingTx = await createPendingCreditTx(fixture.walletId, uid('pi_T1'))
@@ -147,22 +136,18 @@ describe('T1: normal $100 top-up', () => {
     expect(r.feeAmount).toBe(3.60)
     expect(r.wasAlreadyConfirmed).toBe(false)
   })
-
   it('T1-2: exactly one CONFIRMED CREDIT row in DB', async () => {
     expect(await countRows(fixture.walletId, 'CREDIT')).toBe(1)
   })
-
   it('T1-3: exactly one PLATFORM_FEE row in DB', async () => {
     expect(await countRows(fixture.walletId, 'PLATFORM_FEE')).toBe(1)
   })
-
   it('T1-4: PLATFORM_FEE amount is $3.60', async () => {
     const fee = await db.walletTransaction.findFirst({
       where: { walletId: fixture.walletId, type: 'PLATFORM_FEE', status: 'CONFIRMED' },
     })
     expect(Number(fee!.amount)).toBe(3.60)
   })
-
   it('T1-5: CREDIT row has expiresAt set ~12 months from now', async () => {
     const credit = await db.walletTransaction.findUnique({ where: { id: pendingTx.id } })
     expect(credit!.expiresAt).not.toBeNull()
@@ -174,10 +159,9 @@ describe('T1: normal $100 top-up', () => {
 
 // ── T2: Idempotent replay ─────────────────────────────────────────────────────
 
-describe('T2: idempotent replay — second call returns wasAlreadyConfirmed=true', () => {
+describe('T2: idempotent replay', () => {
   let fixture: Fixture
   let pendingTx: any
-
   beforeAll(async () => {
     fixture = await createFixture('T2')
     pendingTx = await createPendingCreditTx(fixture.walletId, uid('pi_T2'))
@@ -189,13 +173,11 @@ describe('T2: idempotent replay — second call returns wasAlreadyConfirmed=true
     const r = await confirmWalletTopup(db, makeInput(fixture.walletId, piId, pendingTx.id))
     expect(r.wasAlreadyConfirmed).toBe(false)
   })
-
-  it('T2-2: second call returns wasAlreadyConfirmed=true without creating new rows', async () => {
+  it('T2-2: second call returns wasAlreadyConfirmed=true', async () => {
     const piId = (pendingTx.metadata as any)._pendingPiId
     const r = await confirmWalletTopup(db, makeInput(fixture.walletId, piId, pendingTx.id))
     expect(r.wasAlreadyConfirmed).toBe(true)
   })
-
   it('T2-3: still exactly one CREDIT and one PLATFORM_FEE after two calls', async () => {
     expect(await countRows(fixture.walletId, 'CREDIT')).toBe(1)
     expect(await countRows(fixture.walletId, 'PLATFORM_FEE')).toBe(1)
@@ -204,17 +186,16 @@ describe('T2: idempotent replay — second call returns wasAlreadyConfirmed=true
 
 // ── T4: Concurrent confirmations ─────────────────────────────────────────────
 
-describe('T4: concurrent confirmations — no double credit', () => {
+describe('T4: concurrent confirmations', () => {
   let fixture: Fixture
   let pendingTx: any
-
   beforeAll(async () => {
     fixture = await createFixture('T4')
     pendingTx = await createPendingCreditTx(fixture.walletId, uid('pi_T4'))
   })
   afterAll(() => cleanup(fixture))
 
-  it('T4-1: two concurrent confirmations: exactly one primary, one replay', async () => {
+  it('T4-1: two concurrent confirmations: at least one committed, exactly one CREDIT', async () => {
     const piId = (pendingTx.metadata as any)._pendingPiId
     const dbA = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } })
     const dbB = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } })
@@ -224,8 +205,6 @@ describe('T4: concurrent confirmations — no double credit', () => {
         confirmWalletTopup(dbA, inp),
         confirmWalletTopup(dbB, inp),
       ])
-      // Both fulfilled OR one aborted with P2034 — either is valid.
-      // What must be true in all cases: exactly one CREDIT row exists.
       const committed = [r1, r2].filter(r => r.status === 'fulfilled')
       expect(committed.length).toBeGreaterThanOrEqual(1)
       expect(await countRows(fixture.walletId, 'CREDIT')).toBe(1)
@@ -234,18 +213,16 @@ describe('T4: concurrent confirmations — no double credit', () => {
       await dbB.$disconnect()
     }
   })
-
-  it('T4-2: exactly one PLATFORM_FEE after concurrent confirmations', async () => {
+  it('T4-2: exactly one PLATFORM_FEE', async () => {
     expect(await countRows(fixture.walletId, 'PLATFORM_FEE')).toBe(1)
   })
 })
 
 // ── T5: Duplicate wallet-add ──────────────────────────────────────────────────
 
-describe('T5: duplicate wallet-add with same PaymentIntent (idempotency)', () => {
+describe('T5: duplicate wallet-add', () => {
   let fixture: Fixture
   let pendingTx: any
-
   beforeAll(async () => {
     fixture = await createFixture('T5')
     pendingTx = await createPendingCreditTx(fixture.walletId, uid('pi_T5'))
@@ -254,7 +231,7 @@ describe('T5: duplicate wallet-add with same PaymentIntent (idempotency)', () =>
   })
   afterAll(() => cleanup(fixture))
 
-  it('T5-1: second call with same PI returns existing result — exactly one CREDIT', async () => {
+  it('T5-1: second call returns existing result — exactly one CREDIT', async () => {
     const piId = (pendingTx.metadata as any)._pendingPiId
     const r = await confirmWalletTopup(db, makeInput(fixture.walletId, piId, pendingTx.id))
     expect(r.wasAlreadyConfirmed).toBe(true)
@@ -268,7 +245,6 @@ describe('T6: cross-account PaymentIntent reuse rejected', () => {
   let fixtureA: Fixture
   let fixtureB: Fixture
   let pendingTx: any
-
   beforeAll(async () => {
     fixtureA = await createFixture('T6A')
     fixtureB = await createFixture('T6B')
@@ -276,7 +252,7 @@ describe('T6: cross-account PaymentIntent reuse rejected', () => {
   })
   afterAll(async () => { await cleanup(fixtureA); await cleanup(fixtureB) })
 
-  it('T6-1: confirming with wrong walletId throws; no rows written to either wallet', async () => {
+  it('T6-1: wrong walletId throws; no rows in either wallet', async () => {
     const piId = (pendingTx.metadata as any)._pendingPiId
     await expect(
       confirmWalletTopup(db, makeInput(fixtureB.walletId, piId, pendingTx.id))
@@ -288,10 +264,9 @@ describe('T6: cross-account PaymentIntent reuse rejected', () => {
 
 // ── T7: Amount mismatch ───────────────────────────────────────────────────────
 
-describe('T7: amount mismatch between PI and metadata', () => {
+describe('T7: amount mismatch', () => {
   let fixture: Fixture
   let pendingTx: any
-
   beforeAll(async () => {
     fixture = await createFixture('T7')
     pendingTx = await createPendingCreditTx(fixture.walletId, uid('pi_T7'))
@@ -300,12 +275,8 @@ describe('T7: amount mismatch between PI and metadata', () => {
 
   it('T7-1: wrong piAmountReceived throws AMOUNT_MISMATCH; no rows written', async () => {
     const piId = (pendingTx.metadata as any)._pendingPiId
-    // chargeAmount in metadata = 103.60; we pass 200.00 — mismatch
     await expect(
-      confirmWalletTopup(db, {
-        ...makeInput(fixture.walletId, piId, pendingTx.id),
-        piAmountReceived: 200.00,
-      })
+      confirmWalletTopup(db, { ...makeInput(fixture.walletId, piId, pendingTx.id), piAmountReceived: 200.00 })
     ).rejects.toMatchObject({ code: 'AMOUNT_MISMATCH' })
     expect(await countRows(fixture.walletId, 'CREDIT')).toBe(0)
   })
@@ -315,7 +286,6 @@ describe('T7: amount mismatch between PI and metadata', () => {
 
 describe('T8: legacy PaymentIntent without fee metadata', () => {
   let fixture: Fixture
-
   beforeAll(async () => { fixture = await createFixture('T8') })
   afterAll(() => cleanup(fixture))
 
@@ -329,10 +299,9 @@ describe('T8: legacy PaymentIntent without fee metadata', () => {
     expect(await countRows(fixture.walletId, 'PLATFORM_FEE')).toBe(0)
   })
 
-  it('T8-2: second legacy call with same PI throws (P2002 is the uniqueness guard)', async () => {
+  it('T8-2: second legacy call with same PI throws; exactly one CREDIT', async () => {
     const piId = uid('pi_T8b')
     await confirmWalletTopup(db, makeLegacyInput(fixture.walletId, piId))
-
     let threw = false
     try {
       await confirmWalletTopup(db, makeLegacyInput(fixture.walletId, piId))
@@ -341,7 +310,6 @@ describe('T8: legacy PaymentIntent without fee metadata', () => {
       expect(e.code === 'P2002' || e instanceof TopupConfirmationError).toBe(true)
     }
     expect(threw).toBe(true)
-    // Exactly one CREDIT for this PI — not two
     const credits = await db.walletTransaction.findMany({
       where: { walletId: fixture.walletId, type: 'CREDIT', status: 'CONFIRMED',
                metadata: { path: ['stripePaymentIntentId'], equals: piId } },
@@ -351,21 +319,17 @@ describe('T8: legacy PaymentIntent without fee metadata', () => {
 })
 
 // ── T9: Webhook transaction-client path ───────────────────────────────────────
-// confirmWalletTopupInTx() must work inside a real $transaction block.
-// This is the path that was broken: tx.$transaction() is not a function
-// on a Prisma TransactionClient. The inner-layer architecture fixes this.
 
 describe('T9: webhook path — confirmWalletTopupInTx inside $transaction', () => {
   let fixture: Fixture
   let pendingTx: any
-
   beforeAll(async () => {
     fixture = await createFixture('T9')
     pendingTx = await createPendingCreditTx(fixture.walletId, uid('pi_T9'))
   })
   afterAll(() => cleanup(fixture))
 
-  it('T9-1: succeeds when called inside a real $transaction (TransactionClient)', async () => {
+  it('T9-1: succeeds inside a real $transaction (TransactionClient)', async () => {
     const piId = (pendingTx.metadata as any)._pendingPiId
     const result = await db.$transaction(async tx => {
       return confirmWalletTopupInTx(tx, makeInput(fixture.walletId, piId, pendingTx.id))
@@ -374,12 +338,10 @@ describe('T9: webhook path — confirmWalletTopupInTx inside $transaction', () =
     expect(result.creditAmount).toBe(100)
     expect(result.feeAmount).toBe(3.60)
   })
-
-  it('T9-2: exactly one CREDIT and one PLATFORM_FEE written', async () => {
+  it('T9-2: exactly one CREDIT and one PLATFORM_FEE', async () => {
     expect(await countRows(fixture.walletId, 'CREDIT')).toBe(1)
     expect(await countRows(fixture.walletId, 'PLATFORM_FEE')).toBe(1)
   })
-
   it('T9-3: second call from another transaction returns wasAlreadyConfirmed=true', async () => {
     const piId = (pendingTx.metadata as any)._pendingPiId
     const result = await db.$transaction(async tx => {
@@ -392,9 +354,6 @@ describe('T9: webhook path — confirmWalletTopupInTx inside $transaction', () =
 })
 
 // ── T10: Barrier-synchronised concurrent confirmWalletTopupInTx ───────────────
-// Two confirmWalletTopupInTx calls run inside two independent $transaction blocks.
-// A Deferred latch holds both transactions open after they read the pending row,
-// ensuring genuine overlap before the write, proving atomic conditional update.
 
 class Deferred {
   readonly promise: Promise<void>
@@ -406,20 +365,17 @@ class Deferred {
 describe('T10: barrier-synchronised concurrent confirmWalletTopupInTx', () => {
   let fixture: Fixture
   let pendingTx: any
-
   beforeAll(async () => {
     fixture = await createFixture('T10')
     pendingTx = await createPendingCreditTx(fixture.walletId, uid('pi_T10'))
   })
   afterAll(() => cleanup(fixture))
 
-  it('T10-1: two concurrent inTx calls produce exactly one primary confirmer', async () => {
+  it('T10-1: two concurrent inTx calls: at least one committed, one CREDIT', async () => {
     const piId = (pendingTx.metadata as any)._pendingPiId
     const inp = makeInput(fixture.walletId, piId, pendingTx.id)
-
     const dbA = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } })
     const dbB = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL } } })
-
     const readDoneA = new Deferred()
     const readDoneB = new Deferred()
     const proceed   = new Deferred()
@@ -429,7 +385,6 @@ describe('T10: barrier-synchronised concurrent confirmWalletTopupInTx', () => {
     async function run(txDb: PrismaClient, readDone: Deferred): Promise<Outcome> {
       try {
         const value = await txDb.$transaction(async tx => {
-          // Read the pending row to participate in SSI snapshot
           await (tx as any).walletTransaction.findUnique({ where: { id: pendingTx.id } })
           readDone.resolve()
           await proceed.promise
@@ -451,9 +406,6 @@ describe('T10: barrier-synchronised concurrent confirmWalletTopupInTx', () => {
         })(),
       ]).then(([a, b]) => [a, b] as [Outcome, Outcome])
 
-      // Both fulfilled is correct — one primary, one replay.
-      // If one got P2034 (serialization conflict), it returns { status: 'err' }.
-      // Either outcome is valid — what must be true: exactly one CREDIT row.
       const committed = [r1, r2].filter(r => r.status === 'ok')
       expect(committed.length).toBeGreaterThanOrEqual(1)
     } finally {
@@ -461,8 +413,7 @@ describe('T10: barrier-synchronised concurrent confirmWalletTopupInTx', () => {
       await dbB.$disconnect()
     }
   })
-
-  it('T10-2: exactly one CREDIT and one PLATFORM_FEE after barrier-concurrent calls', async () => {
+  it('T10-2: exactly one CREDIT and one PLATFORM_FEE', async () => {
     expect(await countRows(fixture.walletId, 'CREDIT')).toBe(1)
     expect(await countRows(fixture.walletId, 'PLATFORM_FEE')).toBe(1)
   })
@@ -478,10 +429,9 @@ describe('parseTopupMetadata unit tests', () => {
     expect(r.platformFee).toBe(0)
   })
 
-  it('returns hasFeeSplit=false when any core value is missing', () => {
-    const r = parseTopupMetadata({ topupAmount: '100' }, 103.60)
-    expect(r.hasFeeSplit).toBe(false)
-    expect(r.chargeAmount).toBe(103.60)
+  it('throws PARTIAL_METADATA when any core value is present but not all', () => {
+    const meta = { topupAmount: '100' }
+    expect(() => parseTopupMetadata(meta, 103.60)).toThrow('partial fee split')
   })
 
   it('returns correct split when all values present', () => {
