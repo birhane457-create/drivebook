@@ -429,12 +429,7 @@ describe('parseTopupMetadata unit tests', () => {
     expect(r.platformFee).toBe(0)
   })
 
-  it('throws PARTIAL_METADATA when any core value is present but not all', () => {
-    const meta = { topupAmount: '100' }
-    expect(() => parseTopupMetadata(meta, 103.60)).toThrow()
-  })
-
-  it('returns correct split when all values present', () => {
+  it('returns correct split when all four values present and consistent', () => {
     const r = parseTopupMetadata(
       { topupAmount: '100', platformFee: '3.60', chargeAmount: '103.60', feePercent: '3.6' },
       103.60,
@@ -446,11 +441,54 @@ describe('parseTopupMetadata unit tests', () => {
     expect(r.feePercent).toBe(3.6)
   })
 
-  it('returns hasFeeSplit=false when all three core fields are absent (legacy)', () => {
-    const r = parseTopupMetadata({ feePercent: '3.6' }, 100)
+  // ── Legacy fallback ──────────────────────────────────────────────────────
+
+  it('returns hasFeeSplit=false when ALL four fee-split fields are absent', () => {
+    const r = parseTopupMetadata({ walletId: 'test', userId: 'u1' }, 100)
     expect(r.hasFeeSplit).toBe(false)
     expect(r.topupAmount).toBe(100)
   })
+
+  it('returns legacy fallback for existing legitimate legacy PaymentIntents', () => {
+    // Legacy PIs have no fee metadata at all — just type, walletId, userId
+    const r = parseTopupMetadata(
+      { type: 'wallet_purchase', walletId: 'w1', userId: 'u1' },
+      103.60,
+    )
+    expect(r.hasFeeSplit).toBe(false)
+    expect(r.topupAmount).toBe(103.60)
+    expect(r.platformFee).toBe(0)
+    expect(r.chargeAmount).toBe(103.60)
+  })
+
+  // ── feePercent presence and validity ─────────────────────────────────────
+
+  it('throws PARTIAL_METADATA when feePercent is missing from new-format metadata', () => {
+    // Three core values present but feePercent absent — new-format requires all four
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: '3.60', chargeAmount: '103.60',
+    }, 103.60)).toThrow()
+  })
+
+  it('throws PARTIAL_METADATA when feePercent is NaN', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: '3.60', chargeAmount: '103.60', feePercent: 'NaN',
+    }, 103.60)).toThrow()
+  })
+
+  it('throws PARTIAL_METADATA when feePercent is Infinity', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: '3.60', chargeAmount: '103.60', feePercent: 'Infinity',
+    }, 103.60)).toThrow()
+  })
+
+  it('throws INVALID_FEE_PERCENT when feePercent is negative', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: '3.60', chargeAmount: '103.60', feePercent: '-1',
+    }, 103.60)).toThrow()
+  })
+
+  // ── Other partial metadata ──────────────────────────────────────────────
 
   it('throws PARTIAL_METADATA when only topupAmount is present', () => {
     expect(() => parseTopupMetadata({ topupAmount: '100' }, 103.60)).toThrow()
@@ -460,45 +498,54 @@ describe('parseTopupMetadata unit tests', () => {
     expect(() => parseTopupMetadata({ platformFee: '3.60' }, 103.60)).toThrow()
   })
 
+  it('throws PARTIAL_METADATA when only feePercent is present', () => {
+    // feePercent alone is new-format territory — the three core values must also be present
+    expect(() => parseTopupMetadata({ feePercent: '3.6' }, 100)).toThrow()
+  })
+
   it('throws PARTIAL_METADATA when topupAmount is non-finite', () => {
     expect(() => parseTopupMetadata({
-      topupAmount: 'NaN', platformFee: '3.60', chargeAmount: '103.60',
+      topupAmount: 'NaN', platformFee: '3.60', chargeAmount: '103.60', feePercent: '3.6',
     }, 103.60)).toThrow()
   })
 
   it('throws PARTIAL_METADATA when platformFee is non-finite', () => {
     expect(() => parseTopupMetadata({
-      topupAmount: '100', platformFee: 'abc', chargeAmount: '103.60',
+      topupAmount: '100', platformFee: 'abc', chargeAmount: '103.60', feePercent: '3.6',
     }, 103.60)).toThrow()
   })
 
+  // ── Value range validation ──────────────────────────────────────────────
+
   it('throws INVALID_TOPUP_AMOUNT when topupAmount is zero', () => {
     expect(() => parseTopupMetadata({
-      topupAmount: '0', platformFee: '0', chargeAmount: '0',
+      topupAmount: '0', platformFee: '0', chargeAmount: '0', feePercent: '0',
     }, 0)).toThrow()
   })
 
   it('throws INVALID_TOPUP_AMOUNT when topupAmount is negative', () => {
     expect(() => parseTopupMetadata({
-      topupAmount: '-50', platformFee: '0', chargeAmount: '-50',
+      topupAmount: '-50', platformFee: '0', chargeAmount: '-50', feePercent: '0',
     }, -50)).toThrow()
   })
 
   it('throws INVALID_PLATFORM_FEE when platformFee is negative', () => {
     expect(() => parseTopupMetadata({
-      topupAmount: '100', platformFee: '-1', chargeAmount: '99',
+      topupAmount: '100', platformFee: '-1', chargeAmount: '99', feePercent: '0',
     }, 99)).toThrow()
   })
 
   it('throws INVALID_CHARGE_AMOUNT when chargeAmount is zero', () => {
     expect(() => parseTopupMetadata({
-      topupAmount: '0', platformFee: '0', chargeAmount: '0',
+      topupAmount: '0', platformFee: '0', chargeAmount: '0', feePercent: '0',
     }, 0)).toThrow()
   })
 
+  // ── Fee split and percent validation ───────────────────────────────────
+
   it('throws FEE_SPLIT_MISMATCH when topupAmount + platformFee != chargeAmount', () => {
     expect(() => parseTopupMetadata({
-      topupAmount: '100', platformFee: '3.60', chargeAmount: '200.00',
+      topupAmount: '100', platformFee: '3.60', chargeAmount: '200.00', feePercent: '3.6',
     }, 200)).toThrow()
   })
 
@@ -508,25 +555,55 @@ describe('parseTopupMetadata unit tests', () => {
     }, 110)).toThrow()
   })
 
+  it('throws FEE_PERCENT_MISMATCH on a one-cent fee discrepancy', () => {
+    // 3.6% of $100 = $3.60 (360 cents). If metadata says $3.61 (361 cents), that's a 1c mismatch.
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: '3.61', chargeAmount: '103.61', feePercent: '3.6',
+    }, 103.61)).toThrow()
+  })
+
+  it('throws FEE_PERCENT_MISMATCH on a two-cent fee discrepancy', () => {
+    // 3.6% of $100 = $3.60 (360 cents). If metadata says $3.62 (362 cents), that's a 2c mismatch.
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: '3.62', chargeAmount: '103.62', feePercent: '3.6',
+    }, 103.62)).toThrow()
+  })
+
+  // ── Valid zero-fee transactions ─────────────────────────────────────────
+
   it('accepts zero platformFee with hasFeeSplit=true', () => {
     const r = parseTopupMetadata({
       topupAmount: '100', platformFee: '0', chargeAmount: '100', feePercent: '0',
     }, 100)
     expect(r.hasFeeSplit).toBe(true)
     expect(r.platformFee).toBe(0)
+    expect(r.feePercent).toBe(0)
   })
 
-  it('accepts correct feePercent with rounding tolerance', () => {
-    // 3.6% of $100 = $3.60 — exact match
+  // ── Exact cent-level rounding validation ────────────────────────────────
+
+  it('accepts fee that matches exact cent rounding of topupAmount × feePercent / 100', () => {
+    // 3.6% of $100 = $3.60 — exact cent match
     const r = parseTopupMetadata({
       topupAmount: '100', platformFee: '3.60', chargeAmount: '103.60', feePercent: '3.6',
     }, 103.60)
     expect(r.hasFeeSplit).toBe(true)
-    // 3.6% of $33.33 = $1.19988 → rounds to $1.20, tolerance allows $1.20
-    const r2 = parseTopupMetadata({
+  })
+
+  it('accepts fee that matches after rounding (3.6% of $33.33 = $1.20)', () => {
+    // 3.6% of $33.33 = $1.19988 → Math.round(33.33 * 3.6 / 100 * 100) = Math.round(119.988) = 120 → $1.20
+    const r = parseTopupMetadata({
       topupAmount: '33.33', platformFee: '1.20', chargeAmount: '34.53', feePercent: '3.6',
     }, 34.53)
-    expect(r2.hasFeeSplit).toBe(true)
+    expect(r.hasFeeSplit).toBe(true)
+    expect(r.platformFee).toBe(1.20)
+  })
+
+  it('rejects fee that is one cent off from the rounded calculation', () => {
+    // 3.6% of $33.33 → rounded to $1.20 (120 cents). If metadata says $1.21 (121 cents), reject.
+    expect(() => parseTopupMetadata({
+      topupAmount: '33.33', platformFee: '1.21', chargeAmount: '34.54', feePercent: '3.6',
+    }, 34.54)).toThrow()
   })
 })
 

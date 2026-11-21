@@ -52,15 +52,19 @@ export function parseTopupMetadata(
   const rawCharge  = meta.chargeAmount  != null ? parseFloat(meta.chargeAmount)  : NaN
   const rawPercent = meta.feePercent    != null ? parseFloat(meta.feePercent)    : NaN
 
-  // If none of the fee-split fields are present, this is a legacy PI — return fallback.
-  const anyPresent = meta.topupAmount != null || meta.platformFee != null || meta.chargeAmount != null
+  // ── Legacy fallback ──────────────────────────────────────────────────────
+  // Return the fallback ONLY when ALL four fee-split fields are absent.
+  // If any field is present, we are in new-format territory and all must be valid.
+  const anyPresent = meta.topupAmount != null || meta.platformFee != null
+                  || meta.chargeAmount != null || meta.feePercent != null
   if (!anyPresent) {
     return { topupAmount: fallback, platformFee: 0, chargeAmount: fallback, feePercent: 0, hasFeeSplit: false }
   }
 
   // ── Fail-closed validation for new-format metadata ──────────────────────
-  // All three core values must be present and finite.
-  if (!Number.isFinite(rawTopup) || !Number.isFinite(rawFee) || !Number.isFinite(rawCharge)) {
+  // All four values must be present and finite.
+  if (!Number.isFinite(rawTopup) || !Number.isFinite(rawFee)
+      || !Number.isFinite(rawCharge) || !Number.isFinite(rawPercent)) {
     throw new TopupConfirmationError(
       'PaymentIntent metadata contains non-finite or missing fee split values',
       'PARTIAL_METADATA',
@@ -91,37 +95,47 @@ export function parseTopupMetadata(
     )
   }
 
+  // feePercent must be present, finite (already checked above) and non-negative.
+  // Do NOT silently replace a missing feePercent with zero.
+  if (rawPercent < 0) {
+    throw new TopupConfirmationError(
+      `Invalid feePercent: ${rawPercent} — must be non-negative`,
+      'INVALID_FEE_PERCENT',
+    )
+  }
+
   // topupAmount + platformFee must equal chargeAmount to the cent.
   const sumCents = Math.round((rawTopup + rawFee) * 100)
   const chargeCents = Math.round(rawCharge * 100)
   if (sumCents !== chargeCents) {
     throw new TopupConfirmationError(
-      `Fee split does not add up: topupAmount ${rawTopup} + platformFee ${rawFee} = ${sumCents / 100} cents, but chargeAmount = ${chargeCents / 100} cents`,
+      `Fee split does not add up: topupAmount ${rawTopup} + platformFee ${rawFee} = ${sumCents / 100}, but chargeAmount = ${chargeCents / 100}`,
       'FEE_SPLIT_MISMATCH',
     )
   }
 
-  // feePercent must be finite if present.
-  const feePercent = Number.isFinite(rawPercent) ? rawPercent : 0
-
-  // If feePercent is present and non-zero, validate the relationship:
-  // platformFee ≈ topupAmount × feePercent / 100 (within rounding tolerance).
-  if (feePercent > 0) {
-    const expectedFee = parseFloat((rawTopup * feePercent / 100).toFixed(2))
-    const tolerance = 0.02 // 2 cents tolerance for rounding
-    if (Math.abs(rawFee - expectedFee) > tolerance) {
-      throw new TopupConfirmationError(
-        `platformFee ${rawFee} does not match feePercent ${feePercent}% of topupAmount ${rawTopup} (expected ~${expectedFee}, tolerance ${tolerance})`,
-        'FEE_PERCENT_MISMATCH',
-      )
-    }
+  // ── Fee percent validation: exact cent-level ─────────────────────────────
+  // The original platform fee calculation (wallet-topup-intent/route.ts) is:
+  //   platformFee = parseFloat((topupAmount * feePercent / 100).toFixed(2))
+  // This rounds to the nearest cent. We validate at the same cent precision
+  // — no tolerance. If the metadata fee and the calculated fee differ by even
+  // one cent, the metadata is inconsistent and must be rejected.
+  //
+  // A zero feePercent is valid when platformFee is also zero (fee-free promotion).
+  const expectedFeeCents = Math.round(rawTopup * rawPercent / 100 * 100)
+  const actualFeeCents = Math.round(rawFee * 100)
+  if (expectedFeeCents !== actualFeeCents) {
+    throw new TopupConfirmationError(
+      `platformFee ${rawFee} (${actualFeeCents}c) does not match feePercent ${rawPercent}% of topupAmount ${rawTopup} (expected ${expectedFeeCents}c)`,
+      'FEE_PERCENT_MISMATCH',
+    )
   }
 
   return {
     topupAmount:  rawTopup,
     platformFee:  rawFee,
     chargeAmount: rawCharge,
-    feePercent,
+    feePercent:   rawPercent,
     hasFeeSplit:  true,
   }
 }
