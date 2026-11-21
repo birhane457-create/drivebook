@@ -52,24 +52,76 @@ export function parseTopupMetadata(
   const rawCharge  = meta.chargeAmount  != null ? parseFloat(meta.chargeAmount)  : NaN
   const rawPercent = meta.feePercent    != null ? parseFloat(meta.feePercent)    : NaN
 
+  // If none of the fee-split fields are present, this is a legacy PI — return fallback.
   const anyPresent = meta.topupAmount != null || meta.platformFee != null || meta.chargeAmount != null
-  const allValid   = !Number.isNaN(rawTopup) && !Number.isNaN(rawFee) && !Number.isNaN(rawCharge)
+  if (!anyPresent) {
+    return { topupAmount: fallback, platformFee: 0, chargeAmount: fallback, feePercent: 0, hasFeeSplit: false }
+  }
 
-  if (anyPresent && !allValid) {
+  // ── Fail-closed validation for new-format metadata ──────────────────────
+  // All three core values must be present and finite.
+  if (!Number.isFinite(rawTopup) || !Number.isFinite(rawFee) || !Number.isFinite(rawCharge)) {
     throw new TopupConfirmationError(
-      'PaymentIntent metadata contains partial fee split — cannot determine wallet credit amount safely',
+      'PaymentIntent metadata contains non-finite or missing fee split values',
       'PARTIAL_METADATA',
     )
   }
-  if (!allValid) {
-    return { topupAmount: fallback, platformFee: 0, chargeAmount: fallback, feePercent: 0, hasFeeSplit: false }
+
+  // topupAmount must be positive (student is adding money to their wallet).
+  if (rawTopup <= 0) {
+    throw new TopupConfirmationError(
+      `Invalid topupAmount: ${rawTopup} — must be positive`,
+      'INVALID_TOPUP_AMOUNT',
+    )
+  }
+
+  // platformFee must be non-negative (zero is valid for fee-free promotions).
+  if (rawFee < 0) {
+    throw new TopupConfirmationError(
+      `Invalid platformFee: ${rawFee} — must be non-negative`,
+      'INVALID_PLATFORM_FEE',
+    )
+  }
+
+  // chargeAmount must be positive (student paid something to Stripe).
+  if (rawCharge <= 0) {
+    throw new TopupConfirmationError(
+      `Invalid chargeAmount: ${rawCharge} — must be positive`,
+      'INVALID_CHARGE_AMOUNT',
+    )
+  }
+
+  // topupAmount + platformFee must equal chargeAmount to the cent.
+  const sumCents = Math.round((rawTopup + rawFee) * 100)
+  const chargeCents = Math.round(rawCharge * 100)
+  if (sumCents !== chargeCents) {
+    throw new TopupConfirmationError(
+      `Fee split does not add up: topupAmount ${rawTopup} + platformFee ${rawFee} = ${sumCents / 100} cents, but chargeAmount = ${chargeCents / 100} cents`,
+      'FEE_SPLIT_MISMATCH',
+    )
+  }
+
+  // feePercent must be finite if present.
+  const feePercent = Number.isFinite(rawPercent) ? rawPercent : 0
+
+  // If feePercent is present and non-zero, validate the relationship:
+  // platformFee ≈ topupAmount × feePercent / 100 (within rounding tolerance).
+  if (feePercent > 0) {
+    const expectedFee = parseFloat((rawTopup * feePercent / 100).toFixed(2))
+    const tolerance = 0.02 // 2 cents tolerance for rounding
+    if (Math.abs(rawFee - expectedFee) > tolerance) {
+      throw new TopupConfirmationError(
+        `platformFee ${rawFee} does not match feePercent ${feePercent}% of topupAmount ${rawTopup} (expected ~${expectedFee}, tolerance ${tolerance})`,
+        'FEE_PERCENT_MISMATCH',
+      )
+    }
   }
 
   return {
     topupAmount:  rawTopup,
     platformFee:  rawFee,
     chargeAmount: rawCharge,
-    feePercent:   Number.isFinite(rawPercent) ? rawPercent : 0,
+    feePercent,
     hasFeeSplit:  true,
   }
 }

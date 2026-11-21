@@ -921,16 +921,26 @@ async function handleWalletPaymentSuccess(
           if (explicitMatch) {
             transactions = [explicitMatch];
           } else {
-            // Fallback: Find recent PENDING transactions (legacy behavior)
-            // NOTE: This time-window approach is ambiguous if multiple purchases occur
-            // within 10 minutes. Explicit PaymentIntent ID matching (above) prevents this.
-            transactions = await tx.walletTransaction.findMany({
+            // CORRECTION 2: Legacy time-window fallback — ambiguous when multiple
+            // pending transactions exist. Accept exactly one; reject multiple.
+            const recentPending = await tx.walletTransaction.findMany({
               where: {
                 walletId,
                 status: 'PENDING',
                 createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) }
               }
             });
+            if (recentPending.length === 1) {
+              // Unambiguous: exactly one pending transaction — confirm it
+              transactions = [recentPending[0]];
+            } else if (recentPending.length > 1) {
+              // Ambiguous: multiple pending transactions — reject rather than guess
+              logger.error('Multiple PENDING wallet transactions found — cannot determine which to confirm', {
+                walletId, paymentIntentId: paymentIntent.id, count: recentPending.length
+              });
+              throw new Error(`Ambiguous wallet confirmation: ${recentPending.length} pending transactions for wallet ${walletId}`);
+            }
+            // recentPending.length === 0: falls through to "No wallet transactions found" below
           }
         }
     
@@ -943,7 +953,11 @@ async function handleWalletPaymentSuccess(
         // Owns: amount validation, PENDING-state guard, tx state verification,
         // and PLATFORM_FEE idempotency. Fix C: webhook now uses conditional
         // updateMany(status:'PENDING') instead of unconditional update.
-        const pendingTxId = transactionId ?? null;
+        // CORRECTION 2: Pass the found pending transaction's ID when we have one.
+        // When transactionId is absent but we found a row by explicit PI metadata
+        // match or by unambiguous time-window fallback, use that row's ID so
+        // confirmWalletTopupInTx can do the conditional PENDING→CONFIRMED update.
+        const pendingTxId = transactionId ?? transactions[0]?.id ?? null;
         const walletIdForConfirm = transactions[0]?.walletId;
         if (!walletIdForConfirm) throw new Error('No walletId on transaction');
 
@@ -969,17 +983,23 @@ async function handleWalletPaymentSuccess(
           `fee=$${confirmation.feeAmount.toFixed(2)} ` +
           `alreadyConfirmed=${confirmation.wasAlreadyConfirmed}`
         );
-        confirmedTransactions = [confirmation.walletTxId];
+        // CORRECTION 1: Fetch the FRESH confirmed record by walletTxId.
+        // Do NOT reuse the pre-confirmation 'transactions' array — those rows
+        // were read as PENDING and may not reflect the post-confirmation state.
+        const confirmedTx = await tx.walletTransaction.findUnique({
+          where: { id: confirmation.walletTxId },
+        });
+        if (!confirmedTx) throw new Error('Confirmed wallet transaction not found after confirmation');
+        confirmedTransactions = [confirmedTx];
 
-                // Get wallet details for logging
+        // Get wallet details for logging
         const wallet = await tx.clientWallet.findUnique({
-          where: { id: transactions[0].walletId },
+          where: { id: confirmedTx.walletId },
           include: { user: true }
         });
-    
-        logger.info(`Ã¢Å“â€¦ Wallet payment processed: ${wallet?.user.email} - ${transactions.length} transaction(s) confirmed`);
-        confirmedTransactions = transactions;
-      }, SERIALIZABLE_TX);
+
+        logger.info(`Wallet payment processed: ${wallet?.user?.email} - confirmed tx ${confirmedTx.id}`);
+              }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-wallet-payment' });
 
   // AUDIT-01/02 fix (Tier 4): wallet payment â€” financial tx already committed above.

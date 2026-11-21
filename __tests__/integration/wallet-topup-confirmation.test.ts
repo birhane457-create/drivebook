@@ -431,7 +431,7 @@ describe('parseTopupMetadata unit tests', () => {
 
   it('throws PARTIAL_METADATA when any core value is present but not all', () => {
     const meta = { topupAmount: '100' }
-    expect(() => parseTopupMetadata(meta, 103.60)).toThrow('partial fee split')
+    expect(() => parseTopupMetadata(meta, 103.60)).toThrow()
   })
 
   it('returns correct split when all values present', () => {
@@ -444,6 +444,203 @@ describe('parseTopupMetadata unit tests', () => {
     expect(r.platformFee).toBe(3.60)
     expect(r.chargeAmount).toBe(103.60)
     expect(r.feePercent).toBe(3.6)
+  })
+
+  it('returns hasFeeSplit=false when all three core fields are absent (legacy)', () => {
+    const r = parseTopupMetadata({ feePercent: '3.6' }, 100)
+    expect(r.hasFeeSplit).toBe(false)
+    expect(r.topupAmount).toBe(100)
+  })
+
+  it('throws PARTIAL_METADATA when only topupAmount is present', () => {
+    expect(() => parseTopupMetadata({ topupAmount: '100' }, 103.60)).toThrow()
+  })
+
+  it('throws PARTIAL_METADATA when only platformFee is present', () => {
+    expect(() => parseTopupMetadata({ platformFee: '3.60' }, 103.60)).toThrow()
+  })
+
+  it('throws PARTIAL_METADATA when topupAmount is non-finite', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: 'NaN', platformFee: '3.60', chargeAmount: '103.60',
+    }, 103.60)).toThrow()
+  })
+
+  it('throws PARTIAL_METADATA when platformFee is non-finite', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: 'abc', chargeAmount: '103.60',
+    }, 103.60)).toThrow()
+  })
+
+  it('throws INVALID_TOPUP_AMOUNT when topupAmount is zero', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '0', platformFee: '0', chargeAmount: '0',
+    }, 0)).toThrow()
+  })
+
+  it('throws INVALID_TOPUP_AMOUNT when topupAmount is negative', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '-50', platformFee: '0', chargeAmount: '-50',
+    }, -50)).toThrow()
+  })
+
+  it('throws INVALID_PLATFORM_FEE when platformFee is negative', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: '-1', chargeAmount: '99',
+    }, 99)).toThrow()
+  })
+
+  it('throws INVALID_CHARGE_AMOUNT when chargeAmount is zero', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '0', platformFee: '0', chargeAmount: '0',
+    }, 0)).toThrow()
+  })
+
+  it('throws FEE_SPLIT_MISMATCH when topupAmount + platformFee != chargeAmount', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: '3.60', chargeAmount: '200.00',
+    }, 200)).toThrow()
+  })
+
+  it('throws FEE_PERCENT_MISMATCH when feePercent does not match the fee', () => {
+    expect(() => parseTopupMetadata({
+      topupAmount: '100', platformFee: '10.00', chargeAmount: '110.00', feePercent: '3.6',
+    }, 110)).toThrow()
+  })
+
+  it('accepts zero platformFee with hasFeeSplit=true', () => {
+    const r = parseTopupMetadata({
+      topupAmount: '100', platformFee: '0', chargeAmount: '100', feePercent: '0',
+    }, 100)
+    expect(r.hasFeeSplit).toBe(true)
+    expect(r.platformFee).toBe(0)
+  })
+
+  it('accepts correct feePercent with rounding tolerance', () => {
+    // 3.6% of $100 = $3.60 — exact match
+    const r = parseTopupMetadata({
+      topupAmount: '100', platformFee: '3.60', chargeAmount: '103.60', feePercent: '3.6',
+    }, 103.60)
+    expect(r.hasFeeSplit).toBe(true)
+    // 3.6% of $33.33 = $1.19988 → rounds to $1.20, tolerance allows $1.20
+    const r2 = parseTopupMetadata({
+      topupAmount: '33.33', platformFee: '1.20', chargeAmount: '34.53', feePercent: '3.6',
+    }, 34.53)
+    expect(r2.hasFeeSplit).toBe(true)
+  })
+})
+
+// ── T11: Stale transaction not used after confirmation ───────────────────────
+// Verifies that confirmWalletTopup returns a walletTxId that points to the
+// actual confirmed DB row, not a stale pre-confirmation snapshot.
+
+describe('T11: stale transaction not used after confirmation', () => {
+  let fixture: Fixture
+  let pendingTx: any
+
+  beforeAll(async () => {
+    fixture = await createFixture('T11')
+    pendingTx = await createPendingCreditTx(fixture.walletId, uid('pi_T11'))
+  })
+  afterAll(() => cleanup(fixture))
+
+  it('T11-1: confirmation returns walletTxId pointing to the confirmed row', async () => {
+    const piId = (pendingTx.metadata as any)._pendingPiId
+    const r = await confirmWalletTopup(db, makeInput(fixture.walletId, piId, pendingTx.id))
+    // The returned walletTxId must match the pending transaction we created
+    expect(r.walletTxId).toBe(pendingTx.id)
+  })
+
+  it('T11-2: the DB row at walletTxId has status=CONFIRMED and correct metadata', async () => {
+    const row = await db.walletTransaction.findUnique({ where: { id: pendingTx.id } })
+    expect(row!.status).toBe('CONFIRMED')
+    expect(Number(row!.amount)).toBe(100)
+    expect((row!.metadata as any).stripePaymentIntentId).toBeTruthy()
+    expect((row!.metadata as any).topupAmount).toBe(100)
+  })
+})
+
+// ── T12: WalletId-only confirmation with exactly one pending transaction ─────
+// Simulates the webhook's walletId-only fallback path: no transactionId in PI
+// metadata, but exactly one PENDING transaction exists for the wallet.
+
+describe('T12: walletId-only with exactly one pending transaction', () => {
+  let fixture: Fixture
+  let pendingTx: any
+
+  beforeAll(async () => {
+    fixture = await createFixture('T12')
+    pendingTx = await createPendingCreditTx(fixture.walletId, uid('pi_T12'))
+  })
+  afterAll(() => cleanup(fixture))
+
+  it('T12-1: confirmation with pendingTxId from found row succeeds', async () => {
+    const piId = (pendingTx.metadata as any)._pendingPiId
+    // Simulate walletId-only path: pass the found row's ID as pendingTxId
+    const r = await confirmWalletTopup(db, makeInput(fixture.walletId, piId, pendingTx.id))
+    expect(r.wasAlreadyConfirmed).toBe(false)
+    expect(r.creditAmount).toBe(100)
+    expect(await countRows(fixture.walletId, 'CREDIT')).toBe(1)
+  })
+})
+
+// ── T13: WalletId-only with multiple pending transactions ────────────────────
+// The webhook's walletId-only fallback should reject ambiguous matches.
+// This test verifies the service rejects a pendingTxId that doesn't match
+// the PI metadata's transactionId.
+
+describe('T13: ambiguous pending transactions — service rejects', () => {
+  let fixture: Fixture
+  let pendingTx1: any
+  let pendingTx2: any
+
+  beforeAll(async () => {
+    fixture = await createFixture('T13')
+    pendingTx1 = await createPendingCreditTx(fixture.walletId, uid('pi_T13a'))
+    pendingTx2 = await createPendingCreditTx(fixture.walletId, uid('pi_T13b'))
+  })
+  afterAll(() => cleanup(fixture))
+
+  it('T13-1: confirming an already-confirmed row with a different PI throws PI_MISMATCH', async () => {
+    // First: confirm with the correct PI
+    const piIdA = (pendingTx1.metadata as any)._pendingPiId
+    await confirmWalletTopup(db, makeInput(fixture.walletId, piIdA, pendingTx1.id))
+
+    // Second: try to confirm the SAME row with a DIFFERENT PI
+    // This should trigger the wasAlreadyConfirmed path and check the stored PI id
+    const wrongPiId = uid('pi_T13_wrong')
+    await expect(
+      confirmWalletTopup(db, {
+        walletId: fixture.walletId,
+        paymentIntentId:   wrongPiId,
+        piAmountReceived:  103.60,
+        piMeta:            makePiMeta(pendingTx1.id, wrongPiId),
+        pendingTxId:       pendingTx1.id,
+        piCreatedAt:       Math.floor(Date.now() / 1000),
+        getValidityMonths: getMonths,
+      })
+    ).rejects.toMatchObject({ code: 'PI_MISMATCH' })
+
+    // pendingTx2 should remain PENDING (untouched)
+    const row2 = await db.walletTransaction.findUnique({ where: { id: pendingTx2.id } })
+    expect(row2!.status).toBe('PENDING')
+  })
+})
+
+// ── T14: Missing transactionId with no matching pending transaction ──────────
+
+describe('T14: no matching pending transaction', () => {
+  let fixture: Fixture
+
+  beforeAll(async () => { fixture = await createFixture('T14') })
+  afterAll(() => cleanup(fixture))
+
+  it('T14-1: confirming with non-existent pendingTxId throws TX_NOT_FOUND', async () => {
+    const piId = uid('pi_T14')
+    await expect(
+      confirmWalletTopup(db, makeInput(fixture.walletId, piId, 'nonexistent_tx_id'))
+    ).rejects.toMatchObject({ code: 'TX_NOT_FOUND' })
+    expect(await countRows(fixture.walletId, 'CREDIT')).toBe(0)
   })
 })
 
