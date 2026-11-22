@@ -721,4 +721,48 @@ describe('T14: no matching pending transaction', () => {
   })
 })
 
+// ── T15: Legacy vs new-format PI distinction ─────────────────────────────────
+// When pendingTxId is null:
+//   - Genuine legacy PI (hasFeeSplit=false): allow the create fallback
+//   - New-format PI (hasFeeSplit=true) with missing transactionId: reject
+
+describe('T15: legacy vs new-format PI — transactionId=null distinction', () => {
+  let fixture: Fixture
+
+  beforeAll(async () => { fixture = await createFixture('T15') })
+  afterAll(() => cleanup(fixture))
+
+  it('T15-1: new-format PI with pendingTxId=null throws NEW_FORMAT_MISSING_TX_ID', async () => {
+    const piId = uid('pi_T15_new')
+    // New-format: has valid fee-split metadata (hasFeeSplit=true) but no transactionId
+    // This simulates a new-format PI that lost its transactionId metadata
+    await expect(
+      confirmWalletTopup(db, {
+        walletId:          fixture.walletId,
+        paymentIntentId:   piId,
+        piAmountReceived:  103.60,
+        piMeta:            {
+          // Valid fee-split metadata but NO transactionId
+          topupAmount: '100', platformFee: '3.60',
+          chargeAmount: '103.60', feePercent: '3.6',
+        },
+        pendingTxId:       null,   // ← missing transactionId
+        piCreatedAt:       Math.floor(Date.now() / 1000),
+        getValidityMonths: getMonths,
+      })
+    ).rejects.toMatchObject({ code: 'NEW_FORMAT_MISSING_TX_ID' })
+    // No wallet credit should have been written
+    expect(await countRows(fixture.walletId, 'CREDIT')).toBe(0)
+  })
+
+  it('T15-2: genuine legacy PI (no fee metadata, pendingTxId=null) uses create fallback', async () => {
+    const piId = uid('pi_T15_legacy')
+    // Legacy: no fee-split fields at all (hasFeeSplit=false)
+    const r = await confirmWalletTopup(db, makeLegacyInput(fixture.walletId, piId))
+    expect(r.creditAmount).toBe(50)
+    expect(r.feeAmount).toBe(0)
+    expect(await countRows(fixture.walletId, 'CREDIT')).toBe(1)
+  })
+})
+
 afterAll(() => db.$disconnect())

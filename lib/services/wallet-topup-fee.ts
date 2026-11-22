@@ -296,7 +296,23 @@ export async function confirmWalletTopupInTx(
       }
     }
   } else {
-    // LEGACY FALLBACK: PI has no transactionId metadata. Create a new CREDIT row.
+    // LEGACY FALLBACK: PI has no transactionId metadata.
+    //
+    // Allowed ONLY for genuinely legacy PaymentIntents (pre-policy, hasFeeSplit=false).
+    // A new-format PaymentIntent (hasFeeSplit=true, all four fee-split fields valid)
+    // must always carry transactionId — wallet-topup-intent stamps it after PI creation.
+    // If a new-format PI has no transactionId, the metadata is inconsistent and the
+    // payment cannot be safely credited without manual reconciliation.
+    if (topupMeta.hasFeeSplit) {
+      throw new TopupConfirmationError(
+        `New-format PaymentIntent ${paymentIntentId} has valid fee-split metadata but no transactionId. ` +
+        `This indicates metadata loss between PI creation and webhook delivery. ` +
+        `Manual reconciliation required.`,
+        'NEW_FORMAT_MISSING_TX_ID',
+      )
+    }
+
+    // Genuine legacy PI: create a new CREDIT row.
     // The unique index on stripePaymentIntentId prevents duplicates; P2002 is handled
     // by the caller.
     walletTx = await (tx as any).walletTransaction.create({
