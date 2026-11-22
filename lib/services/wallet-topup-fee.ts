@@ -212,7 +212,51 @@ export async function confirmWalletTopupInTx(
   let wasAlreadyConfirmed = false
 
   if (pendingTxId) {
-    // PRIMARY PATH: atomically transition the PENDING row.
+    // PRIMARY PATH: load the pending row FIRST to establish format from DB evidence.
+    // The DB row was written by wallet-topup-intent and is the authoritative record
+    // of what was intended — independent of any PI metadata that may have been lost.
+    const pendingRow = await (tx as any).walletTransaction.findUnique({ where: { id: pendingTxId } })
+
+    if (!pendingRow) {
+      throw new TopupConfirmationError(`Wallet transaction ${pendingTxId} not found`, 'TX_NOT_FOUND')
+    }
+
+    // Classify the pending row's format from its own metadata.
+    // A DB row is new-format if it carries the four fee-split fields with valid values.
+    const dbMeta = pendingRow.metadata as Record<string, unknown> | null ?? {}
+    const dbTopupAmount = dbMeta.topupAmount != null ? Number(dbMeta.topupAmount) : NaN
+    const dbPlatformFee = dbMeta.platformFee != null ? Number(dbMeta.platformFee) : NaN
+    const dbFeePercent  = dbMeta.feePercent  != null ? Number(dbMeta.feePercent)  : NaN
+    const dbIsNewFormat = Number.isFinite(dbTopupAmount) && dbTopupAmount > 0
+                       && Number.isFinite(dbPlatformFee) && dbPlatformFee >= 0
+                       && Number.isFinite(dbFeePercent)  && dbFeePercent >= 0
+
+    // Cross-check: if the DB row says new-format, the PI metadata must also be new-format.
+    // If PI metadata has been stripped (hasFeeSplit=false) but the DB row is new-format,
+    // reject — this is the metadata-loss attack surface the reviewer identified.
+    if (dbIsNewFormat && !topupMeta.hasFeeSplit) {
+      throw new TopupConfirmationError(
+        `Pending transaction ${pendingTxId} has new-format DB metadata (topupAmount=${dbTopupAmount}, ` +
+        `feePercent=${dbFeePercent}%) but the PaymentIntent ${paymentIntentId} carries no fee-split metadata. ` +
+        `This indicates PI metadata loss. Manual reconciliation required.`,
+        'PI_METADATA_STRIPPED',
+      )
+    }
+
+    // Cross-check: PI metadata amounts must agree with the DB row amounts.
+    // The DB row is the sealed record — it cannot have been tampered with by the caller.
+    if (dbIsNewFormat && topupMeta.hasFeeSplit) {
+      const dbTopupCents = Math.round(dbTopupAmount * 100)
+      const piTopupCents = Math.round(topupMeta.topupAmount * 100)
+      if (dbTopupCents !== piTopupCents) {
+        throw new TopupConfirmationError(
+          `DB row topupAmount (${dbTopupAmount}) does not match PI metadata topupAmount (${topupMeta.topupAmount})`,
+          'AMOUNT_DB_PI_MISMATCH',
+        )
+      }
+    }
+
+    // Atomically transition the PENDING row.
     const updated = await (tx as any).walletTransaction.updateMany({
       where: {
         id:       pendingTxId,
@@ -238,7 +282,7 @@ export async function confirmWalletTopupInTx(
     walletTx = await (tx as any).walletTransaction.findUnique({ where: { id: pendingTxId } })
 
     if (!walletTx) {
-      throw new TopupConfirmationError(`Wallet transaction ${pendingTxId} not found`, 'TX_NOT_FOUND')
+      throw new TopupConfirmationError(`Wallet transaction ${pendingTxId} not found after update`, 'TX_NOT_FOUND')
     }
 
     if (updated.count === 0) {
@@ -265,11 +309,6 @@ export async function confirmWalletTopupInTx(
         )
       }
 
-      // Fix reviewer issue 2: for new-format transactions (post-policy), the PI id
-      // in metadata is mandatory. A confirmed row with no stored PI id on the
-      // new-format path is anomalous — reject it. Legacy rows (hasFeeSplit=false)
-      // are explicitly exempted because they were confirmed before the PI id was
-      // stored in metadata.
       const storedPiId = (walletTx.metadata as any)?.stripePaymentIntentId
       if (hasFeeSplit) {
         // New-format: PI id must be present and must match.
@@ -299,10 +338,7 @@ export async function confirmWalletTopupInTx(
     // LEGACY FALLBACK: PI has no transactionId metadata.
     //
     // Allowed ONLY for genuinely legacy PaymentIntents (pre-policy, hasFeeSplit=false).
-    // A new-format PaymentIntent (hasFeeSplit=true, all four fee-split fields valid)
-    // must always carry transactionId — wallet-topup-intent stamps it after PI creation.
-    // If a new-format PI has no transactionId, the metadata is inconsistent and the
-    // payment cannot be safely credited without manual reconciliation.
+    // A new-format PaymentIntent (hasFeeSplit=true) must always carry transactionId.
     if (topupMeta.hasFeeSplit) {
       throw new TopupConfirmationError(
         `New-format PaymentIntent ${paymentIntentId} has valid fee-split metadata but no transactionId. ` +
@@ -313,8 +349,6 @@ export async function confirmWalletTopupInTx(
     }
 
     // Genuine legacy PI: create a new CREDIT row.
-    // The unique index on stripePaymentIntentId prevents duplicates; P2002 is handled
-    // by the caller.
     walletTx = await (tx as any).walletTransaction.create({
       data: {
         walletId,
