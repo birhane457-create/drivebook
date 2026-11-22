@@ -253,7 +253,20 @@ export async function POST(req: NextRequest) {
             code: 'NEW_FORMAT_NO_PENDING_ROW',
           }, { status: 422 });
         }
-        // hasFeeSplit = false → genuine legacy PI → proceed with pendingTxId=null (legacy fallback)
+
+        // hasFeeSplit = false → MIGHT be genuine legacy, but only allow if created before policy date.
+        // Policy start: 2026-11-05 00:00:00 UTC (1730764800)
+        // PIs created on or after this date must be new-format.
+        const POLICY_START_UNIX = 1730764800;
+        if (paymentIntent.created >= POLICY_START_UNIX) {
+          // Created after policy start → should have been new-format but metadata is stripped
+          return NextResponse.json({
+            error: 'Wallet top-up PaymentIntent created after policy date has no fee metadata and no matching pending transaction. Manual reconciliation required.',
+            code: 'POST_POLICY_MISSING_METADATA',
+          }, { status: 422 });
+        }
+
+        // Genuine legacy PI (created before policy, no fee metadata, no pending row) → allow legacy fallback
       }
     }
 

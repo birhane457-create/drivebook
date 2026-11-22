@@ -222,11 +222,15 @@ export async function confirmWalletTopupInTx(
     }
 
     // Classify the pending row's format from its own metadata.
-    // A DB row is new-format if it carries the four fee-split fields with valid values.
+    // A DB row is new-format if it carries ALL FIVE required fields with valid values.
+    // Fail-closed: missing fields in a new-format row are rejected, not skipped.
     const dbMeta = pendingRow.metadata as Record<string, unknown> | null ?? {}
-    const dbTopupAmount = dbMeta.topupAmount != null ? Number(dbMeta.topupAmount) : NaN
-    const dbPlatformFee = dbMeta.platformFee != null ? Number(dbMeta.platformFee) : NaN
-    const dbFeePercent  = dbMeta.feePercent  != null ? Number(dbMeta.feePercent)  : NaN
+    const dbTopupAmount  = dbMeta.topupAmount  != null ? Number(dbMeta.topupAmount)  : NaN
+    const dbPlatformFee  = dbMeta.platformFee  != null ? Number(dbMeta.platformFee)  : NaN
+    const dbFeePercent   = dbMeta.feePercent   != null ? Number(dbMeta.feePercent)   : NaN
+    const dbChargeAmount = dbMeta.chargeAmount != null ? Number(dbMeta.chargeAmount) : NaN
+    const dbPiId         = (dbMeta as any).stripePaymentIntentId as string | undefined
+
     const dbIsNewFormat = Number.isFinite(dbTopupAmount) && dbTopupAmount > 0
                        && Number.isFinite(dbPlatformFee) && dbPlatformFee >= 0
                        && Number.isFinite(dbFeePercent)  && dbFeePercent >= 0
@@ -243,24 +247,51 @@ export async function confirmWalletTopupInTx(
       )
     }
 
+    // FAIL-CLOSED: For new-format rows, ALL fields must be present and valid.
+    // Missing chargeAmount or stripePaymentIntentId in a new-format DB row is data corruption.
+    if (dbIsNewFormat) {
+      if (!Number.isFinite(dbChargeAmount) || dbChargeAmount <= 0) {
+        throw new TopupConfirmationError(
+          `New-format pending transaction ${pendingTxId} has missing or invalid chargeAmount in DB metadata. ` +
+          `Manual reconciliation required.`,
+          'DB_CHARGE_AMOUNT_MISSING',
+        )
+      }
+      if (!dbPiId) {
+        throw new TopupConfirmationError(
+          `New-format pending transaction ${pendingTxId} has no stripePaymentIntentId in DB metadata. ` +
+          `Manual reconciliation required.`,
+          'DB_PI_ID_MISSING',
+        )
+      }
+    }
+
     // Cross-check: PI metadata amounts must agree with the DB row amounts.
     // The DB row is the sealed record — it cannot have been tampered with by the caller.
-    // Compare all four monetary/pricing fields in integer cents.
+    // Compare all five fields in integer cents. NO SKIPPING — if a field is absent, fail.
     if (dbIsNewFormat && topupMeta.hasFeeSplit) {
-      const dbChargeAmount = dbMeta.chargeAmount != null ? Number(dbMeta.chargeAmount) : NaN
-
       const checks: Array<[string, number, number]> = [
-        ['topupAmount',  Math.round(dbTopupAmount * 100), Math.round(topupMeta.topupAmount * 100)],
-        ['platformFee',  Math.round(dbPlatformFee * 100), Math.round(topupMeta.platformFee * 100)],
-        ['feePercent',   Math.round(dbFeePercent  * 1000), Math.round(topupMeta.feePercent  * 1000)],
-        ['chargeAmount', Math.round(dbChargeAmount * 100), Math.round(topupMeta.chargeAmount * 100)],
-        // The pending row's stored amount is the wallet credit amount (topupAmount).
-        // Compare it against the PI-derived topupAmount to catch amount mismatches.
+        ['topupAmount',      Math.round(dbTopupAmount  * 100),  Math.round(topupMeta.topupAmount  * 100)],
+        ['platformFee',      Math.round(dbPlatformFee  * 100),  Math.round(topupMeta.platformFee  * 100)],
+        ['feePercent',       Math.round(dbFeePercent   * 1000), Math.round(topupMeta.feePercent   * 1000)],
+        ['chargeAmount',     Math.round(dbChargeAmount * 100),  Math.round(topupMeta.chargeAmount * 100)],
         ['pendingRowAmount', Math.round(Number(pendingRow.amount) * 100), Math.round(topupMeta.topupAmount * 100)],
       ]
 
       for (const [field, dbCents, piCents] of checks) {
-        if (!Number.isFinite(dbCents) || !Number.isFinite(piCents)) continue // skip if DB field absent
+        // Fail-closed: if either value is invalid, reject immediately (data corruption)
+        if (!Number.isFinite(dbCents)) {
+          throw new TopupConfirmationError(
+            `DB row ${field} is not finite for transaction ${pendingTxId}`,
+            'DB_FIELD_INVALID',
+          )
+        }
+        if (!Number.isFinite(piCents)) {
+          throw new TopupConfirmationError(
+            `PI metadata ${field} is not finite for transaction ${pendingTxId}`,
+            'PI_FIELD_INVALID',
+          )
+        }
         if (dbCents !== piCents) {
           throw new TopupConfirmationError(
             `DB row ${field} (${dbCents}c) does not match PI metadata ${field} (${piCents}c) ` +
@@ -272,8 +303,8 @@ export async function confirmWalletTopupInTx(
 
       // Verify the pending row's stored PaymentIntent ID matches the one being confirmed.
       // wallet-topup-intent seals this after PI creation; mismatch means wrong PI.
-      const dbPiId = (dbMeta as any).stripePaymentIntentId as string | undefined
-      if (dbPiId && dbPiId !== paymentIntentId) {
+      // For new-format rows, dbPiId is guaranteed present by the check above.
+      if (dbPiId !== paymentIntentId) {
         throw new TopupConfirmationError(
           `Pending transaction ${pendingTxId} was created for PaymentIntent ${dbPiId} ` +
           `but is being confirmed with PaymentIntent ${paymentIntentId}`,
