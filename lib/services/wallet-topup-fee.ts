@@ -276,6 +276,30 @@ export async function confirmWalletTopupInTx(
       )
     }
 
+    // Cross-check: if the DB row is legacy, the PI must also be legacy AND pre-policy.
+    // Reject if:
+    //   - PI has new-format fee metadata (inconsistent with legacy DB row)
+    //   - PI was created on/after policy date (should have been new-format)
+    if (dbIsLegacy) {
+      if (topupMeta.hasFeeSplit) {
+        throw new TopupConfirmationError(
+          `Pending transaction ${pendingTxId} has legacy DB metadata (no fee fields) ` +
+          `but PaymentIntent ${paymentIntentId} contains valid new-format fee metadata. ` +
+          `This is inconsistent. Manual reconciliation required.`,
+          'DB_LEGACY_PI_NEW_FORMAT',
+        )
+      }
+      // Policy-date cutoff: legacy rows can only be confirmed for pre-policy PIs
+      const POLICY_START_UNIX = 1793836800
+      if (piCreatedAt >= POLICY_START_UNIX) {
+        throw new TopupConfirmationError(
+          `Pending transaction ${pendingTxId} has legacy DB metadata but PaymentIntent ${paymentIntentId} ` +
+          `was created after policy date (2026-11-05). Manual reconciliation required.`,
+          'DB_LEGACY_POST_POLICY_PI',
+        )
+      }
+    }
+
     // Cross-check: PI metadata amounts must agree with the DB row amounts.
     // The DB row is the sealed record — it cannot have been tampered with by the caller.
     // Compare all five fields in integer cents. NO SKIPPING — if a field is absent, fail.

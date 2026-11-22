@@ -1010,6 +1010,96 @@ describe('T17: fail-closed DB validation — missing required fields', () => {
         metadata: { path: ['stripePaymentIntentId'], equals: piId } }
     })
   })
+
+  it('T17-7: post-policy PI with legacy-classified pending row → DB_LEGACY_POST_POLICY_PI', async () => {
+    // Regression test for the reviewer's finding:
+    // Post-policy PI + existing pending row with NO fee metadata (legacy-classified)
+    // → must be rejected even though a DB row exists
+    const piId = uid('pi_T17_g')
+    const postPolicyTimestamp = 1793836800 + 86400  // 2026-11-06
+
+    // Create a pending row with NO fee metadata (all 5 new-format fields absent)
+    const pendingTx = await db.walletTransaction.create({
+      data: {
+        walletId: fixture.walletId,
+        type: 'CREDIT',
+        amount: 50,
+        status: 'PENDING',
+        description: 'Wallet top-up $50',
+        metadata: {
+          // No topupAmount, platformFee, feePercent, chargeAmount, stripePaymentIntentId
+          // This is a genuinely legacy-formatted DB row (pre-policy)
+        },
+      },
+    })
+
+    try {
+      // PI has no fee metadata, created after policy date
+      await expect(
+        confirmWalletTopup(db, {
+          walletId:          fixture.walletId,
+          paymentIntentId:   piId,
+          piAmountReceived:  50,
+          piMeta:            {},  // no fee metadata
+          pendingTxId:       pendingTx.id,
+          piCreatedAt:       postPolicyTimestamp,  // ← after policy date
+          getValidityMonths: getMonths,
+        })
+      ).rejects.toMatchObject({ code: 'DB_LEGACY_POST_POLICY_PI' })
+
+      // The row must remain PENDING — not confirmed
+      const row = await db.walletTransaction.findUnique({ where: { id: pendingTx.id } })
+      expect(row!.status).toBe('PENDING')
+      // No PLATFORM_FEE or CONFIRMED CREDIT created
+      expect(await countRows(fixture.walletId, 'PLATFORM_FEE')).toBe(0)
+      expect(await db.walletTransaction.count({
+        where: { walletId: fixture.walletId, type: 'CREDIT', status: 'CONFIRMED' }
+      })).toBe(0)
+    } finally {
+      await db.walletTransaction.deleteMany({ where: { id: pendingTx.id } })
+    }
+  })
+
+  it('T17-8: legacy DB row + new-format PI → DB_LEGACY_PI_NEW_FORMAT', async () => {
+    // DB row has no fee metadata (legacy), but PI has valid new-format fee metadata
+    // This is inconsistent — reject
+    const piId = uid('pi_T17_h')
+
+    const pendingTx = await db.walletTransaction.create({
+      data: {
+        walletId: fixture.walletId,
+        type: 'CREDIT',
+        amount: 100,
+        status: 'PENDING',
+        description: 'Wallet top-up $100',
+        metadata: {
+          // No new-format fields — legacy DB row
+        },
+      },
+    })
+
+    try {
+      await expect(
+        confirmWalletTopup(db, {
+          walletId:          fixture.walletId,
+          paymentIntentId:   piId,
+          piAmountReceived:  103.60,
+          piMeta:            {
+            topupAmount: '100', platformFee: '3.60',
+            chargeAmount: '103.60', feePercent: '3.6',  // ← new-format PI
+          },
+          pendingTxId:       pendingTx.id,
+          piCreatedAt:       Math.floor(Date.now() / 1000),
+          getValidityMonths: getMonths,
+        })
+      ).rejects.toMatchObject({ code: 'DB_LEGACY_PI_NEW_FORMAT' })
+
+      const row = await db.walletTransaction.findUnique({ where: { id: pendingTx.id } })
+      expect(row!.status).toBe('PENDING')
+    } finally {
+      await db.walletTransaction.deleteMany({ where: { id: pendingTx.id } })
+    }
+  })
 })
 
 // ── T14: Missing transactionId with no matching pending transaction ──────────
