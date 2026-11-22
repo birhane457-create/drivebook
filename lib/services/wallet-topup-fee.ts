@@ -222,8 +222,10 @@ export async function confirmWalletTopupInTx(
     }
 
     // Classify the pending row's format from its own metadata.
-    // A DB row is new-format if it carries ALL FIVE required fields with valid values.
-    // Fail-closed: missing fields in a new-format row are rejected, not skipped.
+    // THREE STATES, not two:
+    //   1. Valid new-format: all five fields present and valid
+    //   2. Genuine legacy: all five new-format fields absent
+    //   3. Incomplete/malformed: some present, some absent → REJECT (data corruption)
     const dbMeta = pendingRow.metadata as Record<string, unknown> | null ?? {}
     const dbTopupAmount  = dbMeta.topupAmount  != null ? Number(dbMeta.topupAmount)  : NaN
     const dbPlatformFee  = dbMeta.platformFee  != null ? Number(dbMeta.platformFee)  : NaN
@@ -231,9 +233,36 @@ export async function confirmWalletTopupInTx(
     const dbChargeAmount = dbMeta.chargeAmount != null ? Number(dbMeta.chargeAmount) : NaN
     const dbPiId         = (dbMeta as any).stripePaymentIntentId as string | undefined
 
-    const dbIsNewFormat = Number.isFinite(dbTopupAmount) && dbTopupAmount > 0
+    // Check which fields are present (regardless of validity)
+    const dbHasTopupAmount  = dbMeta.topupAmount  != null
+    const dbHasPlatformFee  = dbMeta.platformFee  != null
+    const dbHasFeePercent   = dbMeta.feePercent   != null
+    const dbHasChargeAmount = dbMeta.chargeAmount != null
+    const dbHasPiId         = dbPiId != null
+
+    // Count how many new-format fields are present
+    const dbNewFormatFieldCount = [dbHasTopupAmount, dbHasPlatformFee, dbHasFeePercent, dbHasChargeAmount, dbHasPiId]
+      .filter(Boolean).length
+
+    // Three-way classification:
+    const dbIsNewFormat = dbNewFormatFieldCount === 5
+                       && Number.isFinite(dbTopupAmount) && dbTopupAmount > 0
                        && Number.isFinite(dbPlatformFee) && dbPlatformFee >= 0
                        && Number.isFinite(dbFeePercent)  && dbFeePercent >= 0
+                       && Number.isFinite(dbChargeAmount) && dbChargeAmount > 0
+                       && dbPiId != null
+
+    const dbIsLegacy = dbNewFormatFieldCount === 0  // ALL five absent
+
+    // Partial/incomplete metadata → data corruption, reject
+    if (!dbIsNewFormat && !dbIsLegacy) {
+      throw new TopupConfirmationError(
+        `Pending transaction ${pendingTxId} has incomplete DB metadata ` +
+        `(${dbNewFormatFieldCount}/5 new-format fields present). ` +
+        `Cannot determine if this is new-format or legacy. Manual reconciliation required.`,
+        'DB_METADATA_INCOMPLETE',
+      )
+    }
 
     // Cross-check: if the DB row says new-format, the PI metadata must also be new-format.
     // If PI metadata has been stripped (hasFeeSplit=false) but the DB row is new-format,
@@ -245,25 +274,6 @@ export async function confirmWalletTopupInTx(
         `This indicates PI metadata loss. Manual reconciliation required.`,
         'PI_METADATA_STRIPPED',
       )
-    }
-
-    // FAIL-CLOSED: For new-format rows, ALL fields must be present and valid.
-    // Missing chargeAmount or stripePaymentIntentId in a new-format DB row is data corruption.
-    if (dbIsNewFormat) {
-      if (!Number.isFinite(dbChargeAmount) || dbChargeAmount <= 0) {
-        throw new TopupConfirmationError(
-          `New-format pending transaction ${pendingTxId} has missing or invalid chargeAmount in DB metadata. ` +
-          `Manual reconciliation required.`,
-          'DB_CHARGE_AMOUNT_MISSING',
-        )
-      }
-      if (!dbPiId) {
-        throw new TopupConfirmationError(
-          `New-format pending transaction ${pendingTxId} has no stripePaymentIntentId in DB metadata. ` +
-          `Manual reconciliation required.`,
-          'DB_PI_ID_MISSING',
-        )
-      }
     }
 
     // Cross-check: PI metadata amounts must agree with the DB row amounts.
@@ -394,7 +404,10 @@ export async function confirmWalletTopupInTx(
   } else {
     // LEGACY FALLBACK: PI has no transactionId metadata.
     //
-    // Allowed ONLY for genuinely legacy PaymentIntents (pre-policy, hasFeeSplit=false).
+    // Allowed ONLY for genuinely legacy PaymentIntents:
+    //   - Pre-policy (created before 2026-11-05)
+    //   - hasFeeSplit = false (no fee metadata in PI)
+    //
     // A new-format PaymentIntent (hasFeeSplit=true) must always carry transactionId.
     if (topupMeta.hasFeeSplit) {
       throw new TopupConfirmationError(
@@ -402,6 +415,19 @@ export async function confirmWalletTopupInTx(
         `This indicates metadata loss between PI creation and webhook delivery. ` +
         `Manual reconciliation required.`,
         'NEW_FORMAT_MISSING_TX_ID',
+      )
+    }
+
+    // Policy-date cutoff: only allow legacy fallback for PIs created before policy start.
+    // Policy start: 2026-11-05 00:00:00 UTC (1793836800).
+    // PIs created on or after this date must be new-format.
+    const POLICY_START_UNIX = 1793836800
+    if (piCreatedAt >= POLICY_START_UNIX) {
+      throw new TopupConfirmationError(
+        `PaymentIntent ${paymentIntentId} was created after policy date (2026-11-05) ` +
+        `but has no fee metadata and no matching pending transaction. ` +
+        `Manual reconciliation required.`,
+        'POST_POLICY_MISSING_METADATA',
       )
     }
 

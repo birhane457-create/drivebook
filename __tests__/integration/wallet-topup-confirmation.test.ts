@@ -107,13 +107,15 @@ function makeInput(walletId: string, piId: string, txId: string, amount = 100, f
 }
 
 function makeLegacyInput(walletId: string, piId: string, amount = 50) {
+  // Legacy PIs must have been created before 2026-11-05 (Unix 1793836800)
+  const PRE_POLICY_TIMESTAMP = 1793836800 - 86400  // 2026-11-04
   return {
     walletId,
     paymentIntentId:   piId,
     piAmountReceived:  amount,
     piMeta:            null,
     pendingTxId:       null,
-    piCreatedAt:       Math.floor(Date.now() / 1000),
+    piCreatedAt:       PRE_POLICY_TIMESTAMP,
     getValidityMonths: getMonths,
   }
 }
@@ -825,7 +827,7 @@ describe('T17: fail-closed DB validation — missing required fields', () => {
   beforeAll(async () => { fixture = await createFixture('T17') })
   afterAll(() => cleanup(fixture))
 
-  it('T17-1: new-format DB row missing chargeAmount → DB_CHARGE_AMOUNT_MISSING', async () => {
+  it('T17-1: new-format DB row missing chargeAmount → DB_METADATA_INCOMPLETE', async () => {
     const piId = uid('pi_T17_a')
     const pendingTx = await db.walletTransaction.create({
       data: {
@@ -847,13 +849,13 @@ describe('T17: fail-closed DB validation — missing required fields', () => {
     try {
       await expect(
         confirmWalletTopup(db, makeInput(fixture.walletId, piId, pendingTx.id))
-      ).rejects.toMatchObject({ code: 'DB_CHARGE_AMOUNT_MISSING' })
+      ).rejects.toMatchObject({ code: 'DB_METADATA_INCOMPLETE' })
     } finally {
       await db.walletTransaction.deleteMany({ where: { id: pendingTx.id } })
     }
   })
 
-  it('T17-2: new-format DB row missing stripePaymentIntentId → DB_PI_ID_MISSING', async () => {
+  it('T17-2: new-format DB row missing stripePaymentIntentId → DB_METADATA_INCOMPLETE', async () => {
     const piId = uid('pi_T17_b')
     const pendingTx = await db.walletTransaction.create({
       data: {
@@ -875,7 +877,36 @@ describe('T17: fail-closed DB validation — missing required fields', () => {
     try {
       await expect(
         confirmWalletTopup(db, makeInput(fixture.walletId, piId, pendingTx.id))
-      ).rejects.toMatchObject({ code: 'DB_PI_ID_MISSING' })
+      ).rejects.toMatchObject({ code: 'DB_METADATA_INCOMPLETE' })
+    } finally {
+      await db.walletTransaction.deleteMany({ where: { id: pendingTx.id } })
+    }
+  })
+
+  it('T17-2b: incomplete DB metadata (missing feePercent) → DB_METADATA_INCOMPLETE', async () => {
+    const piId = uid('pi_T17_b2')
+    const pendingTx = await db.walletTransaction.create({
+      data: {
+        walletId: fixture.walletId,
+        type: 'CREDIT',
+        amount: 100,
+        status: 'PENDING',
+        description: 'Wallet top-up $100',
+        metadata: {
+          topupAmount: 100,
+          platformFee: 3.60,
+          // feePercent MISSING — partial new-format metadata
+          chargeAmount: 103.60,
+          stripePaymentIntentId: piId,
+        },
+      },
+    })
+
+    try {
+      // PI has complete new-format metadata, but DB row is incomplete (4/5 fields)
+      await expect(
+        confirmWalletTopup(db, makeInput(fixture.walletId, piId, pendingTx.id))
+      ).rejects.toMatchObject({ code: 'DB_METADATA_INCOMPLETE' })
     } finally {
       await db.walletTransaction.deleteMany({ where: { id: pendingTx.id } })
     }
@@ -933,25 +964,41 @@ describe('T17: fail-closed DB validation — missing required fields', () => {
     }
   })
 
-  it('T17-5: post-policy PI with stripped metadata and no DB row → POST_POLICY_MISSING_METADATA (via wallet-add logic)', async () => {
-    // This tests the wallet-add route's policy-date cutoff.
-    // A PI created after 2026-11-05 with no fee metadata and no pending row is rejected.
-    // Simulated here by confirming with pendingTxId=null and a recent timestamp.
+  it('T17-5: post-policy PI with no pending row and no fee metadata → POST_POLICY_MISSING_METADATA', async () => {
+    // This tests the service layer's policy-date cutoff in the legacy fallback path.
+    // A PI created after 2026-11-05 with no fee metadata and no pending row is rejected
+    // by the service itself (not just wallet-add).
     const piId = uid('pi_T17_e')
-    const postPolicyTimestamp = 1730764800 + 86400  // 2026-11-06 (one day after policy)
+    const postPolicyTimestamp = 1793836800 + 86400  // 2026-11-06 (one day after policy)
 
-    // Note: confirmWalletTopup itself doesn't enforce the date cutoff — wallet-add does.
-    // Here we document that legacy fallback would run if called directly.
-    // The wallet-add route (tested separately or via HTTP) rejects this before calling the service.
-    
-    // For now, confirm that the service accepts it as legacy (no date check in service layer)
+    await expect(
+      confirmWalletTopup(db, {
+        walletId:          fixture.walletId,
+        paymentIntentId:   piId,
+        piAmountReceived:  50,
+        piMeta:            {},  // no fee metadata
+        pendingTxId:       null,
+        piCreatedAt:       postPolicyTimestamp,
+        getValidityMonths: getMonths,
+      })
+    ).rejects.toMatchObject({ code: 'POST_POLICY_MISSING_METADATA' })
+
+    // No CREDIT should have been created
+    expect(await countRows(fixture.walletId, 'CREDIT')).toBe(0)
+  })
+
+  it('T17-6: pre-policy PI with no pending row and no fee metadata → legacy fallback allowed', async () => {
+    // Genuine legacy: created before policy date, no fee metadata, no pending row
+    const piId = uid('pi_T17_f')
+    const prePolicyTimestamp = 1793836800 - 86400  // 2026-11-04 (one day before policy)
+
     const r = await confirmWalletTopup(db, {
       walletId:          fixture.walletId,
       paymentIntentId:   piId,
       piAmountReceived:  50,
-      piMeta:            {},  // no fee metadata
+      piMeta:            {},
       pendingTxId:       null,
-      piCreatedAt:       postPolicyTimestamp,
+      piCreatedAt:       prePolicyTimestamp,
       getValidityMonths: getMonths,
     })
     expect(r.creditAmount).toBe(50)

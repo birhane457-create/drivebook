@@ -255,9 +255,9 @@ export async function POST(req: NextRequest) {
         }
 
         // hasFeeSplit = false → MIGHT be genuine legacy, but only allow if created before policy date.
-        // Policy start: 2026-11-05 00:00:00 UTC (1730764800)
+        // Policy start: 2026-11-05 00:00:00 UTC (1793836800)
         // PIs created on or after this date must be new-format.
-        const POLICY_START_UNIX = 1730764800;
+        const POLICY_START_UNIX = 1793836800;
         if (paymentIntent.created >= POLICY_START_UNIX) {
           // Created after policy start → should have been new-format but metadata is stripped
           return NextResponse.json({
