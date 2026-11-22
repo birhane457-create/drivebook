@@ -209,7 +209,53 @@ export async function POST(req: NextRequest) {
     }
 
     const previousBalance = await getWalletBalance(user.id);
-    const pendingTxId = paymentIntent.metadata?.transactionId ?? null;
+    let pendingTxId = paymentIntent.metadata?.transactionId ?? null;
+
+    // Recovery: when transactionId is absent from the PI metadata, search the DB
+    // for a matching pending CREDIT row using the PI id that was sealed into the
+    // row's metadata by wallet-topup-intent after PI creation.
+    // This covers the case where PI metadata loses transactionId but the DB row
+    // still carries the PI id — the reviewer's "T16-2" scenario.
+    if (!pendingTxId) {
+      const recoveredRow = await prisma.walletTransaction.findFirst({
+        where: {
+          walletId: wallet.id,
+          type:     'CREDIT',
+          status:   'PENDING',
+          metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentId },
+        },
+        select: { id: true },
+      });
+
+      if (recoveredRow) {
+        // Found the pending row by PI id — use it as pendingTxId.
+        // The service will cross-check DB amounts against PI metadata.
+        pendingTxId = recoveredRow.id;
+      } else {
+        // No matching pending row found by PI id.
+        // Parse PI metadata to determine if this is new-format.
+        // If new-format without a recoverable pending row, reject for reconciliation.
+        const piAmountForCheck = paymentIntent.amount_received / 100;
+        let piIsNewFormat = false;
+        try {
+          const { parseTopupMetadata } = await import('@/lib/services/wallet-topup-fee');
+          const metaCheck = parseTopupMetadata(paymentIntent.metadata, piAmountForCheck);
+          piIsNewFormat = metaCheck.hasFeeSplit;
+        } catch {
+          // parseTopupMetadata threw (partial/invalid metadata) → treat as new-format
+          piIsNewFormat = true;
+        }
+
+        // hasFeeSplit = true means this is a new-format PI with no recoverable pending row
+        if (piIsNewFormat) {
+          return NextResponse.json({
+            error: 'New-format wallet top-up PaymentIntent has no matching pending transaction. Manual reconciliation required.',
+            code: 'NEW_FORMAT_NO_PENDING_ROW',
+          }, { status: 422 });
+        }
+        // hasFeeSplit = false → genuine legacy PI → proceed with pendingTxId=null (legacy fallback)
+      }
+    }
 
     // Delegate to the shared confirmation service. Both wallet-add and the webhook
     // call this function so the confirmation logic is defined exactly once.

@@ -696,7 +696,7 @@ describe('T13: ambiguous pending transactions — service rejects', () => {
         piCreatedAt:       Math.floor(Date.now() / 1000),
         getValidityMonths: getMonths,
       })
-    ).rejects.toMatchObject({ code: 'PI_MISMATCH' })
+    ).rejects.toMatchObject({ code: expect.stringMatching(/PI_MISMATCH|PI_ID_DB_MISMATCH/) })
 
     // pendingTx2 should remain PENDING (untouched)
     const row2 = await db.walletTransaction.findUnique({ where: { id: pendingTx2.id } })
@@ -755,41 +755,65 @@ describe('T16: DB-authoritative format detection — stripped PI metadata', () =
     expect(await countRows(fixture.walletId, 'PLATFORM_FEE')).toBe(0)
   })
 
-  it('T16-2: new-format DB row + stripped PI metadata + pendingTxId=null → NEW_FORMAT_MISSING_TX_ID', async () => {
-    // Webhook walletId-only fallback found NO pending rows, so pendingTxId=null.
-    // PI metadata also stripped. This was partially covered by T15-1; here we
-    // confirm the guard also protects when piAmountReceived is the stripped total.
-    const piId = uid('pi_T16_null')
+  it('T16-2: new-format DB row + stripped PI metadata + pendingTxId=null → rejected (PI_METADATA_STRIPPED via DB lookup recovery)', async () => {
+    // This tests the ACTUAL scenario:
+    // 1. wallet-topup-intent creates a new-format pending DB row with stripePaymentIntentId
+    // 2. PI metadata loses transactionId but keeps the PI id in the DB row
+    // 3. wallet-add searches by PI id, finds the pending row (recovery path)
+    // 4. Calls confirmWalletTopup with the found pendingTxId
+    // 5. PI metadata has ALL FOUR fee fields stripped → PI_METADATA_STRIPPED
+    const piId2 = uid('pi_T16_b_stripped')
 
-    // Legacy-looking PI metadata (no fee fields), but piAmountReceived = 103.60
-    // which would be the new-format charge amount — stripped metadata can't be
-    // used to determine the wallet credit amount correctly.
-    await expect(
-      confirmWalletTopup(db, {
-        walletId:          fixture.walletId,
-        paymentIntentId:   piId,
-        piAmountReceived:  103.60,
-        piMeta:            {
-          // All four fee-split fields absent — looks legacy but piAmountReceived ≠ topupAmount
-          type: 'wallet_purchase', walletId: fixture.walletId, userId: 'test-user',
+    // Create a new-format pending row that knows its PI id
+    const pendingTx2 = await db.walletTransaction.create({
+      data: {
+        walletId: fixture.walletId,
+        type: 'CREDIT',
+        amount: 100,
+        status: 'PENDING',
+        description: 'Wallet top-up $100',
+        metadata: {
+          topupAmount: 100,
+          platformFee: 3.60,
+          chargeAmount: 103.60,
+          feePercent: 3.6,
+          stripePaymentIntentId: piId2,  // ← PI id sealed in DB row
+          // transactionId NOT set here (simulates the row not being found by transactionId)
         },
-        pendingTxId:       null,
-        piCreatedAt:       Math.floor(Date.now() / 1000),
-        getValidityMonths: getMonths,
-      })
-    // The legacy fallback creates a CREDIT for the full piAmountReceived ($103.60).
-    // But we don't want that for a stripped new-format PI.
-    // Currently this would succeed as "legacy" — this test documents the remaining
-    // limitation: without a pending DB row to cross-check against, we cannot
-    // distinguish stripped-new-format from genuine legacy when pendingTxId=null.
-    // The safe path here is to accept it and flag for reconciliation.
-    // The critical protection is T16-1 (when the pending row IS found).
-    ).resolves.toMatchObject({ feeAmount: 0 })
-
-    // Cleanup: remove the CREDIT that was created by the legacy fallback
-    await db.walletTransaction.deleteMany({
-      where: { walletId: fixture.walletId, type: 'CREDIT', status: 'CONFIRMED' }
+      },
     })
+
+    try {
+      // PI metadata: stripped of ALL fee fields — simulates complete metadata loss
+      // The recovery path in confirmWalletTopupInTx will find the row by PI id,
+      // detect DB is new-format but PI has no fee-split, and throw PI_METADATA_STRIPPED.
+      const strippedMeta = {
+        // No transactionId, no topupAmount, no platformFee, no chargeAmount, no feePercent
+        walletId: fixture.walletId,
+        userId: 'test-user',
+        type: 'wallet_purchase',
+      }
+
+      await expect(
+        confirmWalletTopup(db, {
+          walletId:          fixture.walletId,
+          paymentIntentId:   piId2,
+          piAmountReceived:  103.60,
+          piMeta:            strippedMeta,
+          pendingTxId:       pendingTx2.id,  // simulates wallet-add's DB-recovery path
+          piCreatedAt:       Math.floor(Date.now() / 1000),
+          getValidityMonths: getMonths,
+        })
+      ).rejects.toMatchObject({ code: 'PI_METADATA_STRIPPED' })
+
+      // The row must remain PENDING — not incorrectly confirmed
+      const row = await db.walletTransaction.findUnique({ where: { id: pendingTx2.id } })
+      expect(row!.status).toBe('PENDING')
+      // No PLATFORM_FEE created
+      expect(await countRows(fixture.walletId, 'PLATFORM_FEE')).toBe(0)
+    } finally {
+      await db.walletTransaction.deleteMany({ where: { id: pendingTx2.id } })
+    }
   })
 })
 

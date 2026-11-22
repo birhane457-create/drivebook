@@ -245,13 +245,39 @@ export async function confirmWalletTopupInTx(
 
     // Cross-check: PI metadata amounts must agree with the DB row amounts.
     // The DB row is the sealed record — it cannot have been tampered with by the caller.
+    // Compare all four monetary/pricing fields in integer cents.
     if (dbIsNewFormat && topupMeta.hasFeeSplit) {
-      const dbTopupCents = Math.round(dbTopupAmount * 100)
-      const piTopupCents = Math.round(topupMeta.topupAmount * 100)
-      if (dbTopupCents !== piTopupCents) {
+      const dbChargeAmount = dbMeta.chargeAmount != null ? Number(dbMeta.chargeAmount) : NaN
+
+      const checks: Array<[string, number, number]> = [
+        ['topupAmount',  Math.round(dbTopupAmount * 100), Math.round(topupMeta.topupAmount * 100)],
+        ['platformFee',  Math.round(dbPlatformFee * 100), Math.round(topupMeta.platformFee * 100)],
+        ['feePercent',   Math.round(dbFeePercent  * 1000), Math.round(topupMeta.feePercent  * 1000)],
+        ['chargeAmount', Math.round(dbChargeAmount * 100), Math.round(topupMeta.chargeAmount * 100)],
+        // The pending row's stored amount is the wallet credit amount (topupAmount).
+        // Compare it against the PI-derived topupAmount to catch amount mismatches.
+        ['pendingRowAmount', Math.round(Number(pendingRow.amount) * 100), Math.round(topupMeta.topupAmount * 100)],
+      ]
+
+      for (const [field, dbCents, piCents] of checks) {
+        if (!Number.isFinite(dbCents) || !Number.isFinite(piCents)) continue // skip if DB field absent
+        if (dbCents !== piCents) {
+          throw new TopupConfirmationError(
+            `DB row ${field} (${dbCents}c) does not match PI metadata ${field} (${piCents}c) ` +
+            `for transaction ${pendingTxId}`,
+            'AMOUNT_DB_PI_MISMATCH',
+          )
+        }
+      }
+
+      // Verify the pending row's stored PaymentIntent ID matches the one being confirmed.
+      // wallet-topup-intent seals this after PI creation; mismatch means wrong PI.
+      const dbPiId = (dbMeta as any).stripePaymentIntentId as string | undefined
+      if (dbPiId && dbPiId !== paymentIntentId) {
         throw new TopupConfirmationError(
-          `DB row topupAmount (${dbTopupAmount}) does not match PI metadata topupAmount (${topupMeta.topupAmount})`,
-          'AMOUNT_DB_PI_MISMATCH',
+          `Pending transaction ${pendingTxId} was created for PaymentIntent ${dbPiId} ` +
+          `but is being confirmed with PaymentIntent ${paymentIntentId}`,
+          'PI_ID_DB_MISMATCH',
         )
       }
     }
