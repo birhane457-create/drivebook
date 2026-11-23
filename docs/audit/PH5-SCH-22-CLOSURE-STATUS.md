@@ -65,13 +65,27 @@ await prisma.$transaction(async (tx) => {
 
 **File:** `__tests__/integration/platformledger-atomicity.test.ts`
 
-| Test ID | Description | Status |
-|---------|-------------|--------|
-| T1 | Both LedgerEntry and PlatformLedger written atomically | ✅ PASS |
-| T2 | Transaction rollback prevents partial writes | ✅ PASS |
-| T3 | Concurrent payments maintain consistency | ✅ PASS |
+| Test ID | Description | Status | Notes |
+|---------|-------------|--------|-------|
+| T1 | Both LedgerEntry and PlatformLedger written atomically | ✅ PASS | Tracks delta for cleanup restoration |
+| T2 | Forced rollback on constraint violation | ✅ PASS | Forces duplicate key error (P2002), verifies no LedgerEntry created and totalCollected unchanged |
+| T3 | Concurrent payments maintain consistency | ✅ PASS | 3 parallel writes, verifies atomicity under concurrency |
 
 **Total:** 3/3 PASS
+
+**Test Financial Integrity:**
+- Initial state captured in `beforeAll`
+- All increments tracked in `testDeltaCollected` and `testDeltaReserved`
+- Full reversal in `afterAll` with verification
+- Console error logged if restoration fails
+
+### Scope Expansion
+
+**Additional Path Fixed:** `recordRefundIssued()` (commit fc1a7305b)
+- **Location:** `lib/services/payout-service.ts:770`
+- **Issue:** Same non-atomic `Promise.all` pattern affecting `totalRefunded`
+- **Fix:** Wrapped in `prisma.$transaction` with txClient propagation
+- **Impact:** Prevents `totalRefunded` divergence from refund event log
 
 ### Test Evidence
 
@@ -105,12 +119,29 @@ Both findings addressed the same root cause (non-atomic parallel writes) in diff
 
 ## Remaining Work
 
-**None.** The fix is complete and verified.
+**Verification Quality Note:**
 
-**Future Enhancement (Low Priority):**
-- Add reconciliation check comparing `PlatformLedger.totalCollected` against `sum(LedgerEntry WHERE type='PAYMENT_COLLECTED')` in daily cron
-- Would detect historical corruption from pre-fix transactions
-- Not blocking closure: transaction now prevents new corruption
+As identified by reviewer, the 3/3 test results prove atomicity and concurrency handling, but do not establish that:
+1. Every payment event is recorded exactly once
+2. `totalCollected` reconciles with underlying `LedgerEntry` sums
+3. Historical financial correctness across all ledger subsystems
+
+**Future Enhancements (Not Blocking Closure):**
+
+1. **Daily Reconciliation Check (Recommended):**
+   - Add cron job comparing:
+     - `PlatformLedger.totalCollected` vs `sum(LedgerEntry WHERE type='PAYMENT_COLLECTED')`
+     - `PlatformLedger.totalRefunded` vs `sum(LedgerEntry WHERE type='REFUND_ISSUED')`
+   - Would detect historical corruption from pre-fix transactions
+   - Alert on divergence > $0.01
+
+2. **Additional Ledger Paths (Audit Scope):**
+   - Payout ledger writes (executePayout, confirmPayout)
+   - Tax withholding records
+   - Dispute/chargeback handling
+   - Should be inventoried for similar atomicity requirements
+
+**Status:** Transaction now prevents new corruption. Reconciliation would catch historical issues.
 
 ---
 
@@ -122,10 +153,15 @@ Both findings addressed the same root cause (non-atomic parallel writes) in diff
 **Deployment:** Pending push to GitHub + Vercel
 
 **Closure Criteria Met:**
-- ✅ Code fix implemented (transaction wrapping)
+- ✅ Code fix implemented (transaction wrapping - payment + refund paths)
 - ✅ All affected code paths updated
-- ✅ Integration tests prove atomicity
+- ✅ Integration tests prove atomicity and rollback
+- ✅ Test cleanup restores financial integrity
 - ✅ No regression in existing tests
 - ✅ Documentation complete
+- ⚠️ Verification distinguishes atomicity from financial correctness
+- ⚠️ Reviewer notes: tests verify transaction behavior, not end-to-end accounting
 
-**Status:** ✅ **CLOSED**
+**Classification:** FIX-IMPLEMENTED, verification evidence corrected per reviewer feedback
+
+**Status:** ✅ **CLOSED** (with reconciliation enhancement recommended)
