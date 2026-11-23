@@ -622,34 +622,29 @@ async function handleCheckoutCompleted(
             }
 
             logger.info(`Package wallet (Book Later): face=$${packageFaceValue} / paid=$${amountPaid} / promo=+$${drivebookPromotion} / pkg_fee=$${packagePlatformFee} for userId=${userId}`);
+
+            // FinancialLedger — record wallet credit INSIDE transaction (atomic with wallet confirmation)
+            const wallet = await tx.clientWallet.findUnique({ where: { userId } });
+            if (wallet) {
+              const walletTx = await tx.walletTransaction.findFirst({
+                where: { walletId: wallet.id, type: 'CREDIT', status: 'CONFIRMED',
+                  metadata: { path: ['stripeCheckoutSessionId'], equals: checkoutSession.id } },
+                orderBy: { createdAt: 'desc' },
+              });
+              if (walletTx) {
+                const { recordWalletCredit } = await import('@/lib/services/ledger-operations');
+                await recordWalletCredit({
+                  walletTransactionId: walletTx.id,
+                  userId,
+                  amount: packageFaceValue,
+                  stripePaymentIntentId: typeof payment_intent === 'string' ? payment_intent : checkoutSession.id,
+                  createdBy: 'STRIPE_WEBHOOK',
+                  txClient: tx,
+                });
+              }
+            }
           }, SERIALIZABLE_TX);
     }, { operationName: 'webhook-checkout-session-1' });
-
-    // FinancialLedger — record wallet credit (unconditional, non-gated on email)
-    try {
-      const wallet = await prisma.clientWallet.findUnique({ where: { userId } });
-      if (wallet) {
-        const walletTx = await prisma.walletTransaction.findFirst({
-          where: { walletId: wallet.id, type: 'CREDIT', status: 'CONFIRMED',
-            metadata: { path: ['stripeCheckoutSessionId'], equals: checkoutSession.id } },
-          orderBy: { createdAt: 'desc' },
-        });
-        if (walletTx) {
-          const { recordWalletCredit } = await import('@/lib/services/ledger-operations');
-          await recordWalletCredit({
-            walletTransactionId: walletTx.id,
-            userId,
-            amount: packageFaceValue,
-            stripePaymentIntentId: typeof payment_intent === 'string' ? payment_intent : checkoutSession.id,
-            createdBy: 'STRIPE_WEBHOOK',
-          });
-        }
-      }
-    } catch (ledgerErr: any) {
-      if (!ledgerErr?.message?.includes('idempotency')) {
-        logger.error('[FinancialLedger] Book Later recordWalletCredit failed (non-critical):', { error: ledgerErr?.message });
-      }
-    }
 
     // Send wallet top-up receipt (non-critical)
     try {
@@ -999,6 +994,25 @@ async function handleWalletPaymentSuccess(
         });
 
         logger.info(`Wallet payment processed: ${wallet?.user?.email} - confirmed tx ${confirmedTx.id}`);
+
+        // FinancialLedger — record wallet credit INSIDE transaction (atomic with wallet confirmation)
+        if (wallet?.user) {
+          const amountAdded = confirmedTransactions
+            .filter((t: any) => t.type === 'CREDIT')
+            .reduce((sum: number, t: any) => sum + t.amount, 0);
+
+          if (amountAdded > 0) {
+            const { recordWalletCredit } = await import('@/lib/services/ledger-operations');
+            await recordWalletCredit({
+              walletTransactionId: confirmedTx.id,
+              userId: wallet.userId,
+              amount: amountAdded,
+              stripePaymentIntentId: paymentIntent.id,
+              createdBy: 'STRIPE_WEBHOOK',
+              txClient: tx,
+            });
+          }
+        }
               }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-wallet-payment' });
 

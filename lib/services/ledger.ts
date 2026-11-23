@@ -131,31 +131,63 @@ export async function createLedgerEntry(entry: LedgerEntry) {
 
 /**
  * Create multiple ledger entries atomically (transaction)
+ * @param entries - Array of ledger entries to create
+ * @param txClient - Optional Prisma transaction client. If provided, uses existing transaction; otherwise creates new one.
  */
-export async function createLedgerEntries(entries: LedgerEntry[]) {
+export async function createLedgerEntries(
+  entries: LedgerEntry[],
+  txClient?: Prisma.TransactionClient
+) {
+  const client = txClient || prisma;
+  
   try {
-    const results = await prisma.$transaction(
-      entries.map((entry) =>
-        prisma.financialLedger.create({
-          data: {
-            debitAccount: entry.debitAccount,
-            creditAccount: entry.creditAccount,
-            amount: entry.amount,
-            description: entry.description,
-            idempotencyKey: entry.idempotencyKey,
-            bookingId: entry.bookingId,
-            transactionId: entry.transactionId,
-            payoutId: entry.payoutId,
-            userId: entry.userId,
-            providerId: entry.providerId,
-            metadata: entry.metadata || {},
-            createdBy: entry.createdBy || 'SYSTEM',
-          },
-        })
-      )
-    );
-
-    return { success: true, entries: results };
+    if (txClient) {
+      // Already in a transaction - execute directly
+      const results = await Promise.all(
+        entries.map((entry) =>
+          client.financialLedger.create({
+            data: {
+              debitAccount: entry.debitAccount,
+              creditAccount: entry.creditAccount,
+              amount: entry.amount,
+              description: entry.description,
+              idempotencyKey: entry.idempotencyKey,
+              bookingId: entry.bookingId,
+              transactionId: entry.transactionId,
+              payoutId: entry.payoutId,
+              userId: entry.userId,
+              providerId: entry.providerId,
+              metadata: entry.metadata || {},
+              createdBy: entry.createdBy || 'SYSTEM',
+            },
+          })
+        )
+      );
+      return { success: true, entries: results };
+    } else {
+      // Not in a transaction - wrap in one
+      const results = await prisma.$transaction(
+        entries.map((entry) =>
+          prisma.financialLedger.create({
+            data: {
+              debitAccount: entry.debitAccount,
+              creditAccount: entry.creditAccount,
+              amount: entry.amount,
+              description: entry.description,
+              idempotencyKey: entry.idempotencyKey,
+              bookingId: entry.bookingId,
+              transactionId: entry.transactionId,
+              payoutId: entry.payoutId,
+              userId: entry.userId,
+              providerId: entry.providerId,
+              metadata: entry.metadata || {},
+              createdBy: entry.createdBy || 'SYSTEM',
+            },
+          })
+        )
+      );
+      return { success: true, entries: results };
+    }
   } catch (error: any) {
     // Check for duplicate idempotency key
     if (error.code === 'P2002') {

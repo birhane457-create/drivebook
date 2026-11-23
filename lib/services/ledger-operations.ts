@@ -15,7 +15,7 @@ import {
   ReferenceType,
   createLedgerEntriesIdempotently,
 } from './ledger';
-import { Decimal } from '@prisma/client/runtime/library';
+import { Prisma, Decimal } from '@prisma/client/runtime/library';
 import {
   toDecimal,
   toNumber,
@@ -472,8 +472,9 @@ export async function recordWalletCredit(params: {
   amount: number | Decimal;
   stripePaymentIntentId?: string;
   createdBy?: string;
+  txClient?: Prisma.TransactionClient;
 }) {
-  const { walletTransactionId, userId, amount, stripePaymentIntentId, createdBy = 'SYSTEM' } =
+  const { walletTransactionId, userId, amount, stripePaymentIntentId, createdBy = 'SYSTEM', txClient } =
     params;
 
   const entry: LedgerEntry = {
@@ -494,7 +495,7 @@ export async function recordWalletCredit(params: {
     },
   };
 
-  return createLedgerEntries([entry]);
+  return createLedgerEntries([entry], txClient);
 }
 
 /**
