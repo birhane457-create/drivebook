@@ -114,3 +114,14 @@ PH5-SCH-37 is **CLOSED**. The BookingIdempotencyKey replay scope insufficiency h
 4. ✅ Both legacy (per-field) and new (fingerprint) validation layers tested
 
 The dual-layer protection ensures that idempotency keys cannot be reused with different booking parameters, preventing both obvious attacks (different provider) and subtle tampering (changed pickup location, learner name, etc.).
+
+## Qualification: Migration Reproducibility
+
+**Test database setup required manual intervention:**
+- Migration `20260115000001_add_customer_soft_delete` marked as applied without execution
+- Broken migration directory `20261114192400_add_customer_soft_delete` removed
+- `Customer.deletedAt` and `Customer.deletedBy` columns added manually via SQL
+
+**Impact:** The passing tests confirm correct behavior against the repaired database schema. However, **migration reproducibility from a clean empty database has not been independently verified**. This is a separate migration-integrity task and does not invalidate the booking idempotency implementation or test results.
+
+**Recommendation:** Verify that `npx prisma migrate deploy` on a fresh empty PostgreSQL database successfully creates all tables including Customer with deletedAt/deletedBy columns.

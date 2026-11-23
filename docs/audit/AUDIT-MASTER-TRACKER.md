@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.94 (Section 14 — CP-03 final corrections verified at 5ee46420)
-**Last Updated:** 2026-11-19 (v6.94 — Correction A and B verified at HEAD 5ee46420; Section 14 remains CLOSED)
+**Version:** 6.95 (PH5-SCH-30/36/37 + WLA-006/006-TOPUP closed with runtime tests 2026-11-23)
+**Last Updated:** 2026-11-23 (v6.95 — Five findings closed: WLA-006, WLA-006-TOPUP, PH5-SCH-30, PH5-SCH-36, PH5-SCH-37; 82/82 tests PASS; migration reproducibility pending verification)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1128,7 +1128,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | Severity | Count | Key IDs |
 |----------|-------|---------|
 | HIGH | 1 | PH5-SCH-10: Transaction cascade-deletes when Booking is hard-deleted |
-| MEDIUM | 17 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-30: BookingIdempotencyKey concurrency risk; PH5-SCH-35: SaaS booking webhook outside tx; PH5-SCH-36: Book Later no idempotency write; PH5-SCH-37: replay scope does not bind to original booking parameters |
+| MEDIUM | 14 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-35: SaaS booking webhook outside tx |
 | LOW | 18 | PH5-SCH-02, 04, 06, 08, 09, 11, 13, 14, 15, 16, 20, 25, 26, 29, 31, 32, 33, 34 |
 | NEGLIGIBLE | 1 | PH5-SCH-19: SlotReservation cascade (transient rows, no financial evidence) |
 | **Total** | **37** | All finding IDs PH5-SCH-01 through PH5-SCH-37 |
