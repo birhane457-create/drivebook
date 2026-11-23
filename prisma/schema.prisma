@@ -588,10 +588,17 @@ model Payout {
   payoutRef        String              @unique
   // PH5-SCH-22a Phase 1: Durable balance reservation
   // reservedAt is set atomically with status=PROCESSING. Funds are locked in
-  // PlatformLedger.totalPayoutReserved until the payout PAID or FAILED.
+  // PlatformLedger.totalPayoutReserved until the payout is PAID or FAILED.
   reservedAt       DateTime?
   reservedAmount   Decimal?            @db.Decimal(12, 2)
   reservationId    String?             @unique
+  // PH5-SCH-22a Phase 1: Recovery claim lease
+  // Prevents concurrent recovery workers from both reaching Stripe.
+  // recoveryClaimToken identifies the owning worker.
+  // recoveryClaimExpiresAt allows takeover after a worker crash (TTL = 10 min).
+  // These fields are independent of reservationId (the financial reservation identity).
+  recoveryClaimToken     String?
+  recoveryClaimExpiresAt DateTime?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   transactions     PayoutTransaction[]

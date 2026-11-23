@@ -254,10 +254,14 @@ export async function commitPayoutCompletion(
     txCount: number;
     adminUserId: string;
     path: 'stripe' | 'manual';
+    // When called from recovery, pass the claim token so it is cleared
+    // atomically with the PAID transition — no window where the claim
+    // outlives a completed payout.
+    recoveryClaimToken?: string;
   },
   txClient?: Prisma.TransactionClient,
 ): Promise<void> {
-  const { payoutId, stripeTransferId, payout, txCount, adminUserId, path } = opts;
+  const { payoutId, stripeTransferId, payout, txCount, adminUserId, path, recoveryClaimToken } = opts;
 
   const run = async (tx: Prisma.TransactionClient) => {
     // Lock PlatformLedger
@@ -265,7 +269,8 @@ export async function commitPayoutCompletion(
       SELECT 1 FROM "PlatformLedger" WHERE key = 'default' FOR UPDATE
     `;
 
-    // Conditional status update — guard prevents duplicate completion
+    // Conditional status update — guard prevents duplicate completion.
+    // Also clears financial reservation fields and the recovery claim (if any).
     const updated = await tx.payout.updateMany({
       where: {
         id: payoutId,
@@ -275,10 +280,13 @@ export async function commitPayoutCompletion(
       data: {
         status: 'PAID',
         paidAt: new Date(),
-        // Clear reservation fields — funds are now settled in totalPaidOut.
+        // Clear financial reservation — funds now settled in totalPaidOut.
         reservedAt: null,
         reservedAmount: null,
         reservationId: null,
+        // Clear recovery claim — no active recovery after completion.
+        recoveryClaimToken: null,
+        recoveryClaimExpiresAt: null,
         ...(stripeTransferId ? { stripeTransferId } : {}),
         ...(path === 'manual' ? { confirmedAt: new Date(), confirmedBy: adminUserId } : {}),
         failureReason: null,
@@ -399,6 +407,9 @@ export async function releasePayoutReservation(
         reservedAt: null,
         reservedAmount: null,
         reservationId: null,
+        // Clear recovery claim — a new attempt starts clean.
+        recoveryClaimToken: null,
+        recoveryClaimExpiresAt: null,
       },
     });
 

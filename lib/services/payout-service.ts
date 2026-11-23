@@ -388,23 +388,39 @@ async function recoverProcessingPayout(
   payoutId: string,
   adminUserId: string,
 ): Promise<PayoutResult> {
-  // ── Recovery claim (SELECT FOR UPDATE) ──────────────────────────────────────
-  // Serialises concurrent recovery attempts at the database row level.
-  // The first caller acquires the FOR UPDATE lock and writes a unique claim token
-  // to reservationId.  Any concurrent caller also issues SELECT FOR UPDATE but
-  // blocks until the first transaction commits.  After the first commit, the
-  // second caller reads a changed reservationId (or a non-PROCESSING status)
-  // and returns without taking action.
+  // ── Recovery claim (SELECT FOR UPDATE with TTL lease) ──────────────────────
   //
-  // commitPayoutCompletion() provides a second atomic guard: its own updateMany
-  // will find 0 rows if the first recovery already committed PAID.
+  // Provides exclusive recovery ownership. Uses two dedicated fields that are
+  // separate from the financial reservation identity (reservationId):
+  //   recoveryClaimToken     — identifies the owning worker
+  //   recoveryClaimExpiresAt — TTL; allows takeover after a worker crash
+  //
+  // Acquisition is conditional (all evaluated inside a single FOR UPDATE tx):
+  //   - No active claim (recoveryClaimToken IS NULL): acquire
+  //   - Expired claim (recoveryClaimExpiresAt < now()): take over
+  //   - Active unexpired claim: reject — return current payout state
+  //
+  // The FOR UPDATE lock serialises the acquisition transactions.
+  // After the first caller commits, the second sees the token + future expiry
+  // and finds the WHERE condition matches 0 rows.
+  //
+  // reservationId is not touched here — it retains the stable financial
+  // reservation identity throughout the recovery lifecycle.
+
+  const RECOVERY_CLAIM_TTL_MS = 10 * 60 * 1000; // 10 minutes
   const claimToken = `RCLAIM_${Date.now()}_${payoutId.slice(-8)}`;
+  const claimExpiresAt = new Date(Date.now() + RECOVERY_CLAIM_TTL_MS);
   let claimSucceeded = false;
 
   await prisma.$transaction(async (tx) => {
-    // Lock the row exclusively.
-    const rows = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM "Payout"
+    // Lock the row exclusively for the duration of this transaction.
+    const rows = await tx.$queryRaw<Array<{
+      id: string;
+      recoveryClaimToken: string | null;
+      recoveryClaimExpiresAt: Date | null;
+    }>>`
+      SELECT id, "recoveryClaimToken", "recoveryClaimExpiresAt"
+      FROM "Payout"
       WHERE id = ${payoutId}
         AND status = 'PROCESSING'
         AND "reservedAt" IS NOT NULL
@@ -412,15 +428,29 @@ async function recoverProcessingPayout(
     `;
 
     if (rows.length === 0) {
-      // Row is gone, not PROCESSING, or has no reservation — nothing to claim.
+      // Not PROCESSING, no reservation, or already gone.
       return;
     }
 
-    // Write the claim token.  Any second caller blocking on FOR UPDATE will
-    // commit after us and find the row in a different state.
+    const row = rows[0];
+    const now = new Date();
+    const hasActiveClaim =
+      row.recoveryClaimToken !== null &&
+      row.recoveryClaimExpiresAt !== null &&
+      row.recoveryClaimExpiresAt > now;
+
+    if (hasActiveClaim) {
+      // Another worker owns recovery and its lease has not expired.
+      return;
+    }
+
+    // No claim or expired claim — acquire ownership.
     await tx.payout.update({
       where: { id: payoutId },
-      data: { reservationId: claimToken },
+      data: {
+        recoveryClaimToken: claimToken,
+        recoveryClaimExpiresAt: claimExpiresAt,
+      },
     });
 
     claimSucceeded = true;
@@ -550,8 +580,16 @@ async function recoverProcessingPayout(
     }
   } catch (stripeErr) {
     // Could not establish the transfer outcome.
-    // Preserve the reservation — do NOT release, do NOT mark FAILED.
+    // Preserve the financial reservation — do NOT release, do NOT mark FAILED.
+    // Clear the recovery claim so another worker can retry after investigation.
     const reason = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
+
+    // Clear claim fields (financial reservation remains intact).
+    await prisma.payout.updateMany({
+      where: { id: payoutId, recoveryClaimToken: claimToken },
+      data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
+    });
+
     await logTransition(payoutId, adminUserId, 'PAYOUT_RECOVERY_FAILED', {
       payoutRef: payout.payoutRef,
       note: 'Stripe call failed during recovery — reservation preserved, manual investigation required',
@@ -579,6 +617,9 @@ async function recoverProcessingPayout(
   }
 
   // Transfer confirmed — complete the DB writes in a single transaction.
+  // claimToken is passed so commitPayoutCompletion can clear the recovery
+  // claim atomically with the status transition — no window where the claim
+  // outlives the PAID status.
   await commitPayoutCompletion({
     payoutId,
     stripeTransferId: resolvedTransfer.id,
@@ -592,6 +633,7 @@ async function recoverProcessingPayout(
     txCount,
     adminUserId,
     path: 'stripe',
+    recoveryClaimToken: claimToken,
   });
 
   await logTransition(payoutId, adminUserId, 'PAYOUT_PAID', {
