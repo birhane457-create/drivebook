@@ -3,9 +3,28 @@
 **Finding ID:** PH5-SCH-22  
 **Severity:** MEDIUM  
 **Title:** PlatformLedger increments non-atomic with LedgerEntry appends  
-**Status:** ✅ CLOSED  
+**Scope:** Payment collection + refund issuance paths ONLY  
+**Status:** ✅ FIXED (limited scope)  
+**Related:** PH5-SCH-22a (payout paths) — OPEN  
 **Closed Date:** 2026-11-23  
-**Commit:** ac306e287
+**Commits:** ac306e287 (payment), fc1a7305b (refund), 54e3c97d5 (docs)
+
+---
+
+## Scope Limitation
+
+**What PH5-SCH-22 Covers:**
+- ✅ `recordPaymentCollected()` — payment capture webhook path
+- ✅ `recordRefundIssued()` — refund issuance path
+
+**What PH5-SCH-22 Does NOT Cover (see LEDGER-ATOMICITY-AUDIT.md):**
+- ❌ `executePayout()` — still uses `Promise.all` for ledger writes
+- ❌ `confirmPayoutReceived()` — not yet inspected
+- ❌ Dispute/chargeback ledger writes
+- ❌ Tax withholding records
+- ❌ Stripe transfer atomicity (external operation, cannot be in DB transaction)
+
+**New Finding:** PH5-SCH-22a created to track remaining payout-path atomicity issues
 
 ---
 
@@ -78,6 +97,13 @@ await prisma.$transaction(async (tx) => {
 - All increments tracked in `testDeltaCollected` and `testDeltaReserved`
 - Full reversal in `afterAll` with verification
 - Console error logged if restoration fails
+
+**Test Limitation (Reviewer Note):**
+- T2 verifies Prisma transaction rollback at database level
+- T2 does NOT call `recordPaymentCollected()` with forced `incrementLedger()` failure
+- T2 does NOT prove the actual function's atomicity under real failure conditions
+- Proper test would require mocking `incrementLedger` to throw during `recordPaymentCollected()` execution
+- **Current evidence:** Source code review + Prisma transaction behavior (not full end-to-end failure injection)
 
 ### Scope Expansion
 
@@ -162,6 +188,9 @@ As identified by reviewer, the 3/3 test results prove atomicity and concurrency 
 - ⚠️ Verification distinguishes atomicity from financial correctness
 - ⚠️ Reviewer notes: tests verify transaction behavior, not end-to-end accounting
 
-**Classification:** FIX-IMPLEMENTED, verification evidence corrected per reviewer feedback
+**Classification:** FIX-IMPLEMENTED (payment + refund paths only)  
+**Evidence Quality:** Source code verified + Prisma-level transaction test (not full failure injection)  
+**Remaining Work:** See PH5-SCH-22a and LEDGER-ATOMICITY-AUDIT.md
 
-**Status:** ✅ **CLOSED** (with reconciliation enhancement recommended)
+**Status:** ✅ **FIXED** (limited scope: payment collection + refund issuance)  
+⚠️ **Payout paths require separate fix** (tracked in PH5-SCH-22a)
