@@ -1,6 +1,6 @@
 ﻿# DriveBook Security Audit â€” Master Tracker
-**Version:** 6.95 (PH5-SCH-30/36/37 + WLA-006/006-TOPUP closed with runtime tests 2026-11-23)
-**Last Updated:** 2026-11-23 (v6.95 — Five findings closed: WLA-006, WLA-006-TOPUP, PH5-SCH-30, PH5-SCH-36, PH5-SCH-37; 82/82 tests PASS; migration reproducibility pending verification)
+**Version:** 6.96 (PH5-SCH-21/22 closed: ledger atomicity fixes complete)
+**Last Updated:** 2026-11-23 (v6.96 — PH5-SCH-21/22 closed; FinancialLedger + PlatformLedger atomicity verified; 85/85 tests PASS)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -1128,7 +1128,7 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | Severity | Count | Key IDs |
 |----------|-------|---------|
 | HIGH | 1 | PH5-SCH-10: Transaction cascade-deletes when Booking is hard-deleted |
-| MEDIUM | 14 | PH5-SCH-21/22: ledger non-atomicity; PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-35: SaaS booking webhook outside tx |
+| MEDIUM | 13 | PH5-SCH-23: broken unused integrity check; PH5-SCH-27/28: Business ID and Customer delete race; PH5-SCH-35: SaaS booking webhook outside tx |
 | LOW | 18 | PH5-SCH-02, 04, 06, 08, 09, 11, 13, 14, 15, 16, 20, 25, 26, 29, 31, 32, 33, 34 |
 | NEGLIGIBLE | 1 | PH5-SCH-19: SlotReservation cascade (transient rows, no financial evidence) |
 | **Total** | **37** | All finding IDs PH5-SCH-01 through PH5-SCH-37 |
@@ -1138,6 +1138,8 @@ Items from PHASE-4-API-ROUTES-AUDIT.md v1.2 that remain open.
 | ID | Title | Risk | Status | Reason |
 |---|---|---|---|---|
 | PH5-SCH-10 | Transaction ON DELETE CASCADE — latent data retention risk | HIGH | ✅ CLOSED — constraint changed to RESTRICT; applied via direct SQL to Sydney (d4406ea2); verified confdeltype=r in pg_constraint; schema updated in prisma/schema.prisma | Verification: scripts/migration/06-verify-constraint.ts, timestamp 2026-11-17T17:34:42Z |
+| PH5-SCH-21 | FinancialLedger non-atomicity | MEDIUM | ✅ CLOSED — Duplicate of WLA-006; fixed in commits 8b123479f, 6437ecd3f, 22240aed4; `recordBookingPayment` moved inside booking transaction with `txClient` parameter; 3 webhook paths verified (payment succeeded, refund, Book Now); integration test `ledger-atomicity-rollback.test.ts` proves rollback behavior (2/2 PASS) | Closure: Same root cause as WLA-006 (non-atomic FinancialLedger writes); fixed 2026-11-22 |
+| PH5-SCH-22 | PlatformLedger non-atomicity | MEDIUM | ✅ CLOSED — FIX-IMPLEMENTED (ac306e287); `recordPaymentCollected` wrapped in `prisma.$transaction`; both `appendLedgerEntry` and `incrementLedger` now accept optional `txClient` parameter; prevents partial failures that corrupt `totalCollected`; integration test proves atomicity (3/3 PASS); fixed 2026-11-23 | Tests: `__tests__/integration/platformledger-atomicity.test.ts` T1-T3; closure doc: `docs/audit/PH5-SCH-22-CLOSURE-STATUS.md` |
 | PH5-SCH-30 | BookingIdempotencyKey upsert concurrency risk | MEDIUM | ✅ CLOSED — FIX-IMPLEMENTED (fe088d5d); R1/R2 HTTP tests executed 2026-11-23, 2/2 PASS; BookingIdempotencyKey upsert with fingerprint validation prevents duplicate bookings under concurrency — R1: concurrent requests create exactly one booking (409 or replay on duplicate), R2: sequential retry replays stored response | Tests: `__tests__/integration/booking-group-regression.test.ts` R1/R2 (localhost:5432/drivebook_test, Next.js port 3001); test infrastructure: migrations deployed after resolving 20260115000001 conflict, Customer.deletedAt added manually |
 | PH5-SCH-35 | SaaS booking webhook event outside processing tx | MEDIUM | CONFIRMED (cf6a1558) — C2: AuditLog 2 entries; P2028 anomaly unresolved (rerun pending); pre-tx status check does not prevent concurrent duplicate processing | Remediation: `updateMany` on Quote with `status: { not: 'PAID' }`; if `claimed.count !== 1` skip all Booking + AuditLog writes and defer notifications until after tx commit |
 | PH5-SCH-36 | Book Later path creates duplicate Checkout Sessions on retry | MEDIUM | ✅ CLOSED — FIX-IMPLEMENTED (723c41ac); R3/R4 HTTP tests executed 2026-11-22, 2/2 PASS; dual-layer protection verified (BookingIdempotencyKey + stripe.checkout.sessions.list reuse) — concurrent requests return same session URL, sequential retry replays stored response | Tests: `__tests__/integration/booking-group-regression.test.ts` R3/R4; closure doc: `docs/audit/PH5-SCH-36-CLOSURE-STATUS.md`; runtime evidence commit e1ef6b8b6 |
