@@ -90,17 +90,25 @@ export async function getPlatformLedger() {
     totalPaidOut: 0,
     totalRefunded: 0,
     totalTaxWithheld: 0,
+    totalPayoutReserved: 0,
   };
   return {
     ...totals,
-    // Computed — not stored
+    // Computed — not stored.
+    // availableBalance subtracts in-flight payout reservations so concurrent
+    // executePayout() calls cannot double-spend the same funds.
     availableBalance: parseFloat(
-      (Number(totals.totalCollected) - Number(totals.totalPaidOut) - Number(totals.totalRefunded)).toFixed(2),
+      (
+        Number(totals.totalCollected) -
+        Number(totals.totalPaidOut) -
+        Number(totals.totalRefunded) -
+        Number((totals as any).totalPayoutReserved ?? 0)
+      ).toFixed(2),
     ),
   };
 }
 
-// ─── Check payout is safe ─────────────────────────────────────────────────────
+// ─── Check payout is safe (uses availableBalance which excludes reservations) ─
 
 export async function assertSufficientBalance(netAmount: number) {
   const { availableBalance } = await getPlatformLedger();
@@ -131,3 +139,241 @@ export async function assertNonNegativeBalance() {
     throw new Error(msg);
   }
 }
+
+// ─── Durable payout reservation (PH5-SCH-22a Phase 1) ────────────────────────
+//
+// reservePayoutFunds() MUST be called before every Stripe transfer.
+// It acquires a SELECT FOR UPDATE lock on PlatformLedger, verifies the
+// available balance (minus existing reservations from concurrent payouts),
+// then atomically:
+//   1. Stamps reservedAt / reservedAmount / reservationId on the Payout row.
+//   2. Increments PlatformLedger.totalPayoutReserved.
+//
+// This ensures a concurrent executePayout() that reads the ledger between
+// our balance check and our Stripe call will see the reserved amount and
+// will fail its own balance check — not proceed to Stripe.
+
+export async function reservePayoutFunds(
+  payoutId: string,
+  netAmount: number,
+  txClient?: Prisma.TransactionClient,
+): Promise<string> {
+  let reservationId!: string;
+
+  const run = async (tx: Prisma.TransactionClient) => {
+    // Lock the PlatformLedger row for the duration of this transaction.
+    const rows = await tx.$queryRaw<Array<{
+      totalCollected: string;
+      totalPaidOut: string;
+      totalRefunded: string;
+      totalPayoutReserved: string;
+    }>>`
+      SELECT "totalCollected", "totalPaidOut", "totalRefunded", "totalPayoutReserved"
+      FROM "PlatformLedger"
+      WHERE key = 'default'
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
+      throw new Error('PlatformLedger not initialised — cannot reserve funds');
+    }
+
+    const ledger = rows[0];
+    const available =
+      Number(ledger.totalCollected) -
+      Number(ledger.totalPaidOut) -
+      Number(ledger.totalRefunded) -
+      Number(ledger.totalPayoutReserved);
+
+    if (netAmount > available) {
+      throw new Error(
+        `Insufficient balance: need $${netAmount.toFixed(2)}, ` +
+        `available $${available.toFixed(2)} ` +
+        `($${Number(ledger.totalPayoutReserved).toFixed(2)} reserved for in-flight payouts)`,
+      );
+    }
+
+    reservationId = `RES_${Date.now()}_${payoutId.slice(-8)}`;
+
+    // Guard: only stamp if no reservation exists yet (prevents double-reservation on retry)
+    const stamped = await tx.payout.updateMany({
+      where: { id: payoutId, status: 'PROCESSING', reservedAt: null },
+      data: {
+        reservedAt: new Date(),
+        reservedAmount: netAmount,
+        reservationId,
+      },
+    });
+
+    if (stamped.count === 0) {
+      // Already reserved from a prior attempt — treat as idempotent, read existing id
+      const existing = await tx.payout.findUnique({
+        where: { id: payoutId },
+        select: { reservationId: true },
+      });
+      reservationId = existing?.reservationId ?? reservationId;
+      // Don't increment totalPayoutReserved again — reservation already active
+      return;
+    }
+
+    // Atomically increment the reservation bucket
+    await tx.platformLedger.update({
+      where: { key: 'default' },
+      data: { totalPayoutReserved: { increment: netAmount } },
+    });
+  };
+
+  if (txClient) {
+    await run(txClient);
+  } else {
+    await prisma.$transaction(run);
+  }
+
+  return reservationId;
+}
+
+// ─── Convert reservation → confirmed PAID (PH5-SCH-22a Phase 1) ──────────────
+//
+// All writes — status, PlatformLedger counters, LedgerEntry rows — happen in
+// ONE transaction.  If any write fails the whole transaction rolls back and
+// the payout remains in PROCESSING with its reservation intact, so a retry
+// can call Stripe with the same idempotency key and reach here again safely.
+
+export async function commitPayoutCompletion(
+  opts: {
+    payoutId: string;
+    stripeTransferId: string | null;
+    payout: {
+      netAmount: number;
+      grossAmount: number;
+      taxWithheld: number;
+      payoutRef: string;
+      providerId: string;
+      bankReference?: string | null;
+    };
+    txCount: number;
+    adminUserId: string;
+    path: 'stripe' | 'manual';
+  },
+  txClient?: Prisma.TransactionClient,
+): Promise<void> {
+  const { payoutId, stripeTransferId, payout, txCount, adminUserId, path } = opts;
+
+  const run = async (tx: Prisma.TransactionClient) => {
+    // Lock PlatformLedger
+    await tx.$queryRaw`
+      SELECT 1 FROM "PlatformLedger" WHERE key = 'default' FOR UPDATE
+    `;
+
+    // Conditional status update — guard prevents duplicate completion
+    const updated = await tx.payout.updateMany({
+      where: {
+        id: payoutId,
+        status: { in: ['PROCESSING', 'SENT'] },
+        reservedAt: { not: null },
+      },
+      data: {
+        status: 'PAID',
+        paidAt: new Date(),
+        ...(stripeTransferId ? { stripeTransferId } : {}),
+        ...(path === 'manual' ? { confirmedAt: new Date(), confirmedBy: adminUserId } : {}),
+        failureReason: null,
+      },
+    });
+
+    if (updated.count === 0) {
+      throw new Error('Payout already completed or reservation missing — cannot commit');
+    }
+
+    // Convert reservation → settled payout in the aggregates.
+    // totalPayoutReserved decrements; totalPaidOut and totalTaxWithheld increment.
+    await tx.platformLedger.update({
+      where: { key: 'default' },
+      data: {
+        totalPayoutReserved: { decrement: payout.netAmount },
+        totalPaidOut:        { increment: payout.netAmount },
+        totalReserved:       { decrement: payout.grossAmount },
+        totalTaxWithheld:    { increment: payout.taxWithheld },
+      },
+    });
+
+    // Append immutable ledger entries
+    await appendLedgerEntry(
+      {
+        type: 'PAYOUT_PAID',
+        amount: -payout.netAmount,
+        referenceId: payoutId,
+        referenceType: 'PAYOUT',
+        providerId: payout.providerId,
+        description:
+          path === 'stripe'
+            ? `${payout.payoutRef} - net payout to instructor (Stripe)`
+            : `${payout.payoutRef} - net payout confirmed (bank transfer)`,
+        metadata: {
+          ...(stripeTransferId ? { stripeTransferId } : {}),
+          ...(path === 'manual' ? { bankReference: payout.bankReference, confirmedBy: adminUserId } : {}),
+          txCount,
+        },
+      },
+      tx,
+    );
+
+    if (payout.taxWithheld > 0) {
+      await appendLedgerEntry(
+        {
+          type: 'TAX_WITHHELD',
+          amount: payout.taxWithheld,
+          referenceId: payoutId,
+          referenceType: 'PAYOUT',
+          providerId: payout.providerId,
+          description: `${payout.payoutRef} - ATO withholding`,
+        },
+        tx,
+      );
+    }
+  };
+
+  if (txClient) {
+    await run(txClient);
+  } else {
+    await prisma.$transaction(run);
+  }
+}
+
+// ─── Release reservation on definitive failure (PH5-SCH-22a Phase 1) ─────────
+//
+// Sets status = FAILED and returns the reserved amount to the available pool.
+// No-ops if the payout is already in a terminal state (idempotent).
+
+export async function releasePayoutReservation(
+  payoutId: string,
+  netAmount: number,
+  failureReason: string,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    // Lock PlatformLedger
+    await tx.$queryRaw`
+      SELECT 1 FROM "PlatformLedger" WHERE key = 'default' FOR UPDATE
+    `;
+
+    const updated = await tx.payout.updateMany({
+      where: { id: payoutId, status: 'PROCESSING', reservedAt: { not: null } },
+      data: {
+        status: 'FAILED',
+        failureReason,
+        retryCount: { increment: 1 },
+      },
+    });
+
+    if (updated.count === 0) {
+      // Already terminal (PAID, FAILED, etc.) — nothing to release
+      return;
+    }
+
+    await tx.platformLedger.update({
+      where: { key: 'default' },
+      data: { totalPayoutReserved: { decrement: netAmount } },
+    });
+  });
+}
+

@@ -24,6 +24,7 @@ import { DEFAULT_TIMEZONE } from '@/lib/utils/timezone';
 export type AlertType =
   | 'NEGATIVE_BALANCE'
   | 'PAYOUT_FAILED'
+  | 'PAYOUT_COMMIT_FAILED'    // PH5-SCH-22a: Stripe succeeded but DB commit failed — requires retry
   | 'ABN_REVOKED'
   | 'RECONCILIATION_ISSUES'
   | 'DISPUTE_OPENED'          // Sprint A: chargeback filed

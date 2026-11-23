@@ -7,16 +7,25 @@
  *                                           -> FAILED   (retryable)
  *                                           -> ON_HOLD  (dispute / admin hold)
  *
- * Guarantees:
- * - Transactions are IMMUTABLE - never mutated after creation.
- *   Payout membership tracked via PayoutTransaction join records only.
- * - Idempotency: SHA-256 of sorted transaction IDs -> collision-free key
+ * PH5-SCH-22a Phase 1 Guarantees:
+ * - Durable reservation: funds are locked in PlatformLedger.totalPayoutReserved
+ *   BEFORE any Stripe transfer is initiated.  A concurrent executePayout() that
+ *   checks the balance after the reservation is set will see the reduced
+ *   available balance and fail — it never reaches Stripe.
+ * - Single-transaction commit: status transition (PROCESSING→PAID) + all ledger
+ *   writes (PlatformLedger counters + LedgerEntry rows) happen in one transaction
+ *   via commitPayoutCompletion(). If the transaction fails the reservation remains
+ *   active and the retry path is safe (Stripe idempotency key reuses the transfer).
+ * - Reservation release: on any error after reservation, releasePayoutReservation()
+ *   atomically sets status=FAILED and decrements totalPayoutReserved.
+ * - confirmPayoutReceived: also uses commitPayoutCompletion() so status + ledger
+ *   are always atomic. No separate status-then-ledger split.
+ *
+ * Legacy guarantees (unchanged):
+ * - Transactions are IMMUTABLE — never mutated after creation.
+ * - Idempotency: SHA-256 of sorted transaction IDs → collision-free key
  *   passed to both DB (@unique constraint) and Stripe.
- * - Concurrency lock: ELIGIBLE/FAILED -> PROCESSING is atomic via updateMany
- *   with status guard. 0 rows updated = another process holds the lock -> abort.
- * - Balance check: assertSufficientBalance() before every Stripe transfer.
- * - Ledger: every financial event appended to LedgerEntry + PlatformLedger updated.
- *   For bank/manual payouts, ledger is updated ONLY when admin confirms receipt.
+ * - Concurrency lock: ELIGIBLE/FAILED → PROCESSING is atomic via updateMany.
  * - Full audit trail: every state transition logged to AuditLog.
  * - Two-phase: buildPayout() validates + creates record (no Stripe),
  *   executePayout() acquires lock + transfers + finalises.
@@ -27,7 +36,7 @@ import Stripe from 'stripe';
 import { prisma } from '@/lib/prisma';
 import { smsService } from '@/lib/services/sms';
 import { emailService } from '@/lib/services/email';
-import { appendLedgerEntry, incrementLedger, assertSufficientBalance, assertNonNegativeBalance, getPlatformLedger } from '@/lib/services/ledger-service';
+import { appendLedgerEntry, incrementLedger, assertSufficientBalance, assertNonNegativeBalance, getPlatformLedger, reservePayoutFunds, commitPayoutCompletion, releasePayoutReservation } from '@/lib/services/ledger-service';
 import { sendAlert } from '@/lib/services/alert-service';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
@@ -361,8 +370,18 @@ export async function executePayout(
   const txCount = payout.transactions.length;
   const isStripe = payout.payoutMethod === 'stripe_connect' && payout.stripeAccountId;
 
+  // Tracks whether stripe.transfers.create has returned successfully.
+  // If true when an error is thrown, the catch block must NOT release the
+  // reservation — the transfer already occurred and the payout must remain
+  // PROCESSING so a retry can recover it.
+  let stripeTransferCreated = false;
+
   try {
-    await assertSufficientBalance(Number(payout.netAmount));
+    // Phase 1: Reserve funds BEFORE any Stripe call.
+    // reservePayoutFunds acquires SELECT FOR UPDATE on PlatformLedger, checks
+    // available balance (excluding other in-flight reservations), then atomically
+    // stamps the Payout row and increments totalPayoutReserved.
+    await reservePayoutFunds(payoutId, toNumber(payout.netAmount));
 
     if (isStripe) {
       // PAY-01 SECURITY: Verify destination ownership before money movement
@@ -385,7 +404,16 @@ export async function executePayout(
       // TOCTOU Protection: Use the verified account ID (same value we just checked)
       const verifiedAccountId = payout.stripeAccountId!;
 
-      // Stripe Connect: money moves now -> PAID -> ledger updated
+      // Stripe Connect: funds already reserved in DB — safe to transfer now.
+      //
+      // IMPORTANT: Once stripe.transfers.create returns without throwing, the money
+      // has moved (or Stripe already has it from a prior idempotent attempt).
+      // Any database failure AFTER this point must NOT release the reservation —
+      // the payout must remain PROCESSING so the next retry can call Stripe with
+      // the same idempotency key, get back the existing transfer, and complete the
+      // DB writes.  stripeTransferCreated (hoisted to outer scope) tracks whether
+      // we have crossed this point.
+
       const transfer = await stripe.transfers.create(
         {
           amount: Math.round(toNumber(toDecimal(payout.netAmount)) * 100),
@@ -403,48 +431,26 @@ export async function executePayout(
         },
         { idempotencyKey: payout.idempotencyKey },
       );
+      // ← Money has moved (or was already moved on a prior attempt).
+      stripeTransferCreated = true;
 
-      await prisma.payout.update({
-        where: { id: payoutId },
-        data: {
-          status: 'PAID',
-          stripeTransferId: transfer.id,
-          paidAt: new Date(),
-          failureReason: null,
-        },
-      });
-
-      await Promise.all([
-        appendLedgerEntry({
-          type: 'PAYOUT_PAID',
-          amount: -toNumber(payout.netAmount),
-          referenceId: payoutId,
-          referenceType: 'PAYOUT',
+      // Single transaction: status PROCESSING→PAID + ledger counters + LedgerEntry rows.
+      // If this fails, stripeTransferCreated=true so the catch block will NOT release
+      // the reservation or mark FAILED — the payout stays PROCESSING and is retryable.
+      await commitPayoutCompletion({
+        payoutId,
+        stripeTransferId: transfer.id,
+        payout: {
+          netAmount: toNumber(payout.netAmount),
+          grossAmount: toNumber(payout.grossAmount),
+          taxWithheld: toNumber(payout.taxWithheld),
+          payoutRef: payout.payoutRef,
           providerId: payout.providerId,
-          description: `${payout.payoutRef} - net payout to instructor (Stripe)`,
-          metadata: { stripeTransferId: transfer.id, txCount },
-        }),
-        ...(Number(payout.taxWithheld) > 0
-          ? [appendLedgerEntry({
-              type: 'TAX_WITHHELD',
-              amount: toNumber(payout.taxWithheld),
-              referenceId: payoutId,
-              referenceType: 'PAYOUT',
-              providerId: payout.providerId,
-              description: `${payout.payoutRef} - ATO withholding`,
-            })]
-          : []),
-        incrementLedger({
-          totalPaidOut: toNumber(payout.netAmount),
-          totalReserved: -toNumber(payout.grossAmount),
-          totalTaxWithheld: toNumber(payout.taxWithheld),
-        }),
-      ]);
-
-      // P2-7 FIX: Verify ledger didn't go negative after payout (concurrent payout race).
-      // assertSufficientBalance() runs before the Stripe transfer but a concurrent payout
-      // could have consumed the same balance in the window between the check and the transfer.
-      await assertNonNegativeBalance();
+        },
+        txCount,
+        adminUserId,
+        path: 'stripe',
+      });
 
       await logTransition(payoutId, adminUserId, 'PAYOUT_PAID', {
         payoutRef: payout.payoutRef,
@@ -534,7 +540,8 @@ export async function executePayout(
       };
     } else {
       // Bank transfer / manual: no money moves yet.
-      // Status -> PENDING_TRANSFER. Ledger updated only when admin confirms receipt.
+      // Status -> PENDING_TRANSFER. Reservation remains active.
+      // Ledger is updated only when admin confirms receipt via confirmPayoutReceived().
       await prisma.payout.update({
         where: { id: payoutId },
         data: { status: 'PENDING_TRANSFER', failureReason: null },
@@ -564,10 +571,39 @@ export async function executePayout(
   } catch (err) {
     const failureReason = err instanceof Error ? err.message : String(err);
 
-    await prisma.payout.update({
-      where: { id: payoutId },
-      data: { status: 'FAILED', failureReason, retryCount: { increment: 1 } },
-    });
+    if (stripeTransferCreated) {
+      // The Stripe transfer succeeded but the DB commit failed.
+      // The reservation MUST remain active — the payout stays PROCESSING.
+      // The next retry will call stripe.transfers.create with the same
+      // idempotency key (Stripe returns the existing transfer), then reach
+      // commitPayoutCompletion again.  Do NOT release or mark FAILED here.
+      await logTransition(payoutId, adminUserId, 'PAYOUT_FAILED', {
+        payoutRef: payout.payoutRef,
+        grossAmount: payout.grossAmount,
+        netAmount: payout.netAmount,
+        note: 'Stripe transfer succeeded; DB commit failed — reservation preserved for retry',
+      }, false, failureReason);
+
+      void sendAlert({
+        type: 'PAYOUT_COMMIT_FAILED',
+        severity: 'CRITICAL',
+        message: `Stripe transfer succeeded but DB commit failed: ${payout.payoutRef}`,
+        entityId: payoutId,
+        metadata: {
+          payoutRef: payout.payoutRef,
+          providerId: payout.providerId,
+          netAmount: payout.netAmount,
+          failureReason,
+          action: 'Payout remains PROCESSING with reservation. Retry to complete.',
+        },
+      });
+
+      throw err; // propagate so the caller knows the operation is incomplete
+    }
+
+    // Stripe was never called (or threw before the transfer was created).
+    // Safe to release the reservation and mark FAILED.
+    await releasePayoutReservation(payoutId, toNumber(payout.netAmount), failureReason);
 
     await logTransition(payoutId, adminUserId, 'PAYOUT_FAILED', {
       payoutRef: payout.payoutRef,
@@ -634,48 +670,35 @@ export async function confirmPayoutReceived(
   payoutId: string,
   adminUserId: string,
 ) {
+  // Read for validation — not yet authoritative (the transaction below is).
   const payout = await prisma.payout.findUnique({ where: { id: payoutId } });
   if (!payout) throw new Error('Payout not found');
   if (payout.status !== 'SENT') throw new Error(`Cannot confirm: payout is ${payout.status}`);
+  if (!payout.reservedAt || !payout.reservedAmount) {
+    throw new Error(
+      `Payout ${payoutId} has no active reservation — data integrity error. ` +
+      `reservedAt=${payout.reservedAt}, reservedAmount=${payout.reservedAmount}`,
+    );
+  }
 
-  await prisma.payout.update({
-    where: { id: payoutId },
-    data: {
-      status: 'PAID',
-      paidAt: new Date(),
-      confirmedAt: new Date(),
-      confirmedBy: adminUserId,
-      failureReason: null,
-    },
-  });
-
-  // Ledger updated now that money is confirmed moved
-  await Promise.all([
-    appendLedgerEntry({
-      type: 'PAYOUT_PAID',
-      amount: -Number(payout.netAmount),
-      referenceId: payoutId,
-      referenceType: 'PAYOUT',
+  // Single transaction: SENT→PAID status + PlatformLedger counters + LedgerEntry rows.
+  // If any write fails the whole transaction rolls back and the payout remains SENT
+  // with its reservation intact, so a retry is safe.
+  await commitPayoutCompletion({
+    payoutId,
+    stripeTransferId: null,
+    payout: {
+      netAmount: Number(payout.netAmount),
+      grossAmount: Number(payout.grossAmount),
+      taxWithheld: Number(payout.taxWithheld),
+      payoutRef: payout.payoutRef,
       providerId: payout.providerId,
-      description: `${payout.payoutRef} - net payout confirmed (bank transfer)`,
-      metadata: { bankReference: payout.bankReference, confirmedBy: adminUserId },
-    }),
-    ...(Number(payout.taxWithheld) > 0
-      ? [appendLedgerEntry({
-          type: 'TAX_WITHHELD',
-          amount: Number(payout.taxWithheld),
-          referenceId: payoutId,
-          referenceType: 'PAYOUT',
-          providerId: payout.providerId,
-          description: `${payout.payoutRef} - ATO withholding`,
-        })]
-      : []),
-    incrementLedger({
-      totalPaidOut: Number(payout.netAmount),
-      totalReserved: -Number(payout.grossAmount),
-      totalTaxWithheld: Number(payout.taxWithheld),
-    }),
-  ]);
+      bankReference: payout.bankReference,
+    },
+    txCount: 0, // txCount unused in bank-transfer description
+    adminUserId,
+    path: 'manual',
+  });
 
   await logTransition(payoutId, adminUserId, 'PAYOUT_CONFIRMED', {
     payoutRef: payout.payoutRef,
