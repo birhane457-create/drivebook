@@ -318,6 +318,43 @@ export async function buildPayout(
   }
 }
 
+// ─── Shared Stripe transfer parameter builder ────────────────────────────────
+//
+// Used by both executePayout() and recoverProcessingPayout().
+// The parameters MUST be identical for Stripe idempotency to work correctly:
+// re-using an idempotency key with any differing parameter causes Stripe to
+// return a 400 IdempotencyError rather than the original transfer.
+//
+// Do not add conditional or recovery-specific fields here.
+
+function buildStripeTransferParams(
+  payout: {
+    id: string;
+    payoutRef: string;
+    netAmount: Decimal;
+    taxWithheld: Decimal;
+    stripeAccountId: string;
+    providerId: string;
+  },
+  txCount: number,
+  adminUserId: string,
+): Parameters<typeof stripe.transfers.create>[0] {
+  return {
+    amount: Math.round(toNumber(toDecimal(payout.netAmount)) * 100),
+    currency: 'aud',
+    destination: payout.stripeAccountId,
+    description: `DriveBook ${payout.payoutRef} - ${txCount} lesson(s)`,
+    metadata: {
+      payoutRef: payout.payoutRef,
+      payoutId: payout.id,
+      providerId: payout.providerId,
+      transactionCount: String(txCount),
+      taxWithheld: toFixed(toDecimal(payout.taxWithheld), 2),
+      adminId: adminUserId,
+    },
+  };
+}
+
 // ─── Recovery path for PROCESSING payouts with an active reservation ──────────
 //
 // Called by executePayout() when the target payout is already PROCESSING and
@@ -325,52 +362,72 @@ export async function buildPayout(
 //
 //   A. commitPayoutCompletion() failed AFTER Stripe returned a transfer ID.
 //      payout.stripeTransferId is already set on the row.
-//      We retrieve that transfer directly — this is authoritative.
+//      Retrieve the transfer directly — this is fully authoritative.
 //
 //   B. Network timeout or Stripe 5xx before we received any response.
 //      payout.stripeTransferId is null.
-//      We re-call stripe.transfers.create() with the SAME idempotencyKey.
-//      Stripe's idempotency guarantee (24h retention window) means this
-//      returns the existing transfer if one was created, or creates a new one
-//      if the original request never reached Stripe.  Either way money moves
-//      at most once.  The reservation is already active so the balance is safe.
+//      Re-call stripe.transfers.create() with the SAME idempotency key and
+//      IDENTICAL parameters (via buildStripeTransferParams).
+//      Stripe returns the original transfer if one exists, or creates a new one
+//      if the original never reached Stripe.  Money moves at most once.
+//      This is only safe within Stripe's 24-hour idempotency retention window.
+//      If reservedAt is older than STRIPE_IDEMPOTENCY_SAFE_WINDOW_MS, the
+//      outcome is indeterminate — preserve the reservation and require manual
+//      investigation.
 //
 // This function NEVER releases a reservation based on a negative search result.
 // If the Stripe outcome cannot be established, the reservation is preserved and
 // the error propagates — requiring manual investigation rather than risking
 // a double-payment.
-//
-// Concurrency: commitPayoutCompletion() uses updateMany(status IN [PROCESSING,SENT],
-// reservedAt NOT NULL) as an atomic guard, so simultaneous recovery calls
-// produce at most one successful commit.
+
+// Stripe retains idempotency keys for 24 hours.  We use a 23-hour safe window
+// to give 1 hour of operational margin before automatic recovery is unsafe.
+const STRIPE_IDEMPOTENCY_SAFE_WINDOW_MS = 23 * 60 * 60 * 1000;
 
 async function recoverProcessingPayout(
   payoutId: string,
   adminUserId: string,
 ): Promise<PayoutResult> {
-  // Acquire a recovery lock before doing anything else.
-  // We stamp stripeTransferId optimistically and use the conditional update in
-  // commitPayoutCompletion() as the ultimate guard, but we also want to prevent
-  // two concurrent recovery attempts from both reaching Stripe.
-  // We achieve this by updating the payout with a no-op conditional update that
-  // only succeeds if the row is still PROCESSING with no stripeTransferId being
-  // written concurrently.  If another recovery is mid-flight, we return the
-  // current state without acting.
-  const lockResult = await prisma.payout.updateMany({
-    where: {
-      id: payoutId,
-      status: 'PROCESSING',
-      reservedAt: { not: null },
-    },
-    data: {
-      // Touch updatedAt to claim this recovery attempt.
-      // This is a no-op for data but serves as a serialisation point.
-      updatedAt: new Date(),
-    },
+  // ── Recovery claim (SELECT FOR UPDATE) ──────────────────────────────────────
+  // Serialises concurrent recovery attempts at the database row level.
+  // The first caller acquires the FOR UPDATE lock and writes a unique claim token
+  // to reservationId.  Any concurrent caller also issues SELECT FOR UPDATE but
+  // blocks until the first transaction commits.  After the first commit, the
+  // second caller reads a changed reservationId (or a non-PROCESSING status)
+  // and returns without taking action.
+  //
+  // commitPayoutCompletion() provides a second atomic guard: its own updateMany
+  // will find 0 rows if the first recovery already committed PAID.
+  const claimToken = `RCLAIM_${Date.now()}_${payoutId.slice(-8)}`;
+  let claimSucceeded = false;
+
+  await prisma.$transaction(async (tx) => {
+    // Lock the row exclusively.
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "Payout"
+      WHERE id = ${payoutId}
+        AND status = 'PROCESSING'
+        AND "reservedAt" IS NOT NULL
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
+      // Row is gone, not PROCESSING, or has no reservation — nothing to claim.
+      return;
+    }
+
+    // Write the claim token.  Any second caller blocking on FOR UPDATE will
+    // commit after us and find the row in a different state.
+    await tx.payout.update({
+      where: { id: payoutId },
+      data: { reservationId: claimToken },
+    });
+
+    claimSucceeded = true;
   });
 
-  if (lockResult.count === 0) {
-    // Another process is completing or the payout already moved out of PROCESSING.
+  if (!claimSucceeded) {
+    // Another recovery attempt is in progress or the payout already moved.
     const current = await prisma.payout.findUnique({ where: { id: payoutId } });
     if (!current) throw new Error(`Recovery: payout ${payoutId} not found`);
     return {
@@ -390,7 +447,7 @@ async function recoverProcessingPayout(
     where: { id: payoutId },
     include: { transactions: { select: { transactionId: true } } },
   });
-  if (!payout) throw new Error(`Recovery: payout ${payoutId} not found`);
+  if (!payout) throw new Error(`Recovery: payout ${payoutId} not found after claim`);
 
   const txCount = payout.transactions.length;
   const isStripe = payout.payoutMethod === 'stripe_connect' && payout.stripeAccountId;
@@ -400,6 +457,7 @@ async function recoverProcessingPayout(
     reservedAt: payout.reservedAt?.toISOString(),
     existingStripeTransferId: payout.stripeTransferId,
     scenario: payout.stripeTransferId ? 'A_DB_COMMIT_FAILED' : 'B_TIMEOUT_UNKNOWN',
+    claimToken,
   });
 
   if (!isStripe) {
@@ -428,43 +486,71 @@ async function recoverProcessingPayout(
 
   try {
     if (payout.stripeTransferId) {
-      // Scenario A: We already wrote the transfer ID to the database.
-      // Retrieve it directly — this is fully authoritative.
+      // Scenario A: stripeTransferId already written to the database.
+      // The DB commit failed after Stripe responded.  Retrieve directly.
       resolvedTransfer = await stripe.transfers.retrieve(payout.stripeTransferId);
+
     } else {
-      // Scenario B: Timeout before we received Stripe's response.
-      // Re-call stripe.transfers.create() with the SAME idempotency key.
+      // Scenario B: No stripeTransferId — timeout before we got a response.
       //
-      // Stripe's idempotency contract (24-hour retention window):
-      //   - If the original request completed:  returns the existing transfer.
-      //   - If the original request did not complete: creates a new transfer.
-      //   - Either way: money moves at most once.
-      //
-      // We NEVER release a reservation in recovery based on a negative search —
-      // only this deterministic create-or-retrieve is authoritative.
-      resolvedTransfer = await stripe.transfers.create(
-        {
-          amount: Math.round(toNumber(toDecimal(payout.netAmount)) * 100),
-          currency: 'aud',
-          destination: payout.stripeAccountId!,
-          description: `DriveBook ${payout.payoutRef} - ${txCount} lesson(s) [recovery]`,
+      // Safety check: Stripe retains idempotency keys for 24 hours.
+      // We enforce a 23-hour window (1-hour margin).  Outside the window the
+      // idempotency key may have expired; replaying the same key could then
+      // create a new transfer even if the original succeeded.  In that case
+      // the reservation does NOT prevent double-payment — it only prevents
+      // other payouts from consuming the same funds.
+      // We therefore refuse automatic recovery outside the window and require
+      // manual reconciliation.
+      const reservedAtMs = payout.reservedAt!.getTime();
+      const ageMs = Date.now() - reservedAtMs;
+
+      if (ageMs > STRIPE_IDEMPOTENCY_SAFE_WINDOW_MS) {
+        const ageHours = (ageMs / 3_600_000).toFixed(1);
+        const msg =
+          `Recovery: payout ${payout.payoutRef} has been PROCESSING for ${ageHours}h ` +
+          `(> 23h idempotency safety window). ` +
+          `Cannot safely replay idempotency key — manual reconciliation required. ` +
+          `Idempotency key: ${payout.idempotencyKey}`;
+
+        await logTransition(payoutId, adminUserId, 'PAYOUT_RECOVERY_EXPIRED', {
+          payoutRef: payout.payoutRef,
+          ageHours,
+          idempotencyKey: payout.idempotencyKey,
+          note: 'Reservation preserved — manual reconciliation required',
+        }, false, msg);
+
+        void sendAlert({
+          type: 'PAYOUT_COMMIT_FAILED',
+          severity: 'CRITICAL',
+          message: `Payout recovery window expired — manual reconciliation required: ${payout.payoutRef}`,
+          entityId: payoutId,
           metadata: {
             payoutRef: payout.payoutRef,
-            payoutId: payout.id,
             providerId: payout.providerId,
-            transactionCount: String(txCount),
-            taxWithheld: toFixed(toDecimal(payout.taxWithheld), 2),
-            adminId: adminUserId,
-            recoveryAttempt: 'true',
+            netAmount: payout.netAmount,
+            ageHours,
+            idempotencyKey: payout.idempotencyKey,
+            action: 'Query Stripe for this idempotency key and either commit or release manually.',
           },
-        },
+        });
+
+        throw new Error(msg);
+      }
+
+      // Within the safe window: re-call with IDENTICAL parameters.
+      // buildStripeTransferParams() produces the same body as the original call.
+      resolvedTransfer = await stripe.transfers.create(
+        buildStripeTransferParams(
+          { ...payout, stripeAccountId: payout.stripeAccountId! },
+          txCount,
+          adminUserId,
+        ),
         { idempotencyKey: payout.idempotencyKey },
       );
     }
   } catch (stripeErr) {
     // Could not establish the transfer outcome.
     // Preserve the reservation — do NOT release, do NOT mark FAILED.
-    // Requires manual investigation.
     const reason = stripeErr instanceof Error ? stripeErr.message : String(stripeErr);
     await logTransition(payoutId, adminUserId, 'PAYOUT_RECOVERY_FAILED', {
       payoutRef: payout.payoutRef,
@@ -481,6 +567,7 @@ async function recoverProcessingPayout(
         providerId: payout.providerId,
         netAmount: payout.netAmount,
         failureReason: reason,
+        idempotencyKey: payout.idempotencyKey,
         action: 'Reservation preserved. Query Stripe manually for idempotency key: ' + payout.idempotencyKey,
       },
     });
@@ -491,8 +578,7 @@ async function recoverProcessingPayout(
     );
   }
 
-  // Transfer is now confirmed (retrieved or idempotently created).
-  // Complete the DB writes in a single transaction.
+  // Transfer confirmed — complete the DB writes in a single transaction.
   await commitPayoutCompletion({
     payoutId,
     stripeTransferId: resolvedTransfer.id,
@@ -524,23 +610,6 @@ async function recoverProcessingPayout(
     netAmount: toNumber(payout.netAmount),
     gstAmount: toNumber(payout.gstAmount),
     stripeTransferId: resolvedTransfer.id,
-    transactionCount: txCount,
-  };
-}
-
-    note: 'Recovered via existing Stripe transfer',
-    transactionCount: txCount,
-  });
-
-  return {
-    payoutId: payout.id,
-    payoutRef: payout.payoutRef,
-    status: 'PAID',
-    grossAmount: toNumber(payout.grossAmount),
-    taxWithheld: toNumber(payout.taxWithheld),
-    netAmount: toNumber(payout.netAmount),
-    gstAmount: toNumber(payout.gstAmount),
-    stripeTransferId: existingTransfer.id,
     transactionCount: txCount,
   };
 }
@@ -666,20 +735,11 @@ export async function executePayout(
       // we have crossed this point.
 
       const transfer = await stripe.transfers.create(
-        {
-          amount: Math.round(toNumber(toDecimal(payout.netAmount)) * 100),
-          currency: 'aud',
-          destination: verifiedAccountId,
-          description: `DriveBook ${payout.payoutRef} - ${txCount} lesson(s)`,
-          metadata: {
-            payoutRef: payout.payoutRef,
-            payoutId: payout.id,
-            providerId: payout.providerId,
-            transactionCount: String(txCount),
-            taxWithheld: toFixed(toDecimal(payout.taxWithheld), 2),
-            adminId: adminUserId,
-          },
-        },
+        buildStripeTransferParams(
+          { ...payout, stripeAccountId: verifiedAccountId },
+          txCount,
+          adminUserId,
+        ),
         { idempotencyKey: payout.idempotencyKey },
       );
       // ← Money has moved (or was already moved on a prior attempt).
