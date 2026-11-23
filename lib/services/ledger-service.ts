@@ -275,6 +275,10 @@ export async function commitPayoutCompletion(
       data: {
         status: 'PAID',
         paidAt: new Date(),
+        // Clear reservation fields — funds are now settled in totalPaidOut.
+        reservedAt: null,
+        reservedAmount: null,
+        reservationId: null,
         ...(stripeTransferId ? { stripeTransferId } : {}),
         ...(path === 'manual' ? { confirmedAt: new Date(), confirmedBy: adminUserId } : {}),
         failureReason: null,
@@ -342,37 +346,65 @@ export async function commitPayoutCompletion(
 
 // ─── Release reservation on definitive failure (PH5-SCH-22a Phase 1) ─────────
 //
-// Sets status = FAILED and returns the reserved amount to the available pool.
-// No-ops if the payout is already in a terminal state (idempotent).
+// Sets status=FAILED, clears all three reservation fields, and decrements
+// totalPayoutReserved by the PERSISTED reservedAmount (not the caller's argument,
+// which may differ on a retry after a partial update).
+//
+// Clearing reservedAt/reservedAmount/reservationId is essential: a subsequent
+// retry on the now-FAILED payout must be able to create a fresh reservation.
+// If those fields are left populated, reservePayoutFunds() will see reservedAt≠null,
+// skip the balance check, skip incrementing totalPayoutReserved, and let the
+// payout proceed without its funds counted as reserved.
+//
+// No-ops if the payout is not currently in PROCESSING with an active reservation
+// (idempotent — safe to call twice).
+//
+// The caller-supplied netAmount is used only as a fallback if reservedAmount is
+// somehow null (should never happen once a reservation is stamped).
 
 export async function releasePayoutReservation(
   payoutId: string,
-  netAmount: number,
+  netAmountFallback: number,
   failureReason: string,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    // Lock PlatformLedger
+    // Lock PlatformLedger before reading the payout to prevent a concurrent
+    // reservePayoutFunds() from claiming the about-to-be-released funds.
     await tx.$queryRaw`
       SELECT 1 FROM "PlatformLedger" WHERE key = 'default' FOR UPDATE
     `;
 
-    const updated = await tx.payout.updateMany({
-      where: { id: payoutId, status: 'PROCESSING', reservedAt: { not: null } },
+    // Read the persisted reservedAmount while holding the lock.
+    const existing = await tx.payout.findUnique({
+      where: { id: payoutId },
+      select: { status: true, reservedAt: true, reservedAmount: true },
+    });
+
+    if (!existing || existing.status !== 'PROCESSING' || !existing.reservedAt) {
+      // Already terminal or no reservation — nothing to release.
+      return;
+    }
+
+    const amountToRelease = existing.reservedAmount
+      ? Number(existing.reservedAmount)
+      : netAmountFallback;
+
+    // Clear reservation fields so a future retry can create a new reservation.
+    await tx.payout.update({
+      where: { id: payoutId },
       data: {
         status: 'FAILED',
         failureReason,
         retryCount: { increment: 1 },
+        reservedAt: null,
+        reservedAmount: null,
+        reservationId: null,
       },
     });
 
-    if (updated.count === 0) {
-      // Already terminal (PAID, FAILED, etc.) — nothing to release
-      return;
-    }
-
     await tx.platformLedger.update({
       where: { key: 'default' },
-      data: { totalPayoutReserved: { decrement: netAmount } },
+      data: { totalPayoutReserved: { decrement: amountToRelease } },
     });
   });
 }
