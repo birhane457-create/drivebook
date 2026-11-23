@@ -746,19 +746,22 @@ export async function recordPaymentCollected(
   amount: number,
   providerPayout: number,
 ) {
-  await Promise.all([
-    appendLedgerEntry({
+  // PH5-SCH-22 FIX: Wrap LedgerEntry + PlatformLedger writes in transaction
+  // to prevent partial failures that corrupt totalCollected.
+  await prisma.$transaction(async (tx) => {
+    await appendLedgerEntry({
       type: 'PAYMENT_COLLECTED',
       amount,
       referenceId: bookingId,
       referenceType: 'BOOKING',
       description: `Booking ${bookingId} payment captured`,
-    }),
-    incrementLedger({
+    }, tx);
+    
+    await incrementLedger({
       totalCollected: amount,
       totalReserved: providerPayout,
-    }),
-  ]);
+    }, tx);
+  });
 }
 
 // Record refund issued (called from refund route)

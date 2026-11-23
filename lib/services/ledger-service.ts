@@ -13,6 +13,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { sendAlert } from '@/lib/services/alert-service';
+import type { Prisma } from '@prisma/client';
 
 // ─── Ledger entry types ───────────────────────────────────────────────────────
 
@@ -29,29 +30,37 @@ export type LedgerEntryType =
 
 // ─── Append a ledger entry (never mutates existing entries) ───────────────────
 
-export async function appendLedgerEntry(entry: {
-  type: LedgerEntryType;
-  amount: number;          // positive = money in, negative = money out
-  referenceId: string;
-  referenceType: 'BOOKING' | 'PAYOUT' | 'TRANSACTION' | 'ADJUSTMENT';
-  providerId?: string;
-  description?: string;
-  metadata?: Record<string, unknown>;
-}) {
-  return prisma.ledgerEntry.create({ data: { ...entry, currency: 'AUD', metadata: entry.metadata as any } });
+export async function appendLedgerEntry(
+  entry: {
+    type: LedgerEntryType;
+    amount: number;          // positive = money in, negative = money out
+    referenceId: string;
+    referenceType: 'BOOKING' | 'PAYOUT' | 'TRANSACTION' | 'ADJUSTMENT';
+    providerId?: string;
+    description?: string;
+    metadata?: Record<string, unknown>;
+  },
+  txClient?: Prisma.TransactionClient
+) {
+  const client = txClient ?? prisma;
+  return client.ledgerEntry.create({ data: { ...entry, currency: 'AUD', metadata: entry.metadata as any } });
 }
 
 // ─── Update the singleton PlatformLedger ─────────────────────────────────────
 
-export async function incrementLedger(delta: {
-  totalCollected?: number;
-  totalReserved?: number;
-  totalPaidOut?: number;
-  totalRefunded?: number;
-  totalTaxWithheld?: number;
-}) {
+export async function incrementLedger(
+  delta: {
+    totalCollected?: number;
+    totalReserved?: number;
+    totalPaidOut?: number;
+    totalRefunded?: number;
+    totalTaxWithheld?: number;
+  },
+  txClient?: Prisma.TransactionClient
+) {
+  const client = txClient ?? prisma;
   // Upsert the singleton, then increment each field atomically
-  await prisma.platformLedger.upsert({
+  await client.platformLedger.upsert({
     where: { key: 'default' },
     create: {
       key: 'default',
