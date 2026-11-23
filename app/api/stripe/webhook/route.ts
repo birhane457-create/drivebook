@@ -624,7 +624,7 @@ async function handleCheckoutCompleted(
             logger.info(`Package wallet (Book Later): face=$${packageFaceValue} / paid=$${amountPaid} / promo=+$${drivebookPromotion} / pkg_fee=$${packagePlatformFee} for userId=${userId}`);
 
             // FinancialLedger — record wallet credit INSIDE transaction (atomic with wallet confirmation)
-            const wallet = await tx.clientWallet.findUnique({ where: { userId } });
+            // wallet already fetched/created above, no need to query again
             if (wallet) {
               const walletTx = await tx.walletTransaction.findFirst({
                 where: { walletId: wallet.id, type: 'CREDIT', status: 'CONFIRMED',

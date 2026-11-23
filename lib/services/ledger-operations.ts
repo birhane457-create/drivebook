@@ -15,7 +15,8 @@ import {
   ReferenceType,
   createLedgerEntriesIdempotently,
 } from './ledger';
-import { Prisma, Decimal } from '@prisma/client/runtime/library';
+import { Prisma } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 import {
   toDecimal,
   toNumber,
