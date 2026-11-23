@@ -230,24 +230,69 @@ await (prisma as any).bookingIdempotencyKey.upsert({
 
 ---
 
-## Recommendation
+## Recommended Status
 
-**Status:** ✅ **SOURCE-VERIFIED, FIX-COMPLETE**
+**Finding:** PH5-SCH-36 Book Later Idempotency  
+**Status:** ⏳ **FIX-IMPLEMENTED, SOURCE-VERIFIED, RUNTIME-TEST-PENDING**  
+**Verification:** SOURCE-VERIFIED (dual-layer protection confirmed)  
+**Risk Assessment:** LOW (defense-in-depth architecture)
 
-The fix is correctly implemented with defense-in-depth:
-1. Stripe's idempotency prevents duplicate sessions at API level
-2. DB `upsert` ensures sequential retries replay stored response
-3. Pre-check at route entry ensures early exit on replay
+### Justification
 
-**Next Steps:**
-1. ⏳ Execute integration tests (R3, R4) when test infrastructure available
-2. ✅ Mark PH5-SCH-36 as CLOSED in AUDIT-MASTER-TRACKER.md
+1. **Source Verification:** ✅ COMPLETE
+   - Stripe idempotency key passed to API (line 740)
+   - `BookingIdempotencyKey` upsert after session creation (lines 786-795)
+   - Pre-check at route entry (line 133)
+   - Dual-layer protection confirmed at HEAD 7665efcdc
 
-**Risk Assessment:** LOW  
-The dual-layer protection (Stripe + DB) makes successful exploitation unlikely. Even if a race occurs, Stripe's idempotency guarantees the same session is returned. The window for creating duplicate sessions is closed.
+2. **Runtime Verification:** ⏳ PENDING
+   - Tests written (R3 concurrent, R4 sequential)
+   - Blocked by infrastructure requirement: Next.js server on port 3001
+   - Tests verify HTTP-level idempotency behavior
+   - Source verification shows correct implementation
+
+3. **Risk Assessment:** LOW
+   - Stripe's idempotency guarantees same session for concurrent requests
+   - DB upsert ensures sequential retries replay stored response
+   - Window for duplicate sessions effectively closed
+   - Even if race occurs, Stripe deduplicates at API level
+
+### Closure Options
+
+**Option A: Close as SOURCE-VERIFIED** (Recommended)
+- Status: CLOSED
+- Verification: SOURCE-VERIFIED
+- Note: "HTTP-level tests (R3, R4) pending Next.js test infrastructure; source verification shows dual-layer protection with Stripe idempotency + DB upsert"
+- Justification: Defense-in-depth architecture verified in code; risk assessed as LOW
+
+**Option B: Keep OPEN pending runtime test execution**
+- Status: OPEN (FIX-IMPLEMENTED)
+- Verification: SOURCE-VERIFIED, awaiting runtime execution
+- Next step: Execute R3/R4 when test infrastructure available
+- Justification: Maintains strict standard of runtime verification for all findings
+
+### Infrastructure Requirement for Runtime Test
+
+**Prerequisites:**
+1. Next.js dev server running on port 3001: `npm run dev`
+2. `TEST_DATABASE_URL` pointing to isolated PostgreSQL (not production)
+3. `STRIPE_SECRET_KEY` set to Stripe test key (`sk_test_...`)
+4. Database migrations applied: `npx prisma migrate deploy`
+
+**Execution command:**
+```bash
+TEST_SERVER_URL=http://localhost:3001 \
+TEST_DATABASE_URL=postgresql://postgres:DEBE@localhost:5432/drivebook_test \
+npx vitest run __tests__/integration/booking-group-regression.test.ts
+```
+
+**Expected result:** R3 and R4 tests pass
+- R3: Concurrent requests return same `checkoutUrl`
+- R4: Sequential retry replays stored response without calling Stripe
 
 ---
 
-**Reviewed by:** Kiro AI  
+**Reviewed by:** Kiro AI + User (independent source verification)  
 **Review Date:** 2026-11-22  
-**Next Review:** After test execution
+**Recommendation:** Close as SOURCE-VERIFIED (Option A) OR keep OPEN pending runtime test (Option B)  
+**User Decision:** Pending
