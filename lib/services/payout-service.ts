@@ -772,8 +772,10 @@ export async function recordRefundIssued(
   providerId: string,
   postPayout: boolean,
 ) {
-  await Promise.all([
-    appendLedgerEntry({
+  // PH5-SCH-22 RELATED: Wrap refund ledger writes in transaction
+  // Same atomicity requirement as recordPaymentCollected
+  await prisma.$transaction(async (tx) => {
+    await appendLedgerEntry({
       type: 'REFUND_ISSUED',
       amount: -refundAmount,
       referenceId: bookingId,
@@ -781,20 +783,22 @@ export async function recordRefundIssued(
       providerId,
       description: `Refund for booking ${bookingId}${postPayout ? ' (post-payout adjustment)' : ''}`,
       metadata: { postPayout },
-    }),
-    incrementLedger({ totalRefunded: refundAmount }),
-    ...(postPayout
-      ? [appendLedgerEntry({
-          type: 'ADJUSTMENT',
-          amount: -refundAmount,
-          referenceId: bookingId,
-          referenceType: 'ADJUSTMENT',
-          providerId,
-          description: `Post-payout deduction for booking ${bookingId} - to be recovered from next payout`,
-          metadata: { postPayout: true },
-        })]
-      : []),
-  ]);
+    }, tx);
+    
+    await incrementLedger({ totalRefunded: refundAmount }, tx);
+    
+    if (postPayout) {
+      await appendLedgerEntry({
+        type: 'ADJUSTMENT',
+        amount: -refundAmount,
+        referenceId: bookingId,
+        referenceType: 'ADJUSTMENT',
+        providerId,
+        description: `Post-payout deduction for booking ${bookingId} - to be recovered from next payout`,
+        metadata: { postPayout: true },
+      }, tx);
+    }
+  });
 
   await assertNonNegativeBalance();
 }
