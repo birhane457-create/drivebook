@@ -1361,6 +1361,24 @@ async function handleBookingPaymentSuccess(
 
               const remaining = packageFaceValue - Number(booking.price);
               logger.info(`Package wallet (Book Now): face=$${packageFaceValue} / first_lesson=-$${booking.price} / promo=+$${drivebookPromotion} / pkg_fee=$${packagePlatformFee} / remaining=$${remaining.toFixed(2)} for userId=${userId}`);
+
+              // FinancialLedger — Book Now package credit INSIDE transaction (atomic with wallet confirmation)
+              const creditedWalletTx = await tx.walletTransaction.findFirst({
+                where: { walletId: wallet.id, type: 'CREDIT', status: 'CONFIRMED',
+                  metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentId } },
+                orderBy: { createdAt: 'desc' },
+              });
+              if (creditedWalletTx) {
+                const { recordWalletCredit } = await import('@/lib/services/ledger-operations');
+                await recordWalletCredit({
+                  walletTransactionId: creditedWalletTx.id,
+                  userId,
+                  amount: packageFaceValue,
+                  stripePaymentIntentId: paymentIntentId,
+                  createdBy: 'STRIPE_WEBHOOK',
+                  txClient: tx,
+                });
+              }
             } else {
               // Single lesson — confirm any pending wallet transactions
               await tx.walletTransaction.updateMany({
@@ -1376,33 +1394,6 @@ async function handleBookingPaymentSuccess(
         }, SERIALIZABLE_TX);
     }, { operationName: 'webhook-booking-payment' });
 
-    // FinancialLedger — Book Now package credit (unconditional, non-critical)
-    if (userId && packageFaceValue) {
-      try {
-        const wallet = await prisma.clientWallet.findUnique({ where: { userId } });
-        if (wallet) {
-          const walletTx = await prisma.walletTransaction.findFirst({
-            where: { walletId: wallet.id, type: 'CREDIT', status: 'CONFIRMED',
-              metadata: { path: ['stripePaymentIntentId'], equals: paymentIntentId } },
-            orderBy: { createdAt: 'desc' },
-          });
-          if (walletTx) {
-            const { recordWalletCredit } = await import('@/lib/services/ledger-operations');
-            await recordWalletCredit({
-              walletTransactionId: walletTx.id,
-              userId,
-              amount: packageFaceValue,
-              stripePaymentIntentId: paymentIntentId,
-              createdBy: 'STRIPE_WEBHOOK',
-            });
-          }
-        }
-      } catch (ledgerErr: any) {
-        if (!ledgerErr?.message?.includes('idempotency')) {
-          logger.error('[FinancialLedger] Book Now recordWalletCredit failed (non-critical):', { error: ledgerErr?.message });
-        }
-      }
-    }
   } catch (err) {
     // Handle expired booking error - issue refund OUTSIDE transaction (P2034 retry-safe)
     if (err instanceof ExpiredBookingError) {
