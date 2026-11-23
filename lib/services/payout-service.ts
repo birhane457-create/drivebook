@@ -408,7 +408,7 @@ async function recoverProcessingPayout(
   // reservation identity throughout the recovery lifecycle.
 
   const RECOVERY_CLAIM_TTL_MS = 10 * 60 * 1000; // 10 minutes
-  const claimToken = `RCLAIM_${Date.now()}_${payoutId.slice(-8)}`;
+  const claimToken = crypto.randomUUID();
   const claimExpiresAt = new Date(Date.now() + RECOVERY_CLAIM_TTL_MS);
   let claimSucceeded = false;
 
@@ -493,10 +493,19 @@ async function recoverProcessingPayout(
   if (!isStripe) {
     // Manual/bank payout stuck in PROCESSING — reservation is intact.
     // Move it back to PENDING_TRANSFER so the admin flow can continue.
-    await prisma.payout.updateMany({
-      where: { id: payoutId, status: 'PROCESSING' },
-      data: { status: 'PENDING_TRANSFER', failureReason: null },
+    // Clear the recovery claim in the same update — no dangling claim after transition.
+    const moved = await prisma.payout.updateMany({
+      where: { id: payoutId, status: 'PROCESSING', recoveryClaimToken: claimToken },
+      data: {
+        status: 'PENDING_TRANSFER',
+        failureReason: null,
+        recoveryClaimToken: null,
+        recoveryClaimExpiresAt: null,
+      },
     });
+    if (moved.count === 0) {
+      throw new Error(`Recovery: could not transition manual payout ${payoutId} to PENDING_TRANSFER — claim no longer owned`);
+    }
     return {
       payoutId: payout.id,
       payoutRef: payout.payoutRef,

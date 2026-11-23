@@ -271,10 +271,21 @@ export async function commitPayoutCompletion(
 
     // Conditional status update — guard prevents duplicate completion.
     // Also clears financial reservation fields and the recovery claim (if any).
+    //
+    // When recoveryClaimToken is supplied (recovery path), it is included in
+    // the WHERE clause so the update matches ONLY if this worker still owns the
+    // claim.  If another worker has taken over (expired claim, concurrent recovery),
+    // the update matches 0 rows and the transaction rolls back — protecting both
+    // the ledger and the PlatformLedger counters that follow.
+    //
+    // The manual path (confirmPayoutReceived) does not use a recovery claim, so
+    // it uses the broader status guard (PROCESSING | SENT) with no token check.
     const updated = await tx.payout.updateMany({
       where: {
         id: payoutId,
-        status: { in: ['PROCESSING', 'SENT'] },
+        ...(recoveryClaimToken
+          ? { status: 'PROCESSING', recoveryClaimToken }   // recovery: enforce ownership
+          : { status: { in: ['PROCESSING', 'SENT'] } }),   // normal / manual: no token
         reservedAt: { not: null },
       },
       data: {
@@ -294,7 +305,11 @@ export async function commitPayoutCompletion(
     });
 
     if (updated.count === 0) {
-      throw new Error('Payout already completed or reservation missing — cannot commit');
+      throw new Error(
+        recoveryClaimToken
+          ? 'Recovery claim no longer owned by this worker — completion rejected'
+          : 'Payout already completed or reservation missing — cannot commit'
+      );
     }
 
     // Convert reservation → settled payout in the aggregates.
