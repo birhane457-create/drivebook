@@ -70,16 +70,16 @@ const SERIALIZABLE_TX = {
  * - Invoice events (invoice.*)
  * 
  * Security Features:
- * Ã¢Å“â€¦ Webhook signature verification (FIRST, before rate limiting)
- * Ã¢Å“â€¦ Idempotency protection (atomic within transaction)
- * Ã¢Å“â€¦ Rate limiting (by event ID, not IP)
- * Ã¢Å“â€¦ Audit logging
- * Ã¢Å“â€¦ Atomic operations with Serializable isolation
+ * âœ… Webhook signature verification (FIRST, before rate limiting)
+ * âœ… Idempotency protection (atomic within transaction)
+ * âœ… Rate limiting (by event ID, not IP)
+ * âœ… Audit logging
+ * âœ… Atomic operations with Serializable isolation
  */
 export async function POST(req: NextRequest) {
   try {
     // SECURITY: Verify webhook signature FIRST
-    // This is cryptographic and cheap Ã¢â‚¬â€ do it before any DB operations
+    // This is cryptographic and cheap â€” do it before any DB operations
     const event = await verifyStripeWebhook(req);
 
     // SECURITY: Rate limiting by event ID (not IP)
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
     const rateLimitResult = await checkRateLimitStrict(webhookRateLimit, rateLimitId);
 
     if (!rateLimitResult.success) {
-      logger.error('Ã°Å¸Å¡Â¨ Webhook rate limit exceeded', { rateLimitId });
+      logger.error('ðŸš¨ Webhook rate limit exceeded', { rateLimitId });
       return NextResponse.json(
         { error: 'Too many webhook requests' },
         { status: 429, headers: rateLimitResult.headers }
@@ -111,13 +111,13 @@ export async function POST(req: NextRequest) {
       await handleStripeEvent(event, idempotencyKey);
     } catch (handlerErr) {
       if (handlerErr instanceof DuplicateWebhookEventError) {
-        logger.info('Ã¢Å“â€¦ Concurrent webhook delivery lost the idempotency race', {
+        logger.info('âœ… Concurrent webhook delivery lost the idempotency race', {
           idempotencyKey,
         });
         return NextResponse.json({ received: true, duplicate: true });
       }
 
-      logger.error(`Ã°Å¸Å¡Â¨ Webhook handler error for ${event.type}`, {
+      logger.error(`ðŸš¨ Webhook handler error for ${event.type}`, {
         error: handlerErr instanceof Error ? handlerErr.message : String(handlerErr),
       });
       // Return 500 so Stripe retries delivery for transient errors (DB blips, network issues).
@@ -125,18 +125,18 @@ export async function POST(req: NextRequest) {
       // Non-retryable errors (e.g. amount mismatch, invalid state) are logged above and should
       // be investigated via Stripe dashboard event logs.
       return NextResponse.json(
-        { error: 'Webhook handler failed Ã¢â‚¬â€ will retry', handlerError: true },
+        { error: 'Webhook handler failed â€” will retry', handlerError: true },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ received: true });
   } catch (error: any) {
-    logger.error('Ã°Å¸Å¡Â¨ Webhook error', {
+    logger.error('ðŸš¨ Webhook error', {
       error: error instanceof Error ? error.message : String(error),
     });
 
-    // Signature verification failure Ã¢â‚¬â€ return 400 (not 500) so Stripe knows it's a bad request
+    // Signature verification failure â€” return 400 (not 500) so Stripe knows it's a bad request
     if (error.message?.includes('signature') || error.message?.includes('Invalid webhook')) {
       return NextResponse.json(
         { error: 'Invalid webhook signature' },
@@ -191,7 +191,7 @@ async function verifyStripeWebhook(req: NextRequest): Promise<Stripe.Event> {
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err: any) {
-    logger.error('Ã°Å¸Å¡Â¨ Webhook verification failed', { error: err?.message ?? String(err) });
+    logger.error('ðŸš¨ Webhook verification failed', { error: err?.message ?? String(err) });
     throw new Error(`Invalid webhook signature: ${err.message}`);
   }
 }
@@ -200,7 +200,7 @@ async function verifyStripeWebhook(req: NextRequest): Promise<Stripe.Event> {
  * Route events to appropriate handlers
  */
 async function handleStripeEvent(event: Stripe.Event, idempotencyKey: string): Promise<void> {
-  logger.info(`Ã°Å¸â€œÂ¥ Processing webhook: ${event.type}`);
+  logger.info(`ðŸ“¥ Processing webhook: ${event.type}`);
 
   // Stripe's TS union may lag behind some event types; treat as string for routing.
   switch (event.type as string) {
@@ -273,7 +273,7 @@ async function handleStripeEvent(event: Stripe.Event, idempotencyKey: string): P
       break;
 
     default:
-      logger.info(`Ã¢â€žÂ¹Ã¯Â¸Â Unhandled event type: ${event.type}`);
+      logger.info(`â„¹ï¸ Unhandled event type: ${event.type}`);
       // Still record it for idempotency
       await recordWebhookEvent(prisma, idempotencyKey, event.type, event.id, {});
   }
@@ -290,14 +290,14 @@ async function handleCheckoutCompleted(
   const { customer, metadata, payment_intent } = checkoutSession;
   const { type, providerId, userId, hours, packageType, hourlyRate: hourlyRateStr, discountPct: discountPctStr, packagePlatformFee: packagePlatformFeeStr } = metadata || {};
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Wallet credit (Book Later flow) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // â”€â”€ Wallet credit (Book Later flow) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // These sessions are created by POST /api/public/bookings/bulk with bookingType="later".
   // Metadata contains type="wallet_credit", userId, providerId, hours, packageType.
   // We credit the wallet here instead of in payment_intent.succeeded because Checkout
   // Sessions embed the PaymentIntent internally and fire this event on success.
   if (type === 'wallet_credit') {
     if (!userId) {
-      logger.error('Ã¢ÂÅ’ wallet_credit checkout missing userId in metadata', { sessionId: checkoutSession.id });
+      logger.error('âŒ wallet_credit checkout missing userId in metadata', { sessionId: checkoutSession.id });
       await recordWebhookEvent(prisma, idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
         error: 'Missing userId for wallet_credit'
       });
@@ -307,7 +307,7 @@ async function handleCheckoutCompleted(
     // A completed Checkout Session is not sufficient by itself for every payment method.
     // Never credit the wallet unless Stripe reports the session as paid.
     if (checkoutSession.payment_status !== 'paid') {
-      logger.warn('Ã¢Å¡Â Ã¯Â¸Â Wallet checkout completed but payment is not settled', {
+      logger.warn('âš ï¸ Wallet checkout completed but payment is not settled', {
         sessionId: checkoutSession.id,
         paymentStatus: checkoutSession.payment_status,
         userId,
@@ -316,13 +316,13 @@ async function handleCheckoutCompleted(
     }
 
     const amountPaid = checkoutSession.amount_total ? checkoutSession.amount_total / 100 : 0;
-    logger.info(`Ã°Å¸â€™Â° Wallet credit checkout completed: userId=${userId} amount=${amountPaid}`);
+    logger.info(`ðŸ’° Wallet credit checkout completed: userId=${userId} amount=${amountPaid}`);
 
     // SECURITY: expectedTotal is server-generated metadata. Treat its absence as a
     // validation failure rather than silently accepting an unvalidated amount.
     const expectedTotal = metadata?.expectedTotal ? parseFloat(metadata.expectedTotal) : null;
     if (expectedTotal === null || !Number.isFinite(expectedTotal) || expectedTotal < 0) {
-      logger.error('Ã¢ÂÅ’ Wallet credit checkout missing/invalid expectedTotal', {
+      logger.error('âŒ Wallet credit checkout missing/invalid expectedTotal', {
         sessionId: checkoutSession.id,
         userId,
         expectedTotal: metadata?.expectedTotal,
@@ -334,7 +334,7 @@ async function handleCheckoutCompleted(
     const receivedCents = checkoutSession.amount_total ?? 0;
 
     if (receivedCents !== expectedCents) {
-      logger.error('Ã¢ÂÅ’ Wallet credit amount mismatch', {
+      logger.error('âŒ Wallet credit amount mismatch', {
         sessionId: checkoutSession.id,
         expected: expectedCents,
         received: receivedCents,
@@ -345,9 +345,9 @@ async function handleCheckoutCompleted(
       throw new Error(`Wallet credit amount mismatch: expected ${expectedCents} cents, received ${receivedCents} cents`);
     }
 
-    logger.info(`Ã¢Å“â€¦ Amount validation passed: ${receivedCents} cents`);
+    logger.info(`âœ… Amount validation passed: ${receivedCents} cents`);
 
-    // Ã¢â€â‚¬Ã¢â€â‚¬ 3DS & Prepaid Card Validation (Book Later fraud protection) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    // â”€â”€ 3DS & Prepaid Card Validation (Book Later fraud protection) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (metadata?.require_3ds_validation === 'true') {
       try {
         const Stripe = (await import('stripe')).default;
@@ -387,7 +387,7 @@ async function handleCheckoutCompleted(
 
           // Block prepaid cards or cards where 3DS was attempted and failed
           if (isPrepaid || threeDSecure?.result === 'failed') {
-            logger.warn('Ã°Å¸Å¡Â« Payment blocked: prepaid card or 3DS failed', {
+            logger.warn('ðŸš« Payment blocked: prepaid card or 3DS failed', {
               sessionId: checkoutSession.id,
               userId,
               isPrepaid,
@@ -397,7 +397,7 @@ async function handleCheckoutCompleted(
             // MM-05-D FIX (corrected): Use Stripe's own idempotency key as the
             // primary duplicate-refund guard. recordWebhookEvent() is written AFTER
             // the refund succeeds so that a transient Stripe failure (network error,
-            // timeout) leaves no committed WebhookEvent â€” the next webhook retry can
+            // timeout) leaves no committed WebhookEvent — the next webhook retry can
             // attempt the Stripe call again and Stripe returns the same refund object
             // via the idempotency key.
             //
@@ -411,7 +411,7 @@ async function handleCheckoutCompleted(
             //
             // Invariant 3 (failed Stripe call remains retryable):
             //   If stripe.refunds.create() throws, the catch block re-throws so the
-            //   outer webhook handler returns a non-200 status â†’ Stripe retries.
+            //   outer webhook handler returns a non-200 status → Stripe retries.
             //   No WebhookEvent was committed, so the next retry can attempt again.
             let blockRefund: Awaited<ReturnType<typeof stripe.refunds.create>>;
             try {
@@ -428,16 +428,16 @@ async function handleCheckoutCompleted(
                 { idempotencyKey: `checkout-refund-block-${checkoutSession.id}` },
               );
             } catch (refundErr: any) {
-              // Stripe call failed â€” throw so the webhook returns non-200
+              // Stripe call failed — throw so the webhook returns non-200
               // and Stripe will retry. No WebhookEvent committed yet.
-              logger.error('[3DS-BLOCK] Stripe refund failed â€” webhook will be retried', {
+              logger.error('[3DS-BLOCK] Stripe refund failed — webhook will be retried', {
                 sessionId: checkoutSession.id,
                 error: refundErr.message,
               });
               throw refundErr;
             }
 
-            // Refund confirmed â€” now claim the idempotency key permanently.
+            // Refund confirmed — now claim the idempotency key permanently.
             // A duplicate delivery after this point will see DuplicateWebhookEventError
             // and return early without calling Stripe again.
             try {
@@ -449,9 +449,9 @@ async function handleCheckoutCompleted(
               });
             } catch (idemErr: any) {
               if (idemErr?.name === 'DuplicateWebhookEventError') {
-                // Concurrent delivery already wrote the event â€” refund already issued.
+                // Concurrent delivery already wrote the event — refund already issued.
                 // Stripe idempotency key guarantees both deliveries got the same refund.
-                logger.info('[3DS-BLOCK] Concurrent delivery â€” refund already issued, skipping', {
+                logger.info('[3DS-BLOCK] Concurrent delivery — refund already issued, skipping', {
                   sessionId: checkoutSession.id,
                 });
                 return;
@@ -484,9 +484,9 @@ async function handleCheckoutCompleted(
             return; // Don't credit wallet
           }
 
-          logger.info('Ã¢Å“â€¦ 3DS validation passed');
+          logger.info('âœ… 3DS validation passed');
       } catch (validationErr) {
-        logger.error('Ã°Å¸Å¡Â¨ 3DS validation failed Ã¢â‚¬â€ payment NOT credited', {
+        logger.error('ðŸš¨ 3DS validation failed â€” payment NOT credited', {
           sessionId: checkoutSession.id,
           userId,
           error: validationErr instanceof Error ? validationErr.message : String(validationErr),
@@ -674,18 +674,18 @@ async function handleCheckoutCompleted(
     return;
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ SaaS booking (Quote-based payment) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // â”€â”€ SaaS booking (Quote-based payment) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // These sessions are created by createCheckoutSession() in saas-payment.ts.
   // Metadata contains type="saas_booking", quoteId, bookingId, businessId, providerId, customerId.
-  // Delegates to handleCheckoutComplete() which updates QuoteÃ¢â€ â€™PAID + BookingÃ¢â€ â€™CONFIRMED.
+  // Delegates to handleCheckoutComplete() which updates Quoteâ†’PAID + Bookingâ†’CONFIRMED.
   if (type === 'saas_booking') {
-    logger.info(`Ã°Å¸â€™Â³ SaaS booking checkout completed: sessionId=${checkoutSession.id}`);
+    logger.info(`ðŸ’³ SaaS booking checkout completed: sessionId=${checkoutSession.id}`);
 
     try {
       const { handleCheckoutComplete } = await import('@/lib/services/saas-payment');
       const result = await handleCheckoutComplete(checkoutSession.id);
 
-      logger.info('Ã¢Å“â€¦ SaaS booking payment processed', {
+      logger.info('âœ… SaaS booking payment processed', {
         quoteId: result.quoteId,
         bookingId: result.bookingId,
         amountPaid: result.amountPaid,
@@ -701,7 +701,7 @@ async function handleCheckoutCompleted(
         platformFee: result.platformFee,
       });
     } catch (err) {
-      logger.error('Ã¢ÂÅ’ SaaS booking payment handler failed', {
+      logger.error('âŒ SaaS booking payment handler failed', {
         sessionId: checkoutSession.id,
         error: err instanceof Error ? err.message : String(err),
       });
@@ -718,9 +718,9 @@ async function handleCheckoutCompleted(
     return;
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Instructor subscription checkout Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // â”€â”€ Instructor subscription checkout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (!providerId || !customer) {
-    logger.error('Ã¢ÂÅ’ Missing providerId or customer in checkout session');
+    logger.error('âŒ Missing providerId or customer in checkout session');
     await recordWebhookEvent(prisma, idempotencyKey, 'checkout.session.completed', checkoutSession.id, {
       error: 'Missing providerId or customer'
     });
@@ -739,7 +739,7 @@ async function handleCheckoutCompleted(
         const billingCycle = metadata?.billingCycle ?? 'monthly';
         const stripeSubId = checkoutSession.subscription as string | null;
     
-        // Update instructor with Stripe customer ID and Ã¢â‚¬â€ if tier is known Ã¢â‚¬â€ tier/status/stripeSubscriptionId atomically
+        // Update instructor with Stripe customer ID and â€” if tier is known â€” tier/status/stripeSubscriptionId atomically
         await tx.provider.update({
           where: { id: providerId },
           data: {
@@ -752,7 +752,7 @@ async function handleCheckoutCompleted(
           } as any
         });
     
-        // Update subscription row: link customer ID and Ã¢â‚¬â€ if tier is known Ã¢â‚¬â€ tier/status/stripeSubscriptionId atomically
+        // Update subscription row: link customer ID and â€” if tier is known â€” tier/status/stripeSubscriptionId atomically
         if (tier && stripeSubId) {
           // F-13 FIX: Atomic conditional update using stripeCustomerId correlation
           // This prevents race condition where multiple webhooks try to claim the same trial row
@@ -804,10 +804,10 @@ async function handleCheckoutCompleted(
               });
             }
           } else {
-            logger.info(`âœ“ Successfully claimed trial row for subscription ${stripeSubId} (count: ${claimResult.count})`);
+            logger.info(`✓ Successfully claimed trial row for subscription ${stripeSubId} (count: ${claimResult.count})`);
           }
         } else {
-          // No tier in metadata yet Ã¢â‚¬â€ just update customer ID for now
+          // No tier in metadata yet â€” just update customer ID for now
           await tx.subscription.updateMany({
             where: { providerId },
             data: { stripeCustomerId: customer as string }
@@ -815,7 +815,7 @@ async function handleCheckoutCompleted(
         }
     
         // AUDIT-01/02 fix (Tier 3): replace logSubscriptionAction (used module-level prisma)
-        // with tx.auditLog.create â€” now actually atomic with the subscription state change.
+        // with tx.auditLog.create — now actually atomic with the subscription state change.
         await tx.auditLog.create({
           data: {
             action:     AuditAction.SUBSCRIPTION_UPDATED,
@@ -837,7 +837,7 @@ async function handleCheckoutCompleted(
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-checkout-session-subscription' });
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Stamp metadata onto the Stripe subscription (non-fatal, best-effort) Ã¢â€â‚¬Ã¢â€â‚¬
+  // â”€â”€ Stamp metadata onto the Stripe subscription (non-fatal, best-effort) â”€â”€
   // Ensures future webhooks (renewal, upgrade, cancel) have providerId + tier in metadata.
   const tier = metadata?.tier;
   const billingCycle = metadata?.billingCycle;
@@ -846,7 +846,7 @@ async function handleCheckoutCompleted(
       await stripe.subscriptions.update(checkoutSession.subscription as string, {
         metadata: { providerId, tier, billingCycle: billingCycle ?? 'monthly' },
       });
-      logger.info(`Ã¢Å“â€¦ Stamped metadata on subscription ${checkoutSession.subscription}: providerId=${providerId} tier=${tier}`);
+      logger.info(`âœ… Stamped metadata on subscription ${checkoutSession.subscription}: providerId=${providerId} tier=${tier}`);
     } catch (metadataErr) {
       logger.error('Failed to stamp subscription metadata (non-fatal)', {
         error: metadataErr instanceof Error ? metadataErr.message : String(metadataErr),
@@ -855,7 +855,7 @@ async function handleCheckoutCompleted(
     }
   }
 
-  logger.info(`Ã¢Å“â€¦ Checkout completed: Synced customer ${customer} for instructor ${providerId}`);
+  logger.info(`âœ… Checkout completed: Synced customer ${customer} for instructor ${providerId}`);
 }
 
 // ============================================================================
@@ -871,7 +871,7 @@ async function handleWalletPaymentSuccess(
   transactionId?: string,
   walletId?: string
 ): Promise<void> {
-  logger.info(`Ã°Å¸â€™Â° Processing wallet payment: transactionId=${transactionId}, walletId=${walletId}`);
+  logger.info(`ðŸ’° Processing wallet payment: transactionId=${transactionId}, walletId=${walletId}`);
 
   let confirmedTransactions: any[] = [];
 
@@ -940,7 +940,7 @@ async function handleWalletPaymentSuccess(
         }
     
         if (transactions.length === 0) {
-          logger.error('Ã¢ÂÅ’ No wallet transactions found to confirm');
+          logger.error('âŒ No wallet transactions found to confirm');
           throw new Error('No wallet transactions found');
         }
     
@@ -951,7 +951,7 @@ async function handleWalletPaymentSuccess(
         // CORRECTION 2: Pass the found pending transaction's ID when we have one.
         // When transactionId is absent but we found a row by explicit PI metadata
         // match or by unambiguous time-window fallback, use that row's ID so
-        // confirmWalletTopupInTx can do the conditional PENDING→CONFIRMED update.
+        // confirmWalletTopupInTx can do the conditional PENDING?CONFIRMED update.
         const pendingTxId = transactionId ?? transactions[0]?.id ?? null;
         const walletIdForConfirm = transactions[0]?.walletId;
         if (!walletIdForConfirm) throw new Error('No walletId on transaction');
@@ -1016,7 +1016,7 @@ async function handleWalletPaymentSuccess(
               }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-wallet-payment' });
 
-  // AUDIT-01/02 fix (Tier 4): wallet payment â€” financial tx already committed above.
+  // AUDIT-01/02 fix (Tier 4): wallet payment — financial tx already committed above.
   // writeAuditLogSafe documents this as explicitly non-critical (receipt/notification path).
   {
     const confirmedTx = confirmedTransactions[0];
@@ -1053,22 +1053,8 @@ async function handleWalletPaymentSuccess(
         const balanceAfter = balanceResult.balance;
         const balanceBefore = balanceAfter - amountAdded;
 
-        // FinancialLedger Ã¢â‚¬â€ record wallet credit (double-entry)
-        // Idempotency key: `wallet-credit-${paymentIntentId}` Ã¢â‚¬â€ deterministic
-        try {
-          const { recordWalletCredit } = await import('@/lib/services/ledger-operations');
-          await recordWalletCredit({
-            walletTransactionId: confirmedTx.id,
-            userId: walletRecord.userId,
-            amount: amountAdded,
-            stripePaymentIntentId: paymentIntent.id,
-            createdBy: 'STRIPE_WEBHOOK',
-          });
-        } catch (ledgerErr: any) {
-          if (!ledgerErr?.message?.includes('idempotency')) {
-            logger.error('[FinancialLedger] recordWalletCredit failed (non-critical):', { error: ledgerErr?.message });
-          }
-        }
+        // FinancialLedger — already recorded atomically inside transaction above (lines 1004-1014)
+        // This receipt path runs after transaction commit — no ledger call needed here
 
         await sendWalletTopUpReceipt({
           customerName: walletRecord.user.name || walletRecord.user.email,
@@ -1101,20 +1087,20 @@ async function handleBookingPaymentSuccess(
   // If this PaymentIntent is only the embedded PaymentIntent for that flow and
   // has no DriveBook wallet transaction linkage, do not invent a second credit.
   if (type === 'wallet_credit' && !transactionId && !walletId) {
-    logger.info(`Ã¢â€žÂ¹Ã¯Â¸Â Ignoring embedded wallet_credit PaymentIntent ${paymentIntent.id}; Checkout Session is authoritative`);
+    logger.info(`â„¹ï¸ Ignoring embedded wallet_credit PaymentIntent ${paymentIntent.id}; Checkout Session is authoritative`);
     return;
   }
 
   // Handle both booking payments AND wallet/package purchases
   if (!bookingId && !transactionId && !walletId) {
-    logger.error('Ã¢ÂÅ’ No bookingId, transactionId, or walletId in payment intent metadata');
+    logger.error('âŒ No bookingId, transactionId, or walletId in payment intent metadata');
     await recordWebhookEvent(prisma, idempotencyKey, 'payment_intent.succeeded', paymentIntent.id, {
       error: 'Missing bookingId, transactionId, or walletId'
     });
     return;
   }
 
-  // Ã¢Å“â€¦ Handle wallet/package purchase (book later)
+  // âœ… Handle wallet/package purchase (book later)
   if (transactionId || walletId) {
     await handleWalletPaymentSuccess(paymentIntent, idempotencyKey, transactionId, walletId);
     return;
@@ -1136,21 +1122,21 @@ async function handleBookingPaymentSuccess(
           });
       
           if (!booking) {
-            logger.error('Ã¢ÂÅ’ Booking not found', { bookingId });
+            logger.error('âŒ Booking not found', { bookingId });
             throw new Error(`Booking not found: ${bookingId}`);
           }
       
-          // Ã¢â€â‚¬Ã¢â€â‚¬ Handle EXPIRED booking Ã¢â‚¬â€ DO NOT revive, issue refund instead Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+          // â”€â”€ Handle EXPIRED booking â€” DO NOT revive, issue refund instead â”€â”€â”€â”€â”€â”€â”€â”€â”€
           // If the booking expired before Stripe confirmed payment, the slot may have been
           // released and taken by another student. Reviving the booking risks a double-booking.
           // Safe policy: issue a full refund via Stripe and flag for admin review.
-          // â”€â”€ Handle EXPIRED booking â€“ DO NOT revive, issue refund instead â”€â”€â”€â”€â”€â”€â”€â”€
+          // ── Handle EXPIRED booking – DO NOT revive, issue refund instead ────────
           // If the booking expired before Stripe confirmed payment, the slot may have been
           // released and taken by another student. Reviving the booking risks a double-booking.
           // Safe policy: issue a full refund via Stripe and flag for admin review.
           // IMPORTANT: Throw error here so refund happens OUTSIDE transaction (P2034 retry-safe)
           if (booking.status === 'EXPIRED') {
-            logger.error(`ðŸš¨ Delayed payment on expired booking ${bookingId} â€“ will issue refund outside transaction`);
+            logger.error(`🚨 Delayed payment on expired booking ${bookingId} – will issue refund outside transaction`);
             
             // Mark booking as cancelled INSIDE transaction
             await tx.booking.update({
@@ -1165,26 +1151,26 @@ async function handleBookingPaymentSuccess(
             throw new ExpiredBookingError(bookingId, paymentIntent.id);
           }
       
-          // Ã¢â€â‚¬Ã¢â€â‚¬ Already confirmed (idempotent replay) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+          // â”€â”€ Already confirmed (idempotent replay) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (booking.status === 'CONFIRMED' || booking.status === 'COMPLETED') {
-            logger.info(`Ã¢â€žÂ¹Ã¯Â¸Â Booking ${bookingId} already ${booking.status} Ã¢â‚¬â€ skipping wallet ops`);
+            logger.info(`â„¹ï¸ Booking ${bookingId} already ${booking.status} â€” skipping wallet ops`);
             return;
           }
       
-          // Ã¢â€â‚¬Ã¢â€â‚¬ Strict state machine: only PENDING_PAYMENT Ã¢â€ â€™ CONFIRMED Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+          // â”€â”€ Strict state machine: only PENDING_PAYMENT â†’ CONFIRMED â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (booking.status !== 'PENDING_PAYMENT') {
-            logger.error(`Ã°Å¸Å¡Â¨ Webhook rejected: booking ${bookingId} is in status '${booking.status}' Ã¢â‚¬â€ cannot confirm`);
+            logger.error(`ðŸš¨ Webhook rejected: booking ${bookingId} is in status '${booking.status}' â€” cannot confirm`);
             return;
           }
       
-          // Ã¢Å“â€¦ Validate payment amount matches what was charged
+          // âœ… Validate payment amount matches what was charged
           // For packages: Stripe charged packageTotalPaid. For single lessons: booking.price.
           const chargedAmount = (booking as any).packageTotalPaid || booking.price;
           const expectedAmount = Math.round(chargedAmount * 100); // Convert to cents
           const receivedAmount = paymentIntent.amount_received;
       
           if (receivedAmount !== expectedAmount) {
-            logger.error('Ã¢ÂÅ’ Payment amount mismatch:', {
+            logger.error('âŒ Payment amount mismatch:', {
               expected: expectedAmount,
               received: receivedAmount,
               bookingId
@@ -1194,7 +1180,7 @@ async function handleBookingPaymentSuccess(
             );
           }
       
-          // Get userId from client relation Ã¢â‚¬â€ try multiple fallbacks
+          // Get userId from client relation â€” try multiple fallbacks
           let userId = booking.customer?.userId;
       
           if (!userId && booking.customerId) {
@@ -1211,15 +1197,15 @@ async function handleBookingPaymentSuccess(
           }
       
           if (!userId) {
-            logger.warn(`Ã¢Å¡Â Ã¯Â¸Â Could not resolve userId for booking ${bookingId} Ã¢â‚¬â€ wallet ops skipped`);
+            logger.warn(`âš ï¸ Could not resolve userId for booking ${bookingId} â€” wallet ops skipped`);
           }
       
-          // REMOVED: P0 FIX Ã¢â‚¬â€ Backwards customer validation compared paymentIntent.customer (student)
+          // REMOVED: P0 FIX â€” Backwards customer validation compared paymentIntent.customer (student)
           // against instructor.stripeCustomerId (instructor's SaaS subscription). These are never the same.
           // The amount validation above is sufficient security. Do not re-add without understanding
           // the Stripe customer model: paymentIntent.customer = student, provider.stripeCustomerId = instructor.
       
-          // Ã¢Å“â€¦ All validations passed - Update booking
+          // âœ… All validations passed - Update booking
           await tx.booking.update({
             where: { id: bookingId },
             data: {
@@ -1231,7 +1217,7 @@ async function handleBookingPaymentSuccess(
             } as any
           });
       
-          // Update transaction Ã¢â‚¬â€ SETTLED means eligible for payout
+          // Update transaction â€” SETTLED means eligible for payout
           await (tx as any).transaction.updateMany({
             where: { stripePaymentIntentId: paymentIntentId },
             data: {
@@ -1241,7 +1227,7 @@ async function handleBookingPaymentSuccess(
             }
           });
       
-          // ── Wallet: credit face value, record PACKAGE_FEE, debit first lesson ──────
+          // -- Wallet: credit face value, record PACKAGE_FEE, debit first lesson ------
           // Approved accounting policy (PACKAGE-ACCOUNTING-POLICY.md, 2026-10-18):
           //   Face-Value Model A:
           //   CREDIT wallet  = face value (packageHours x lockedHourlyRate), e.g. $700
@@ -1400,9 +1386,9 @@ async function handleBookingPaymentSuccess(
       const { bookingId: expiredBookingId, paymentIntentId: expiredPaymentIntentId } = err;
       logger.info(`Handling expired booking refund outside transaction for ${expiredBookingId}`);
 
-      // â”€â”€ Step 1: Stripe refund â€” external side effect first â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── Step 1: Stripe refund — external side effect first ──────────────────
       // Stable idempotency key means retries get the same refund object.
-      // If this throws, the catch block below returns non-200 â†’ Stripe retries.
+      // If this throws, the catch block below returns non-200 → Stripe retries.
       // No DB state is written yet so the retry is safe to attempt Stripe again.
       let expiredRefund: Awaited<ReturnType<typeof stripe.refunds.create>>;
       try {
@@ -1411,14 +1397,14 @@ async function handleBookingPaymentSuccess(
           reason: 'duplicate', // closest Stripe reason code
           metadata: {
             bookingId: expiredBookingId,
-            reason: 'Booking expired before payment confirmed â€” automatic refund',
+            reason: 'Booking expired before payment confirmed — automatic refund',
           },
         }, {
           idempotencyKey: `expired-booking-refund-${expiredBookingId}-${expiredPaymentIntentId}`
         });
         logger.info(`Auto-refund issued for expired booking ${expiredBookingId}: ${expiredRefund.id}`);
       } catch (refundErr) {
-        // Refund failed â€” must flag for manual admin action
+        // Refund failed — must flag for manual admin action
         logger.error(`CRITICAL: Auto-refund FAILED for expired booking ${expiredBookingId}. Manual action required.`, {
           error: refundErr instanceof Error ? refundErr.message : String(refundErr),
         });
@@ -1435,23 +1421,23 @@ async function handleBookingPaymentSuccess(
             action: 'Manual refund required via Stripe Dashboard',
           },
         });
-        // Re-throw so the outer handler returns HTTP 500 â†’ Stripe retries
+        // Re-throw so the outer handler returns HTTP 500 → Stripe retries
         throw refundErr;
       }
 
-      // â”€â”€ Step 2: Durable DB state â€” SERIALIZABLE transaction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── Step 2: Durable DB state — SERIALIZABLE transaction ─────────────────
       // MM-05-E-R / MM-05-E-S FIX:
       // Refund is confirmed. Now write durable application state atomically.
       //
       // The booking transition uses updateMany with status='EXPIRED' guard (CAS).
       // We then inspect the booking to verify correctness:
       //
-      //   EXPIRED â†’ CANCELLED  (count=1): normal path â€” write succeeded.
-      //   count=0 â†’ booking is not EXPIRED. Read current state and verify:
-      //     CANCELLED + same refund ID  â†’ already complete; idempotent.
-      //     CANCELLED + null refund ID  â†’ prior partial write; repair refundId.
-      //     CANCELLED + different ID    â†’ integrity error; alert, do not overwrite.
-      //     any other status            â†’ unexpected; alert and fail.
+      //   EXPIRED → CANCELLED  (count=1): normal path — write succeeded.
+      //   count=0 → booking is not EXPIRED. Read current state and verify:
+      //     CANCELLED + same refund ID  → already complete; idempotent.
+      //     CANCELLED + null refund ID  → prior partial write; repair refundId.
+      //     CANCELLED + different ID    → integrity error; alert, do not overwrite.
+      //     any other status            → unexpected; alert and fail.
       //
       // WebhookEvent is written inside the same tx. DuplicateWebhookEventError
       // is only safe to ignore after the booking state is verified as correct.
@@ -1469,7 +1455,7 @@ async function handleBookingPaymentSuccess(
             });
 
             if (transitioned.count === 0) {
-              // Booking not EXPIRED â€” inspect current state before deciding
+              // Booking not EXPIRED — inspect current state before deciding
               const current = await tx.booking.findUnique({
                 where: { id: expiredBookingId },
                 select: { status: true, stripeRefundId: true },
@@ -1481,18 +1467,18 @@ async function handleBookingPaymentSuccess(
 
               if (current.status === 'CANCELLED') {
                 if (current.stripeRefundId === expiredRefund.id) {
-                  // Already in the correct terminal state â€” this is an idempotent retry
-                  logger.info(`[MM-05-E] Booking ${expiredBookingId} already CANCELLED with correct refundId â€” idempotent`);
-                  // Continue to WebhookEvent write below (may also be duplicate â€” handled there)
+                  // Already in the correct terminal state — this is an idempotent retry
+                  logger.info(`[MM-05-E] Booking ${expiredBookingId} already CANCELLED with correct refundId — idempotent`);
+                  // Continue to WebhookEvent write below (may also be duplicate — handled there)
                 } else if (current.stripeRefundId === null) {
-                  // Partial prior write: CANCELLED but refundId not persisted â€” repair it
+                  // Partial prior write: CANCELLED but refundId not persisted — repair it
                   logger.warn(`[MM-05-E] Repairing missing stripeRefundId on CANCELLED booking ${expiredBookingId}`);
                   await tx.booking.update({
                     where: { id: expiredBookingId },
                     data: { stripeRefundId: expiredRefund.id },
                   });
                 } else {
-                  // CANCELLED with a DIFFERENT refundId â€” integrity error; do not overwrite
+                  // CANCELLED with a DIFFERENT refundId — integrity error; do not overwrite
                   void sendAlert({
                     type: 'RECONCILIATION_ISSUES',
                     severity: 'CRITICAL',
@@ -1508,7 +1494,7 @@ async function handleBookingPaymentSuccess(
                   throw new Error(`[MM-05-E] Integrity error: booking ${expiredBookingId} CANCELLED with different refundId (${current.stripeRefundId} vs ${expiredRefund.id})`);
                 }
               } else {
-                // Unexpected status â€” fail loudly; do not silently accept
+                // Unexpected status — fail loudly; do not silently accept
                 void sendAlert({
                   type: 'RECONCILIATION_ISSUES',
                   severity: 'CRITICAL',
@@ -1520,7 +1506,7 @@ async function handleBookingPaymentSuccess(
               }
             }
 
-            // WebhookEvent â€” written inside the same tx as the booking transition.
+            // WebhookEvent — written inside the same tx as the booking transition.
             // Only safe to treat as duplicate if the booking state above is already correct.
             await recordWebhookEvent(tx, idempotencyKey, 'payment_intent.succeeded', paymentIntentId, {
               expiredBooking: true,
@@ -1536,12 +1522,12 @@ async function handleBookingPaymentSuccess(
         // If the tx itself threw DuplicateWebhookEventError, the booking checks
         // passed (or the tx rolled back), so the state is consistent.
         if (dbErr?.name === 'DuplicateWebhookEventError') {
-          logger.info(`[MM-05-E] Duplicate WebhookEvent for expired booking ${expiredBookingId} â€” booking state already verified consistent`);
+          logger.info(`[MM-05-E] Duplicate WebhookEvent for expired booking ${expiredBookingId} — booking state already verified consistent`);
         } else {
-          // DB write failed after Stripe succeeded â€” throw so webhook returns non-200
+          // DB write failed after Stripe succeeded — throw so webhook returns non-200
           // and Stripe retries. The retry will use the same Stripe idempotency key
           // (returns same refund object) and re-attempt this DB transaction.
-          logger.error(`[MM-05-E] Post-refund DB write failed for ${expiredBookingId} â€” webhook will be retried`, {
+          logger.error(`[MM-05-E] Post-refund DB write failed for ${expiredBookingId} — webhook will be retried`, {
             error: dbErr instanceof Error ? dbErr.message : String(dbErr),
           });
           void sendAlert({
@@ -1559,11 +1545,11 @@ async function handleBookingPaymentSuccess(
         }
       }
 
-      // Alert ops â€” non-critical, fire-and-forget
+      // Alert ops — non-critical, fire-and-forget
       void sendAlert({
         type: 'RECONCILIATION_ISSUES',
         severity: 'WARNING',
-        message: `Delayed payment on expired booking ${expiredBookingId} â€” auto-refund issued successfully. Student was charged after slot expired. Admin review recommended.`,
+        message: `Delayed payment on expired booking ${expiredBookingId} — auto-refund issued successfully. Student was charged after slot expired. Admin review recommended.`,
         entityId: expiredBookingId,
         metadata: {
           bookingId: expiredBookingId,
@@ -1581,11 +1567,11 @@ async function handleBookingPaymentSuccess(
     throw err;
   }
 
-  logger.info(`Ã¢Å“â€¦ Booking payment processed with validations: ${bookingId}`);
+  logger.info(`âœ… Booking payment processed with validations: ${bookingId}`);
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Audit log: Stripe payment event Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-  // This closes the audit blind spot Ã¢â‚¬â€ Stripe payment events are now in AuditLog
-  // AUDIT-01/02 fix (Tier 4): payment success â€” financial tx already committed.
+  // â”€â”€ Audit log: Stripe payment event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // This closes the audit blind spot â€” Stripe payment events are now in AuditLog
+  // AUDIT-01/02 fix (Tier 4): payment success — financial tx already committed.
   {
     const txRecord = await prisma.transaction.findFirst({
       where: { stripePaymentIntentId: paymentIntent.id },
@@ -1605,7 +1591,7 @@ async function handleBookingPaymentSuccess(
     });
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ Ledger: record payment collected Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // â”€â”€ Ledger: record payment collected â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // This populates totalCollected + totalReserved so payout balance checks work.
   // Also writes to FinancialLedger (double-entry) for reconciliation/reporting.
   // Non-critical: if either fails, booking is still confirmed. Alert is sent.
@@ -1630,26 +1616,26 @@ async function handleBookingPaymentSuccess(
       //   totalAmount === platformFee + providerPayout
       //
       // IMPORTANT DISTINCTION:
-      //   booking.platformFee (DB column = 0)  ← student-paid platform fee,
-      //     collected at package purchase / wallet top-up (policy §2.2).
+      //   booking.platformFee (DB column = 0)  ? student-paid platform fee,
+      //     collected at package purchase / wallet top-up (policy —2.2).
       //     Must NOT be re-collected here on a wallet-funded lesson.
-      //   ledgerFee = price - providerPayout   ← DriveBook commission retention
+      //   ledgerFee = price - providerPayout   ? DriveBook commission retention
       //     ($10.50 = 15% of $70), deducted from the lesson price when computing
       //     the instructor payout. This is DriveBook's share of the lesson price,
       //     not an additional student-facing charge.
       //
-      // Using booking.platformFee (0) produces:  70 ≠ 0 + 59.5  → mismatch.
-      // Using price - providerPayout ($10.50):   70 = 10.50 + 59.50  ✓
+      // Using booking.platformFee (0) produces:  70 ? 0 + 59.5  ? mismatch.
+      // Using price - providerPayout ($10.50):   70 = 10.50 + 59.50  ?
       const platFeeForLedger = parseFloat((ledgerBooking.price - instrPayout).toFixed(2));
       const platFee = platFeeForLedger > 0 ? platFeeForLedger
         : ((ledgerBooking as any).platformFee ?? 0);
 
       // Existing payout-service ledger (totalCollected/totalReserved)
       await recordPaymentCollected(bookingId, ledgerBooking.price, instrPayout);
-      logger.info(`Ã¢Å“â€¦ Ledger updated: collected=${ledgerBooking.price} reserved=${instrPayout}`);
+      logger.info(`âœ… Ledger updated: collected=${ledgerBooking.price} reserved=${instrPayout}`);
 
-      // FinancialLedger Ã¢â‚¬â€ double-entry via ledger-operations
-      // Idempotency key: `booking-${bookingId}-payment` Ã¢â‚¬â€ deterministic, safe to retry
+      // FinancialLedger â€” double-entry via ledger-operations
+      // Idempotency key: `booking-${bookingId}-payment` â€” deterministic, safe to retry
       const { recordBookingPayment: recordLedgerPayment } = await import('@/lib/services/ledger-operations');
       const clientUserId = ledgerBooking.customer?.userId;
       if (clientUserId) {
@@ -1662,7 +1648,7 @@ async function handleBookingPaymentSuccess(
           providerPayout: instrPayout,
           createdBy: 'STRIPE_WEBHOOK',
         }).catch((err: Error) => {
-          // Duplicate idempotencyKey = already recorded Ã¢â‚¬â€ not an error
+          // Duplicate idempotencyKey = already recorded â€” not an error
           if (!err.message?.includes('idempotency')) {
             logger.error('[FinancialLedger] recordBookingPayment failed (non-critical):', { bookingId, error: err.message });
           }
@@ -1670,15 +1656,15 @@ async function handleBookingPaymentSuccess(
       }
     }
   } catch (ledgerErr) {
-    logger.error('Ã°Å¸Å¡Â¨ LEDGER UPDATE FAILED Ã¢â‚¬â€ booking confirmed but ledger not updated:', {
+    logger.error('ðŸš¨ LEDGER UPDATE FAILED â€” booking confirmed but ledger not updated:', {
       bookingId,
       error: ledgerErr instanceof Error ? ledgerErr.message : String(ledgerErr),
     });
-    // Send structured alert so this is visible in monitoring Ã¢â‚¬â€ never silent
+    // Send structured alert so this is visible in monitoring â€” never silent
     void sendAlert({
       type: 'RECONCILIATION_ISSUES',
       severity: 'WARNING',
-      message: `FinancialLedger write failed for confirmed booking ${bookingId} Ã¢â‚¬â€ reconciliation cron will backfill`,
+      message: `FinancialLedger write failed for confirmed booking ${bookingId} â€” reconciliation cron will backfill`,
       entityId: bookingId,
       metadata: {
         bookingId,
@@ -1766,7 +1752,7 @@ async function handleBookingPaymentSuccess(
       }
     }
 
-    // SMS booking confirmation Ã¢â‚¬â€ student only (non-critical)
+    // SMS booking confirmation â€” student only (non-critical)
     // Instructor gets in-app notification; SMS confirmation only goes to the student
     try {
       const { smsService } = await import('@/lib/services/sms');
@@ -1821,9 +1807,9 @@ async function handleBookingPaymentFailed(
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-booking-payment-failed' });
 
-  logger.info(`Ã¢ÂÅ’ Booking payment failed: ${bookingId}`);
+  logger.info(`âŒ Booking payment failed: ${bookingId}`);
 
-  // AUDIT-01/02 fix (Tier 4): payment failed â€” informational, booking state already reverted.
+  // AUDIT-01/02 fix (Tier 4): payment failed — informational, booking state already reverted.
   await writeAuditLogSafe({
     action:     AuditAction.PAYMENT_FAILED,
     actorId:    'SYSTEM',
@@ -1851,11 +1837,11 @@ async function handleBookingPaymentFailed(
  * 1. Resolve stripeCustomerId (BEFORE transaction)
  * 2. BEGIN SERIALIZABLE
  * 3. processSubscriptionEvent(tx, event, stripeCustomerId)
- *    â†“ Lock Provider
- *    â†“ Lock Subscription
- *    â†“ Validate identity & ownership
- *    â†“ Policy decision
- *    â†“ Conditional mutation
+ *    ↓ Lock Provider
+ *    ↓ Lock Subscription
+ *    ↓ Validate identity & ownership
+ *    ↓ Policy decision
+ *    ↓ Conditional mutation
  * 4. Audit
  * 5. COMMIT
  */
@@ -1968,12 +1954,12 @@ async function handleSubscriptionUpdatedLegacy(
     };
     tier = priceToTier[priceId] || undefined;
     if (tier) {
-      logger.info(`Ã¢â€žÂ¹Ã¯Â¸Â Derived tier '${tier}' from price ID ${priceId} (metadata was missing)`);
+      logger.info(`â„¹ï¸ Derived tier '${tier}' from price ID ${priceId} (metadata was missing)`);
     }
   }
 
   if (!providerId || !tier) {
-    logger.error('Ã¢ÂÅ’ Missing metadata in subscription', { subscriptionId: subscription.id });
+    logger.error('âŒ Missing metadata in subscription', { subscriptionId: subscription.id });
     await recordWebhookEvent(prisma, idempotencyKey, 'subscription.updated', subscription.id, {
       error: 'Missing providerId or tier'
     });
@@ -1982,7 +1968,7 @@ async function handleSubscriptionUpdatedLegacy(
 
   const plan = SUBSCRIPTION_PLANS[tier as keyof typeof SUBSCRIPTION_PLANS];
   if (!plan) {
-    logger.error('Ã¢ÂÅ’ Invalid tier', { tier });
+    logger.error('âŒ Invalid tier', { tier });
     return;
   }
 
@@ -1992,7 +1978,7 @@ async function handleSubscriptionUpdatedLegacy(
     select: { id: true },
   });
   if (!instructorExists) {
-    logger.error(`Ã¢ÂÅ’ Instructor not found in DB: "${providerId}" Ã¢â‚¬â€ subscription ${subscription.id} NOT synced.`);
+    logger.error(`âŒ Instructor not found in DB: "${providerId}" â€” subscription ${subscription.id} NOT synced.`);
     logger.error('   Check Stripe subscription metadata for typos in providerId.');
     await recordWebhookEvent(prisma, idempotencyKey, 'subscription.updated', subscription.id, {
       error: `Instructor not found: ${providerId}`,
@@ -2034,7 +2020,7 @@ async function handleSubscriptionUpdatedLegacy(
         // Priority: find by stripeSubscriptionId first (renewal/update).
         // If not found, find the most-recent non-stripe trial row for this instructor
         // (race condition: customer.subscription.created fires before checkout.session.completed
-        // stamps the stripeSubscriptionId Ã¢â‚¬â€ so we link it rather than create a duplicate).
+        // stamps the stripeSubscriptionId â€” so we link it rather than create a duplicate).
         const existingSubscription = await tx.subscription.findFirst({
           where: { stripeSubscriptionId: subscription.id }
         });
@@ -2166,7 +2152,7 @@ async function handleSubscriptionUpdatedLegacy(
         await emailService.sendGenericEmail({
         from: 'DriveBook Payments <payments@drivebook.com.au>',
         to: instructor.user.email,
-        subject: `${plan.name} subscription activated Ã¢â‚¬â€ DriveBook`,
+        subject: `${plan.name} subscription activated â€” DriveBook`,
         html: `
           <h2>Your ${plan.name} subscription is now active!</h2>
           <p>Thank you for subscribing to DriveBook.</p>
@@ -2190,7 +2176,7 @@ async function handleSubscriptionUpdatedLegacy(
     }
   }
 
-  logger.info(`Ã¢Å“â€¦ Subscription updated: ${subscription.id} (${tier}, ${status})`);
+  logger.info(`âœ… Subscription updated: ${subscription.id} (${tier}, ${status})`);
 }
 
 /**
@@ -2245,7 +2231,7 @@ async function handleSubscriptionCancelled(
       }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-subscription-cancelled' });
 
-  logger.info(`Ã¢Å“â€¦ Subscription cancelled: ${subscription.id}`);
+  logger.info(`âœ… Subscription cancelled: ${subscription.id}`);
 }
 
 async function handleTrialEnding(
@@ -2297,7 +2283,7 @@ async function handleTrialEnding(
     });
   }
 
-  logger.info(`Ã¢Å“â€¦ Trial ending notification sent: ${subscription.id}`);
+  logger.info(`âœ… Trial ending notification sent: ${subscription.id}`);
 }
 
 async function handleInvoicePaymentSucceeded(
@@ -2590,18 +2576,18 @@ async function handleInvoicePaymentFailed(
     });
   }
 
-  logger.info(`Ã¢ÂÅ’ Invoice payment failed: ${invoice.id}`);
+  logger.info(`âŒ Invoice payment failed: ${invoice.id}`);
 }
 
 // ============================================================================
-// SPRINT A Ã¢â‚¬â€ DISPUTE / CHARGEBACK HANDLING
+// SPRINT A â€” DISPUTE / CHARGEBACK HANDLING
 // ============================================================================
 
 /**
  * charge.dispute.created
  *
  * Actions:
- *  1. Create LedgerEntry(DISPUTE_OPENED) Ã¢â‚¬â€ marks the disputed amount as at-risk
+ *  1. Create LedgerEntry(DISPUTE_OPENED) â€” marks the disputed amount as at-risk
  *  2. Freeze payout eligibility for this instructor (disputeHold flag)
  *  3. Create admin alert + audit log
  */
@@ -2614,7 +2600,7 @@ async function handleDisputeOpened(
   const reason = dispute.reason;
   const status = dispute.status;
 
-  // Try to resolve via charge Ã¢â€ â€™ payment intent Ã¢â€ â€™ booking
+  // Try to resolve via charge â†’ payment intent â†’ booking
   let bookingId: string | null = null;
   let providerId: string | null = null;
   try {
@@ -2648,7 +2634,7 @@ async function handleDisputeOpened(
     status,
   });
 
-  // Persist StripeDispute record Ã¢â‚¬â€ gives admin a dedicated dispute queue.
+  // Persist StripeDispute record â€” gives admin a dedicated dispute queue.
   // A dispute ID is globally unique in Stripe. If the record already exists,
   // this event must not create another DISPUTE_OPENED ledger entry.
   const existingDispute = await prisma.stripeDispute.findUnique({
@@ -2661,7 +2647,7 @@ async function handleDisputeOpened(
       where: { stripeDisputeId: dispute.id },
       data: { status, payoutFrozen: !!providerId },
     });
-    logger.info(`Ã¢â€žÂ¹Ã¯Â¸Â Dispute ${dispute.id} already exists Ã¢â‚¬â€ no duplicate opening ledger entry`);
+    logger.info(`â„¹ï¸ Dispute ${dispute.id} already exists â€” no duplicate opening ledger entry`);
     return;
   }
 
@@ -2686,14 +2672,14 @@ async function handleDisputeOpened(
     });
   }
 
-  // Append ledger entry Ã¢â‚¬â€ amount at risk
+  // Append ledger entry â€” amount at risk
   await appendLedgerEntry({
     type: 'DISPUTE_OPENED',
     amount: -amount, // negative = platform liability
     referenceId: bookingId ?? dispute.id,
     referenceType: 'BOOKING',
     providerId: providerId ?? undefined,
-    description: `Stripe dispute ${dispute.id} Ã¢â‚¬â€ ${reason} Ã¢â‚¬â€ $${amount.toFixed(2)} at risk`,
+    description: `Stripe dispute ${dispute.id} â€” ${reason} â€” $${amount.toFixed(2)} at risk`,
     metadata: {
       stripeDisputeId: dispute.id,
       chargeId,
@@ -2740,7 +2726,7 @@ async function handleDisputeOpened(
   void sendAlert({
     type: 'DISPUTE_OPENED',
     severity: 'CRITICAL',
-    message: `Chargeback filed: $${amount.toFixed(2)} Ã¢â‚¬â€ reason: ${reason}. Instructor payout frozen.`,
+    message: `Chargeback filed: $${amount.toFixed(2)} â€” reason: ${reason}. Instructor payout frozen.`,
     entityId: dispute.id,
     metadata: {
       stripeDisputeId: dispute.id,
@@ -2753,7 +2739,7 @@ async function handleDisputeOpened(
     },
   });
 
-  logger.info(`Ã°Å¸Å¡Â¨ Dispute opened: ${dispute.id} Ã¢â‚¬â€ $${amount.toFixed(2)} Ã¢â‚¬â€ ${reason}`);
+  logger.info(`ðŸš¨ Dispute opened: ${dispute.id} â€” $${amount.toFixed(2)} â€” ${reason}`);
 }
 
 /**
@@ -2808,15 +2794,15 @@ async function handleDisputeUpdated(
     amount: dispute.amount / 100,
   });
 
-  logger.info(`Ã¢â€žÂ¹Ã¯Â¸Â Dispute updated without new financial opening entry: ${dispute.id}`);
+  logger.info(`â„¹ï¸ Dispute updated without new financial opening entry: ${dispute.id}`);
 }
 
 /**
  * charge.dispute.closed
  *
  * Stripe fires this when the bank makes a final decision.
- * status = 'won'  Ã¢â€ â€™ platform keeps the money Ã¢â‚¬â€ release the payout hold
- * status = 'lost' Ã¢â€ â€™ chargeback confirmed Ã¢â‚¬â€ create ADJUSTMENT to recover from instructor's
+ * status = 'won'  â†’ platform keeps the money â€” release the payout hold
+ * status = 'lost' â†’ chargeback confirmed â€” create ADJUSTMENT to recover from instructor's
  *                   next payout (same mechanism as post-payout refunds)
  */
 async function handleDisputeClosed(
@@ -2864,19 +2850,19 @@ async function handleDisputeClosed(
   // If this dispute has already been resolved, do not append another financial
   // resolution entry. Stripe can emit multiple updates around final resolution.
   if (existingDispute?.resolvedAt) {
-    logger.info(`Ã¢â€žÂ¹Ã¯Â¸Â Dispute ${dispute.id} already resolved Ã¢â‚¬â€ skipping duplicate financial resolution`);
+    logger.info(`â„¹ï¸ Dispute ${dispute.id} already resolved â€” skipping duplicate financial resolution`);
     return;
   }
 
   if (status === 'won') {
-    // Dispute resolved in our favour Ã¢â‚¬â€ reverse the DISPUTE_OPENED ledger entry
+    // Dispute resolved in our favour â€” reverse the DISPUTE_OPENED ledger entry
     await appendLedgerEntry({
       type: 'DISPUTE_WON',
       amount: amount, // positive = risk removed
       referenceId: bookingId ?? dispute.id,
       referenceType: 'BOOKING',
       providerId: providerId ?? undefined,
-      description: `Dispute ${dispute.id} WON Ã¢â‚¬â€ $${amount.toFixed(2)} liability cleared`,
+      description: `Dispute ${dispute.id} WON â€” $${amount.toFixed(2)} liability cleared`,
       metadata: { stripeDisputeId: dispute.id, chargeId, bookingId },
     });
 
@@ -2893,16 +2879,16 @@ async function handleDisputeClosed(
     void sendAlert({
       type: 'DISPUTE_OPENED',
       severity: 'WARNING',
-      message: `Dispute ${dispute.id} WON Ã¢â‚¬â€ $${amount.toFixed(2)} recovered. Payout hold released.`,
+      message: `Dispute ${dispute.id} WON â€” $${amount.toFixed(2)} recovered. Payout hold released.`,
       entityId: dispute.id,
       metadata: { stripeDisputeId: dispute.id, bookingId, providerId, amount },
     });
 
-    logger.info(`Ã¢Å“â€¦ Dispute WON: ${dispute.id} Ã¢â‚¬â€ $${amount.toFixed(2)} recovered`);
+    logger.info(`âœ… Dispute WON: ${dispute.id} â€” $${amount.toFixed(2)} recovered`);
 
   } else if (status === 'lost') {
-    // Chargeback confirmed Ã¢â‚¬â€ platform absorbs the loss
-    // Stripe also charges a dispute fee (~$15Ã¢â‚¬â€œ$25 AUD); use dispute.balance_transactions
+    // Chargeback confirmed â€” platform absorbs the loss
+    // Stripe also charges a dispute fee (~$15â€“$25 AUD); use dispute.balance_transactions
     const stripeFee = dispute.balance_transactions?.reduce(
       (sum, bt) => sum + Math.abs(bt.fee) / 100, 0
     ) ?? 0;
@@ -2914,7 +2900,7 @@ async function handleDisputeClosed(
       referenceId: bookingId ?? dispute.id,
       referenceType: 'BOOKING',
       providerId: providerId ?? undefined,
-      description: `Dispute ${dispute.id} LOST Ã¢â‚¬â€ $${amount.toFixed(2)} + $${stripeFee.toFixed(2)} fee`,
+      description: `Dispute ${dispute.id} LOST â€” $${amount.toFixed(2)} + $${stripeFee.toFixed(2)} fee`,
       metadata: { stripeDisputeId: dispute.id, chargeId, bookingId, amount, stripeFee, totalLoss },
     });
 
@@ -2938,12 +2924,12 @@ async function handleDisputeClosed(
             referenceId: bookingId,
             referenceType: 'ADJUSTMENT',
             providerId,
-            description: `Dispute ${dispute.id} LOST Ã¢â‚¬â€ recovering instructor payout from future earnings`,
+            description: `Dispute ${dispute.id} LOST â€” recovering instructor payout from future earnings`,
             metadata: { stripeDisputeId: dispute.id, postPayout: true, payoutId: payoutRecord.id },
           });
-          logger.info(`Ã¢Å“â€¦ Recovery adjustment created for paid-out booking ${bookingId}`);
+          logger.info(`âœ… Recovery adjustment created for paid-out booking ${bookingId}`);
         } else {
-          logger.info(`Ã¢â€žÂ¹Ã¯Â¸Â No paid payout found for booking ${bookingId} Ã¢â‚¬â€ no recovery adjustment needed`);
+          logger.info(`â„¹ï¸ No paid payout found for booking ${bookingId} â€” no recovery adjustment needed`);
         }
       } catch (adjErr) {
         logger.error('[DISPUTE LOST] Could not create recovery adjustment', {
@@ -2955,12 +2941,12 @@ async function handleDisputeClosed(
     void sendAlert({
       type: 'DISPUTE_LOST',
       severity: 'CRITICAL',
-      message: `Dispute ${dispute.id} LOST Ã¢â‚¬â€ $${totalLoss.toFixed(2)} cash loss (inc. $${stripeFee.toFixed(2)} Stripe fee). Recovery adjustment created.`,
+      message: `Dispute ${dispute.id} LOST â€” $${totalLoss.toFixed(2)} cash loss (inc. $${stripeFee.toFixed(2)} Stripe fee). Recovery adjustment created.`,
       entityId: dispute.id,
       metadata: { stripeDisputeId: dispute.id, bookingId, providerId, amount, stripeFee, totalLoss },
     });
 
-    logger.info(`Ã°Å¸Å¡Â¨ Dispute LOST: ${dispute.id} Ã¢â‚¬â€ $${totalLoss.toFixed(2)} total loss`);
+    logger.info(`ðŸš¨ Dispute LOST: ${dispute.id} â€” $${totalLoss.toFixed(2)} total loss`);
   }
 
   // Always audit log the close
@@ -3001,13 +2987,13 @@ async function handleDisputeClosed(
 }
 
 // ============================================================================
-// SPRINT B Ã¢â‚¬â€ OUT-OF-BAND REFUND SYNC
+// SPRINT B â€” OUT-OF-BAND REFUND SYNC
 // ============================================================================
 
 /**
  * charge.refunded
  *
- * Fires when a refund is issued Ã¢â‚¬â€ either via the DriveBook refund route (already
+ * Fires when a refund is issued â€” either via the DriveBook refund route (already
  * handled) or directly from the Stripe Dashboard (previously invisible to the DB).
  *
  * We use the idempotency key to skip refunds already processed through the app.
@@ -3031,7 +3017,7 @@ async function handleChargeRefunded(
 
   if (!piId) {
     await recordWebhookEvent(prisma, idempotencyKey, 'charge.refunded', chargeId, {
-      note: 'No payment_intent on charge Ã¢â‚¬â€ skipped',
+      note: 'No payment_intent on charge â€” skipped',
     });
     return;
   }
@@ -3052,9 +3038,9 @@ async function handleChargeRefunded(
   }
 
   if (!bookingId) {
-    // Wallet top-up refund or subscription Ã¢â‚¬â€ not a booking, still record it
+    // Wallet top-up refund or subscription â€” not a booking, still record it
     await recordWebhookEvent(prisma, idempotencyKey, 'charge.refunded', chargeId, {
-      note: 'No bookingId in PI metadata Ã¢â‚¬â€ non-booking refund',
+      note: 'No bookingId in PI metadata â€” non-booking refund',
       piId,
       refundedAmount,
     });
@@ -3074,7 +3060,7 @@ async function handleChargeRefunded(
     return;
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ ATOMIC REFUND SYNC Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+  // â”€â”€ ATOMIC REFUND SYNC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // All operations must succeed or fail together to maintain consistency
 
   // Declare refundDelta outside transaction (needed for alert after transaction)
@@ -3109,18 +3095,18 @@ async function handleChargeRefunded(
         refundDelta = Math.max(0, refundedAmount - alreadyRecordedRefund);
     
         if (refundDelta <= 0.000001) {
-          logger.info(`Ã¢â€žÂ¹Ã¯Â¸Â [REFUND SYNC] Charge ${chargeId} already fully represented locally`);
-          return; // Exit transaction Ã¢â‚¬â€ nothing to do
+          logger.info(`â„¹ï¸ [REFUND SYNC] Charge ${chargeId} already fully represented locally`);
+          return; // Exit transaction â€” nothing to do
         }
     
-        // Out-of-band refund Ã¢â‚¬â€ sync only the new refund amount.
+        // Out-of-band refund â€” sync only the new refund amount.
         await appendLedgerEntry({
           type: 'REFUND_SYNCED',
           amount: -refundDelta,
           referenceId: bookingId,
           referenceType: 'BOOKING',
           providerId: booking.providerId ?? undefined,
-          description: `Out-of-band refund from Stripe Dashboard Ã¢â‚¬â€ $${refundedAmount.toFixed(2)} on charge ${chargeId}`,
+          description: `Out-of-band refund from Stripe Dashboard â€” $${refundedAmount.toFixed(2)} on charge ${chargeId}`,
           metadata: { stripeChargeId: chargeId, piId, refundedAmount, refundDelta, isFullRefund },
         });
     
@@ -3170,11 +3156,11 @@ async function handleChargeRefunded(
     metadata: { stripeChargeId: chargeId, piId, refundedAmount, isFullRefund, bookingStatus: booking.status },
   });
 
-  logger.info(`Ã¢Å¡Â Ã¯Â¸Â [REFUND SYNC] Out-of-band refund on booking ${bookingId}: $${refundDelta.toFixed(2)} new refund`);
+  logger.info(`âš ï¸ [REFUND SYNC] Out-of-band refund on booking ${bookingId}: $${refundDelta.toFixed(2)} new refund`);
 }
 
 // ============================================================================
-// SPRINT C Ã¢â‚¬â€ STRIPE CONNECT TRANSFER FAILURE RECOVERY
+// SPRINT C â€” STRIPE CONNECT TRANSFER FAILURE RECOVERY
 // ============================================================================
 
 /**
@@ -3184,7 +3170,7 @@ async function handleChargeRefunded(
  * (e.g. debit card transfer rejected, Connect account deactivated, etc.)
  *
  * Actions:
- *  1. Revert the Payout status from PAID Ã¢â€ â€™ FAILED
+ *  1. Revert the Payout status from PAID â†’ FAILED
  *  2. Reverse the PAYOUT_PAID ledger entry (re-credit the platform)
  *  3. Alert operations + notify instructor
  */
@@ -3233,14 +3219,14 @@ async function handleTransferFailed(
       });
 
       if (reverted.count > 0) {
-        // Reverse the PAYOUT_PAID ledger entry â€” re-credit the platform balance
+        // Reverse the PAYOUT_PAID ledger entry — re-credit the platform balance
         await appendLedgerEntry({
           type: 'ADJUSTMENT',
           amount: amount, // positive = re-crediting the platform
           referenceId: payoutId,
           referenceType: 'PAYOUT',
           providerId: providerId ?? undefined,
-          description: `Transfer ${transferId} FAILED â€” reversing PAYOUT_PAID for payout ${payoutId}`,
+          description: `Transfer ${transferId} FAILED — reversing PAYOUT_PAID for payout ${payoutId}`,
           metadata: {
             stripeTransferId: transferId,
             payoutId,
@@ -3251,18 +3237,18 @@ async function handleTransferFailed(
 
         await incrementLedger({
           totalPaidOut: -amount,  // reverse the payout
-          totalReserved: amount,  // return to reserved â€” still owed to instructor
+          totalReserved: amount,  // return to reserved — still owed to instructor
         });
 
-        logger.info(`[TRANSFER FAILED] Payout ${payoutId} reverted to FAILED â€” $${amount.toFixed(2)} re-credited to platform`);
+        logger.info(`[TRANSFER FAILED] Payout ${payoutId} reverted to FAILED — $${amount.toFixed(2)} re-credited to platform`);
       } else {
-        // stripeTransferId did not match current PAID payout â€” late event for superseded transfer
-        logger.info(`[TRANSFER FAILED] Transfer ${transferId} â€” no matching PAID payout with this transferId. No reversal applied (payout likely superseded by successful retry).`);
+        // stripeTransferId did not match current PAID payout — late event for superseded transfer
+        logger.info(`[TRANSFER FAILED] Transfer ${transferId} — no matching PAID payout with this transferId. No reversal applied (payout likely superseded by successful retry).`);
       }
     }, SERIALIZABLE_TX);
   }, { operationName: 'webhook-transfer-failed' });
 
-  // Audit log (outside transaction â€” best-effort, non-critical)
+  // Audit log (outside transaction — best-effort, non-critical)
   try {
     await prisma.auditLog.create({
       data: {
@@ -3327,7 +3313,7 @@ async function handleTransferFailed(
     }
   }
 
-  logger.info(`[TRANSFER FAILED] Transfer ${transferId} â€” $${amount.toFixed(2)} â€” instructor: ${providerId} â€” reversal: ${reverted.count > 0}`);
+  logger.info(`[TRANSFER FAILED] Transfer ${transferId} — $${amount.toFixed(2)} — instructor: ${providerId} — reversal: ${reverted.count > 0}`);
 }
 
 
@@ -3387,7 +3373,7 @@ async function handleConnectAccountUpdated(
   const providerId = account.metadata?.providerId;
   if (!providerId) {
     await recordWebhookEvent(prisma, idempotencyKey, 'account.updated', account.id, {
-      note: 'No providerId in metadata Ã¢â‚¬â€ skipped',
+      note: 'No providerId in metadata â€” skipped',
     });
     return;
   }
@@ -3424,7 +3410,7 @@ async function handleConnectAccountUpdated(
     where: { id: providerId },
     data: {
       stripeAccountId: account.id,
-      // Store Connect onboarding state Ã¢â‚¬â€ used by buildPayout eligibility gate
+      // Store Connect onboarding state â€” used by buildPayout eligibility gate
       chargesEnabled,
       payoutsEnabled,
       // Persist detailsSubmitted for onboarding UI state
@@ -3441,5 +3427,5 @@ async function handleConnectAccountUpdated(
     detailsSubmitted,
   });
 
-  logger.info(`Ã¢Å“â€¦ Connect account updated: instructor=${providerId} charges=${chargesEnabled} payouts=${payoutsEnabled}`);
+  logger.info(`âœ… Connect account updated: instructor=${providerId} charges=${chargesEnabled} payouts=${payoutsEnabled}`);
 }
