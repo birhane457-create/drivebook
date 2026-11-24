@@ -72,8 +72,11 @@ export default function ClientPDATestsPage() {
       const instructors = await instructorsRes.json();
 
       // Fetch available PDA tests
-      const testsRes = await fetch('/api/pda-bookings/available');
-      const tests = testsRes.ok ? await testsRes.json() : [];
+      const testsRes = await fetch('/api/pda-bookings/available', { cache: 'no-store' });
+      if (!testsRes.ok) {
+        throw new Error('Failed to load PDA bookings');
+      }
+      const tests = await testsRes.json();
 
       // Organize by instructor
       const organized: InstructorWithBookings[] = instructors
@@ -81,7 +84,7 @@ export default function ClientPDATestsPage() {
         .map((inst: Instructor) => ({
           provider: inst,
           bookedTests: tests.filter((t: PDATest) => t.providerId === inst.id),
-          canAddTest: inst.testPackagePrice && inst.testPackagePrice > 0,
+          canAddTest: Boolean(inst.testPackagePrice && inst.testPackagePrice > 0),
         }));
 
       setInstructorsData(organized);
@@ -258,7 +261,7 @@ export default function ClientPDATestsPage() {
                               <div>
                                 <p className="text-gray-600">Status</p>
                                 <p className="font-semibold text-green-600">
-                                  {test.result ? `Result: ${test.result}` : 'Pending'}
+                                  {test.result ? `Result: ${test.result}` : (test.status || 'Pending').replace(/_/g, ' ')}
                                 </p>
                               </div>
                             </div>
