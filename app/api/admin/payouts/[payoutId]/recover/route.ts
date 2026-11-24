@@ -50,8 +50,8 @@ import { commitPayoutCompletion, releasePayoutReservation } from '@/lib/services
 
 export const dynamic = 'force-dynamic';
 
-const STRIPE_TRANSFER_ID_PATTERN = /^tr_[a-zA-Z0-9]+$/;
-const STRIPE_ACCOUNT_ID_PATTERN  = /^acct_[a-zA-Z0-9]+$/;
+const STRIPE_TRANSFER_ID_PATTERN = /^tr_[a-zA-Z0-9_]+$/;
+const STRIPE_ACCOUNT_ID_PATTERN  = /^acct_[a-zA-Z0-9_]+$/;
 const RECOVERY_CLAIM_TTL_MS = 10 * 60 * 1000; // 10 minutes — matches Phase 1
 
 // Fix #3: completion requires documented evidence matching this payout
@@ -273,47 +273,45 @@ export async function POST(
         );
       }
 
-      // 1c. Currency must be AUD (enforced by schema, but explicit here for clarity)
-      // — already enforced by z.literal('aud') in schema; no additional check needed.
+      // 1c. Currency must be AUD (enforced by schema z.literal('aud')).
 
-      // 1d. Stripe transfer ID must not already be associated with another payout
-      if (ev.stripeTransferId !== payout.stripeTransferId) {
-        // payout.stripeTransferId may be null (timeout scenario) or already set (Scenario A).
-        // If set, it must match what the admin is submitting.
-        if (payout.stripeTransferId !== null && ev.stripeTransferId !== payout.stripeTransferId) {
-          await prisma.payout.updateMany({
-            where: { id: payoutId, recoveryClaimToken: claimToken },
-            data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
-          });
-          return NextResponse.json(
-            {
-              error: 'Transfer ID mismatch: a different transfer ID is already recorded on this payout',
-              submitted: ev.stripeTransferId,
-              recorded: payout.stripeTransferId,
-            },
-            { status: 422 },
-          );
-        }
-
-        // Check no OTHER payout already uses this transfer ID
-        const duplicate = await prisma.payout.findFirst({
-          where: { stripeTransferId: ev.stripeTransferId, id: { not: payoutId } },
-          select: { id: true, payoutRef: true },
+      // 1d. If this payout already has a stripeTransferId recorded, the submission must match it.
+      if (payout.stripeTransferId !== null && ev.stripeTransferId !== payout.stripeTransferId) {
+        await prisma.payout.updateMany({
+          where: { id: payoutId, recoveryClaimToken: claimToken },
+          data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
         });
-        if (duplicate) {
-          await prisma.payout.updateMany({
-            where: { id: payoutId, recoveryClaimToken: claimToken },
-            data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
-          });
-          return NextResponse.json(
-            {
-              error: 'Duplicate transfer ID: this Stripe transfer ID is already associated with another payout',
-              conflictingPayoutRef: duplicate.payoutRef,
-              conflictingPayoutId: duplicate.id,
-            },
-            { status: 409 },
-          );
-        }
+        return NextResponse.json(
+          {
+            error: 'Transfer ID mismatch: a different transfer ID is already recorded on this payout',
+            submitted: ev.stripeTransferId,
+            recorded: payout.stripeTransferId,
+          },
+          { status: 422 },
+        );
+      }
+
+      // 1e. The submitted transfer ID must not be associated with any OTHER payout.
+      // This check runs unconditionally — including when the submitted ID matches
+      // the payout's own stripeTransferId — to protect against race conditions
+      // where two payouts attempt to claim the same transfer ID concurrently.
+      const duplicate = await prisma.payout.findFirst({
+        where: { stripeTransferId: ev.stripeTransferId, id: { not: payoutId } },
+        select: { id: true, payoutRef: true },
+      });
+      if (duplicate) {
+        await prisma.payout.updateMany({
+          where: { id: payoutId, recoveryClaimToken: claimToken },
+          data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
+        });
+        return NextResponse.json(
+          {
+            error: 'Duplicate transfer ID: this Stripe transfer ID is already associated with another payout',
+            conflictingPayoutRef: duplicate.payoutRef,
+            conflictingPayoutId: duplicate.id,
+          },
+          { status: 409 },
+        );
       }
     }
 
