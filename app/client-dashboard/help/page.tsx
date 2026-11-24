@@ -121,7 +121,7 @@ const faqs = [
     items: [
       {
         q: 'How do I update my profile?',
-        a: 'Go to Profile in the nav. You can update your name, phone, address, and profile photo.',
+        a: 'Go to Profile in the nav to update your name, phone number, and default pickup address. Profile photo updates are not currently available in the client dashboard.',
       },
       {
         q: 'How do I change my password?',
