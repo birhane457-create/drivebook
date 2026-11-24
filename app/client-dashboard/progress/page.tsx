@@ -8,7 +8,6 @@ interface FeedbackItem {
   id: string;
   date: string;
   instructor: string;
-  provider?: string;
   performanceScore: number | null;
   assessmentType: 'COACHING' | 'MOCK' | 'OFFICIAL';
   lessonTopics: string[];
@@ -129,7 +128,7 @@ export default function ClientProgressPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-muted-foreground mb-0.5">Latest Mock Assessment</p>
-                <p className="text-sm text-foreground">{new Date(latestMock.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })} · {latestMock.provider}</p>
+                <p className="text-sm text-foreground">{new Date(latestMock.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })} · {latestMock.instructor}</p>
               </div>
               <div className="text-right">
                 {latestMock.performanceScore !== null && (
@@ -264,7 +263,7 @@ export default function ClientProgressPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{item.provider}</p>
+                      <p className="text-xs text-muted-foreground">{item.instructor}</p>
                       {item.lessonTopics.length > 0 && (
                         <p className="text-xs text-muted-foreground mt-0.5">
                           Topics: {item.lessonTopics.join(', ')}
