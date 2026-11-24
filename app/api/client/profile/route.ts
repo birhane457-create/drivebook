@@ -120,15 +120,6 @@ export async function GET(req: NextRequest) {
     }
     const bookings = Array.from(bookingMap.values());
 
-    const upcomingBookings = bookings.filter((b: any) => {
-      if (!b.startTime) return false;
-      return b.startTime > now && b.status === 'CONFIRMED';
-    });
-    const pastBookings = bookings.filter((b: any) => {
-      if (!b.startTime) return false;
-      return b.startTime <= now && b.status === 'COMPLETED';
-    });
-
     const activeBookings = bookings.filter((b: any) => {
       // Always show these â€” student needs to see them
       if (b.status === 'PENDING_PAYMENT') return true; // "Awaiting Payment"
