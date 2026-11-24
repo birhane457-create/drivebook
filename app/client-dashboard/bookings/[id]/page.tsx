@@ -10,6 +10,8 @@ import {
   CreditCard, RefreshCw, FileText, Star, User, Car, BookOpen,
 } from 'lucide-react';
 import ReviewModal from '@/components/ReviewModal';
+import PackageCancellationModal from '@/components/client/PackageCancellationModal';
+import { getFeedbackDescription } from '@/lib/extensions/driving/feedback-codes';
 
 interface BookingDetail {
   id: string;
@@ -27,6 +29,10 @@ interface BookingDetail {
   notes: string | null;
   isPackageBooking: boolean;
   packageHours: number | null;
+  packageHoursRemaining: number | null;
+  packageTotalPaid: number | null;
+  packageExpiryDate: string | null;
+  cancellationStatus: string | null;
   isReviewed: boolean;
   performanceScore: number | null;
   instructorNotes: string | null;
@@ -85,6 +91,13 @@ function DetailRow({ icon: Icon, label, children }: {
   );
 }
 
+function formatFeedbackItems(items: Array<string | number>) {
+  return items.map((item) => {
+    const code = Number(item);
+    return Number.isInteger(code) ? (getFeedbackDescription(code) ?? String(item)) : String(item);
+  });
+}
+
 function FeedbackList({ title, items }: { title: string; items: Array<string | number> }) {
   if (!items?.length) return null;
   return (
@@ -111,6 +124,7 @@ export default function ClientBookingDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviewModal, setReviewModal] = useState(false);
+  const [showPackageCancelModal, setShowPackageCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -197,7 +211,7 @@ export default function ClientBookingDetailPage() {
 
   const statusCfg = STATUS_CONFIG[booking.status] ?? STATUS_CONFIG.upcoming;
   const StatusIcon = statusCfg.icon;
-  const canReschedule = booking.status === 'upcoming' && hoursUntil !== null && hoursUntil > 12;
+  const canReschedule = ['upcoming', 'awaiting_payment'].includes(booking.status) && hoursUntil !== null && hoursUntil > 12;
   const canCancel = ['upcoming', 'awaiting_confirmation', 'awaiting_payment'].includes(booking.status);
   const canReview = booking.status === 'completed' && !booking.isReviewed;
   const hasFeedback = booking.performanceScore !== null ||
@@ -294,9 +308,9 @@ export default function ClientBookingDetailPage() {
           <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <div><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Lesson review</p><h2 className="mt-1 text-lg font-bold text-slate-900">Instructor feedback</h2></div>
             {booking.performanceScore !== null && <div className="rounded-xl bg-blue-50 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Performance score</p><p className="mt-1 text-3xl font-bold text-blue-900">{booking.performanceScore}<span className="text-base font-medium">/100</span></p></div>}
-            <FeedbackList title="Lesson feedback" items={booking.lessonFeedback} />
-            <FeedbackList title="Strengths" items={booking.studentStrengths} />
-            <FeedbackList title="Focus areas" items={booking.focusAreas} />
+            <FeedbackList title="Lesson feedback" items={formatFeedbackItems(booking.lessonFeedback)} />
+            <FeedbackList title="Strengths" items={formatFeedbackItems(booking.studentStrengths)} />
+            <FeedbackList title="Focus areas" items={formatFeedbackItems(booking.focusAreas)} />
             {booking.instructorNotes && <div><h3 className="text-sm font-semibold text-slate-900">Instructor notes</h3><p className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">{booking.instructorNotes}</p></div>}
             {booking.whiteboardSketchUrl && <div><h3 className="text-sm font-semibold text-slate-900">Lesson whiteboard</h3><a href={booking.whiteboardSketchUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm font-semibold text-blue-700 underline">View instructor sketch</a></div>}
           </section>
@@ -326,7 +340,11 @@ export default function ClientBookingDetailPage() {
             ) : (
               <div className="mt-4 flex flex-wrap gap-2">
                 {canReschedule && <Link href={`/client-dashboard/bookings/${booking.id}/reschedule`} className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"><Calendar className="h-4 w-4" />Reschedule</Link>}
-                {canCancel && booking.cancellationStatus !== 'PENDING' && <button onClick={() => setCancelConfirm(true)} className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50"><XCircle className="h-4 w-4" />Cancel booking</button>}
+                {canCancel && booking.cancellationStatus !== 'PENDING' && (
+                  booking.isPackageBooking && booking.packageHours && booking.packageHoursRemaining !== null && booking.packageTotalPaid !== null
+                    ? <button onClick={() => setShowPackageCancelModal(true)} className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50"><XCircle className="h-4 w-4" />Request package cancellation</button>
+                    : <button onClick={() => setCancelConfirm(true)} className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50"><XCircle className="h-4 w-4" />Cancel booking</button>
+                )}
               </div>
             )}
           </section>
@@ -334,6 +352,22 @@ export default function ClientBookingDetailPage() {
 
         <div className="flex justify-start"><Link href="/client-dashboard/bookings" className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900"><ArrowLeft className="h-4 w-4" />Back to all bookings</Link></div>
       </div>
+
+      {showPackageCancelModal && booking.isPackageBooking && booking.packageHours !== null && booking.packageHoursRemaining !== null && booking.packageTotalPaid !== null && (
+        <PackageCancellationModal
+          isOpen={showPackageCancelModal}
+          onClose={() => setShowPackageCancelModal(false)}
+          booking={{
+            id: booking.id,
+            packageHours: booking.packageHours,
+            packageHoursRemaining: booking.packageHoursRemaining,
+            packageTotalPaid: booking.packageTotalPaid,
+            startTime: booking.startTime,
+            provider: { name: booking.provider.name },
+          }}
+          onSuccess={() => { setShowPackageCancelModal(false); void loadBooking(); }}
+        />
+      )}
 
       <ReviewModal
         isOpen={reviewModal}
