@@ -513,6 +513,11 @@ export default function AdminPayoutsPage() {
   const [releaseReason, setReleaseReason] = useState('');
   const [recoverSubmitting, setRecoverSubmitting] = useState(false);
 
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
+
   const fetchPayouts = async () => {
     setLoading(true);
     try {

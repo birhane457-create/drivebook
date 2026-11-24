@@ -67,7 +67,16 @@ const completeEvidenceSchema = z.object({
   reason: z.string().min(20, 'Reason must describe the evidence in at least 20 characters'),
 });
 
-// Fix #2: release requires structured investigation evidence
+// Fix #2: release requires structured investigation evidence.
+// IMPORTANT: This schema validates that the administrator recorded how they
+// investigated.  It does NOT verify that the investigation was correct or that
+// the application independently queried Stripe.  The result field requires explicit
+// language stating no transfer was found — but it cannot prevent an administrator
+// from providing inaccurate evidence.  The structured fields (stripeAccount,
+// checkedAt, method) are preserved verbatim in the audit record so that any
+// subsequent review can identify what was checked and when.
+// Never release a reservation solely on the absence of a transfer from a limited
+// search — the evidence must affirmatively state no transfer exists.
 const releaseEvidenceSchema = z.object({
   stripeAccount: z
     .string()
@@ -81,7 +90,7 @@ const releaseEvidenceSchema = z.object({
     .min(20, 'result must describe what was found in at least 20 characters')
     .refine(
       s => /no transfer|not found|never created|does not exist|no record/i.test(s),
-      'result must explicitly state that no transfer was found — do not release when outcome is uncertain',
+      'result must explicitly state that no transfer was found — releases are not permitted when the transfer outcome remains uncertain',
     ),
   reason: z.string().min(20, 'Reason must be at least 20 characters'),
 });
@@ -208,11 +217,109 @@ export async function POST(
       );
     }
 
+    // ── Fix 1: Validate completion evidence against stored payout values ────
+    // These checks run BEFORE any financial record changes.
+    // They are cross-validation of the administrator's attestation against
+    // what the system recorded — not automated Stripe verification.
+
+    const { action, evidence } = parsed.data;
+
+    if (action === 'complete') {
+      const ev = evidence as z.infer<typeof completeEvidenceSchema>;
+
+      // 1a. Destination account must match the payout's registered Stripe account
+      if (!payout.stripeAccountId) {
+        await prisma.payout.updateMany({
+          where: { id: payoutId, recoveryClaimToken: claimToken },
+          data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
+        });
+        return NextResponse.json(
+          { error: 'Payout has no stripeAccountId — cannot verify destination account' },
+          { status: 409 },
+        );
+      }
+      if (ev.destinationAccount !== payout.stripeAccountId) {
+        await prisma.payout.updateMany({
+          where: { id: payoutId, recoveryClaimToken: claimToken },
+          data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
+        });
+        return NextResponse.json(
+          {
+            error: 'Destination account mismatch: the submitted account does not match the payout\'s registered Stripe Connect account',
+            submitted: ev.destinationAccount,
+            expected: payout.stripeAccountId,
+          },
+          { status: 422 },
+        );
+      }
+
+      // 1b. Transfer amount must match payout net amount (integer-cent precision)
+      const payoutAmountCents = Math.round(Number(payout.netAmount) * 100);
+      const evidenceAmountCents = Math.round(ev.transferAmount * 100);
+      if (evidenceAmountCents !== payoutAmountCents) {
+        await prisma.payout.updateMany({
+          where: { id: payoutId, recoveryClaimToken: claimToken },
+          data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
+        });
+        return NextResponse.json(
+          {
+            error: 'Amount mismatch: the submitted transfer amount does not match the payout net amount',
+            submittedAud: ev.transferAmount,
+            submittedCents: evidenceAmountCents,
+            expectedAud: Number(payout.netAmount),
+            expectedCents: payoutAmountCents,
+          },
+          { status: 422 },
+        );
+      }
+
+      // 1c. Currency must be AUD (enforced by schema, but explicit here for clarity)
+      // — already enforced by z.literal('aud') in schema; no additional check needed.
+
+      // 1d. Stripe transfer ID must not already be associated with another payout
+      if (ev.stripeTransferId !== payout.stripeTransferId) {
+        // payout.stripeTransferId may be null (timeout scenario) or already set (Scenario A).
+        // If set, it must match what the admin is submitting.
+        if (payout.stripeTransferId !== null && ev.stripeTransferId !== payout.stripeTransferId) {
+          await prisma.payout.updateMany({
+            where: { id: payoutId, recoveryClaimToken: claimToken },
+            data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
+          });
+          return NextResponse.json(
+            {
+              error: 'Transfer ID mismatch: a different transfer ID is already recorded on this payout',
+              submitted: ev.stripeTransferId,
+              recorded: payout.stripeTransferId,
+            },
+            { status: 422 },
+          );
+        }
+
+        // Check no OTHER payout already uses this transfer ID
+        const duplicate = await prisma.payout.findFirst({
+          where: { stripeTransferId: ev.stripeTransferId, id: { not: payoutId } },
+          select: { id: true, payoutRef: true },
+        });
+        if (duplicate) {
+          await prisma.payout.updateMany({
+            where: { id: payoutId, recoveryClaimToken: claimToken },
+            data: { recoveryClaimToken: null, recoveryClaimExpiresAt: null },
+          });
+          return NextResponse.json(
+            {
+              error: 'Duplicate transfer ID: this Stripe transfer ID is already associated with another payout',
+              conflictingPayoutRef: duplicate.payoutRef,
+              conflictingPayoutId: duplicate.id,
+            },
+            { status: 409 },
+          );
+        }
+      }
+    }
+
     // ── Execute action with atomic audit ─────────────────────────────────────
     // Fix #4: the audit event is written INSIDE the same transaction as the action.
     // If the audit write fails, the transaction rolls back — no contradictory records.
-
-    const { action, evidence } = parsed.data;
 
     try {
       if (action === 'complete') {
@@ -399,7 +506,7 @@ export async function POST(
           action: 'release',
           payoutId,
           payoutRef: payout.payoutRef,
-          message: 'Reservation released — funds returned to available balance',
+          message: 'Reservation released — funds returned to available balance. This action was completed based on the administrator\'s attestation. The application did not independently verify the Stripe transfer outcome.',
         });
       }
     } catch (serviceErr) {
