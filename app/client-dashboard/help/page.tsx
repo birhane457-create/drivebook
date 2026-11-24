@@ -121,11 +121,11 @@ const faqs = [
     items: [
       {
         q: 'How do I update my profile?',
-        a: 'Go to Profile in the nav. You can update your name, phone, address, and profile photo.',
+        a: 'Go to Profile in the nav to update your name, phone number, and default pickup address. Profile photo updates are not currently available in the client dashboard.',
       },
       {
         q: 'How do I change my password?',
-        a: 'Go to Profile → Change Password. You\'ll need to enter your current password to set a new one.',
+        a: 'Password changes are not available inside the client dashboard. Use the Forgot Password link on the login page, enter your account email, and follow the reset link sent to you.',
       },
       {
         q: 'How do I contact my instructor?',
@@ -284,20 +284,20 @@ export default function ClientHelpPage() {
                 <span className="text-xs text-muted-foreground/60">support@drivebook.com.au</span>
               </span>
             </a>
-            <a href="tel:1800DRIVEBOOK"
+            <a href="mailto:support@drivebook.com.au?subject=DriveBook%20callback%20request"
               className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-blue-500/60 transition">
               <Phone className="w-5 h-5 text-primary shrink-0" />
               <span className="flex flex-col">
-                <span className="text-xs font-semibold text-foreground">Phone</span>
-                <span className="text-xs text-muted-foreground/60">1800 DRIVEBOOK</span>
+                <span className="text-xs font-semibold text-foreground">Request a call</span>
+                <span className="text-xs text-muted-foreground/60">Email support to request a callback</span>
               </span>
             </a>
-            <a href="#"
+            <a href="mailto:support@drivebook.com.au?subject=DriveBook%20support%20request"
               className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-blue-500/60 transition">
               <MessageCircle className="w-5 h-5 text-primary shrink-0" />
               <span className="flex flex-col">
-                <span className="text-xs font-semibold text-foreground">Live Chat</span>
-                <span className="text-xs text-muted-foreground/60">Available 9 AM – 6 PM</span>
+                <span className="text-xs font-semibold text-foreground">Email Support</span>
+                <span className="text-xs text-muted-foreground/60">Send a support request</span>
               </span>
             </a>
           </div>

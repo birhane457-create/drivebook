@@ -33,7 +33,7 @@ interface PackageData {
   // PB-UI-03 FIX: current instructor rate for new-booking estimate (not lockedHourlyRate)
   currentHourlyRate: number;
   status: string;
-  provider: { id: string; name: string; hourlyRate: number };
+  instructor: { id: string; name: string; hourlyRate: number };
   canScheduleMore: boolean;
   bookings: ChildBooking[];
 }
@@ -211,7 +211,7 @@ export default function ClientPackagesPage() {
               const expiringSoon = isExpiringSoon(pkg);
               const expired = isExpired(pkg);
               // PB-UI-03 FIX: call shared estimateHours utility with CURRENT instructor rate
-              const estHours = estimateHours(walletBalance, (pkg.currentHourlyRate || pkg.provider?.hourlyRate) ?? 0);
+              const estHours = estimateHours(walletBalance, (pkg.currentHourlyRate || pkg.instructor?.hourlyRate) ?? 0);
 
               return (
                 <div
@@ -229,7 +229,7 @@ export default function ClientPackagesPage() {
                     <div className="flex items-start justify-between gap-4 flex-wrap">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-2 flex-wrap">
-                          <h3 className="text-lg font-bold text-foreground">{pkg.provider?.name ?? 'Unknown Instructor'}</h3>
+                          <h3 className="text-lg font-bold text-foreground">{pkg.instructor?.name ?? 'Unknown Instructor'}</h3>
                           <span
                             className={`px-2 py-1 rounded text-xs font-medium whitespace-nowrap ${
                               expired
@@ -380,7 +380,7 @@ export default function ClientPackagesPage() {
                     <div className="border-t border-white/5 pt-4 flex gap-3">
                       {pkg.canScheduleMore && walletBalance > 0 && (
                         <Link
-                          href={`/client-dashboard/book-lesson?providerId=${pkg.provider?.id ?? ''}`}
+                          href={`/client-dashboard/book-lesson?providerId=${pkg.instructor?.id ?? ''}`}
                           className="flex-1 px-4 py-2.5 bg-primary text-foreground font-semibold rounded-lg hover:bg-primary/90 transition flex items-center justify-center gap-2 text-sm"
                         >
                           <BookOpen className="w-4 h-4" />

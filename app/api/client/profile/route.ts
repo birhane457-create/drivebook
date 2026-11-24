@@ -64,14 +64,39 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Get total count
-    const total = await prisma.booking.count({
-      where: { customerId: { in: clientIds } },
-    })
+    const now = new Date();
+    const requestedFilter = searchParams.get('filter');
+    const filter = requestedFilter === 'upcoming' || requestedFilter === 'past' ? requestedFilter : 'all';
+    const baseWhere = {
+      customerId: { in: clientIds },
+      status: { in: ['CONFIRMED', 'COMPLETED', 'NO_SHOW', 'CANCELLED', 'EXPIRED', 'PENDING', 'PENDING_PAYMENT'] },
+    };
+    const filterWhere = filter === 'upcoming'
+      ? {
+          OR: [
+            { status: 'CONFIRMED', OR: [{ endTime: null }, { endTime: { gt: now } }] },
+            { status: 'PENDING_PAYMENT' },
+            { status: 'PENDING' },
+          ],
+        }
+      : filter === 'past'
+      ? {
+          OR: [
+            { status: { in: ['COMPLETED', 'NO_SHOW', 'CANCELLED', 'EXPIRED'] } },
+            { status: 'CONFIRMED', endTime: { lte: now } },
+          ],
+        }
+      : {};
+    const bookingWhere = filter === 'all'
+      ? baseWhere
+      : { AND: [baseWhere, filterWhere] };
 
-    // Get user's bookings via customerId only
+    // Count and paginate after applying the selected filter. Filtering a single
+    // page in the browser would omit matching bookings on later pages.
+    const total = await prisma.booking.count({ where: bookingWhere });
+
     const bookingsRaw = await prisma.booking.findMany({
-      where: { customerId: { in: clientIds } },
+      where: bookingWhere,
       include: {
         provider: {
           select: {
@@ -94,16 +119,6 @@ export async function GET(req: NextRequest) {
       bookingMap.set(b.id, b);
     }
     const bookings = Array.from(bookingMap.values());
-
-    const now = new Date();
-    const upcomingBookings = bookings.filter((b: any) => {
-      if (!b.startTime) return false;
-      return b.startTime > now && b.status === 'CONFIRMED';
-    });
-    const pastBookings = bookings.filter((b: any) => {
-      if (!b.startTime) return false;
-      return b.startTime <= now && b.status === 'COMPLETED';
-    });
 
     const activeBookings = bookings.filter((b: any) => {
       // Always show these â€” student needs to see them

@@ -83,10 +83,10 @@ export default function ClientBookingsPage() {
     }
   }, [session]);
 
-  const loadData = async (page: number) => {
+  const loadData = async (page: number, selectedFilter: 'all' | 'upcoming' | 'past' = filter) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/client/profile?page=${page}&limit=10`);
+      const res = await fetch(`/api/client/profile?page=${page}&limit=10&filter=${selectedFilter}`, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
@@ -123,13 +123,7 @@ export default function ClientBookingsPage() {
     );
   }
 
-  const upcomingBookings = profile?.bookings.filter((b: any) => b.status === 'upcoming' || b.status === 'awaiting_payment' || b.status === 'awaiting_confirmation'
-  ) ?? [];
-  const pastBookings = profile?.bookings.filter((b: any) => b.status === 'completed' || b.status === 'cancelled' || b.status === 'expired'
-  ) ?? [];
-  const filteredBookings = filter === 'upcoming' ? upcomingBookings :
-    filter === 'past' ? pastBookings :
-    profile?.bookings ?? [];
+  const filteredBookings = profile.bookings ?? [];
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
@@ -159,17 +153,17 @@ export default function ClientBookingsPage() {
         <div className="bg-card/60 backdrop-blur rounded-2xl border border-border mb-6 overflow-hidden shadow-lg shadow-slate-950/20">
           <div className="flex border-b border-border">
             <button
-              onClick={() => setFilter('all')}
+              onClick={() => { setFilter('all'); void loadData(1, 'all'); }}
               className={`flex-1 px-6 py-4 font-semibold transition-all ${
                 filter === 'all'
                   ? 'border-b-2 border-blue-500 text-primary bg-primary/10'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }`}
             >
-              All Bookings ({pagination.total})
+              All Bookings
             </button>
             <button
-              onClick={() => setFilter('upcoming')}
+              onClick={() => { setFilter('upcoming'); void loadData(1, 'upcoming'); }}
               className={`flex-1 px-6 py-4 font-semibold transition-all ${
                 filter === 'upcoming'
                   ? 'border-b-2 border-blue-500 text-primary bg-primary/10'
@@ -177,17 +171,17 @@ export default function ClientBookingsPage() {
               }`}
             >
               {/* NF-04: use upcomingCount/pastCount from API — not a slice of the current page */}
-              Upcoming ({profile?.upcomingCount ?? 0})
+              Upcoming
             </button>
             <button
-              onClick={() => setFilter('past')}
+              onClick={() => { setFilter('past'); void loadData(1, 'past'); }}
               className={`flex-1 px-6 py-4 font-semibold transition-all ${
                 filter === 'past'
                   ? 'border-b-2 border-blue-500 text-primary bg-primary/10'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }`}
             >
-              Past ({profile?.pastCount ?? 0})
+              Past
             </button>
           </div>
         </div>
