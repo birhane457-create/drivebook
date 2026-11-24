@@ -284,12 +284,12 @@ export default function ClientHelpPage() {
                 <span className="text-xs text-muted-foreground/60">support@drivebook.com.au</span>
               </span>
             </a>
-            <a href="tel:1800DRIVEBOOK"
+            <a href="mailto:support@drivebook.com.au?subject=DriveBook%20callback%20request"
               className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-blue-500/60 transition">
               <Phone className="w-5 h-5 text-primary shrink-0" />
               <span className="flex flex-col">
-                <span className="text-xs font-semibold text-foreground">Phone</span>
-                <span className="text-xs text-muted-foreground/60">1800 DRIVEBOOK</span>
+                <span className="text-xs font-semibold text-foreground">Request a call</span>
+                <span className="text-xs text-muted-foreground/60">Email support to request a callback</span>
               </span>
             </a>
             <a href="mailto:support@drivebook.com.au?subject=DriveBook%20support%20request"
