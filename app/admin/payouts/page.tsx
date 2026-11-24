@@ -500,8 +500,17 @@ export default function AdminPayoutsPage() {
   // Recovery modal state
   const [recoverTarget, setRecoverTarget] = useState<UnresolvedPayout | null>(null);
   const [recoverAction, setRecoverAction] = useState<'complete' | 'release' | null>(null);
+  // Complete evidence
   const [recoverTransferId, setRecoverTransferId] = useState('');
+  const [recoverDestAccount, setRecoverDestAccount] = useState('');
+  const [recoverAmount, setRecoverAmount] = useState('');
   const [recoverReason, setRecoverReason] = useState('');
+  // Release evidence
+  const [releaseAccount, setReleaseAccount] = useState('');
+  const [releaseCheckedAt, setReleaseCheckedAt] = useState('');
+  const [releaseMethod, setReleaseMethod] = useState<'stripe_dashboard' | 'stripe_api' | 'stripe_support'>('stripe_dashboard');
+  const [releaseResult, setReleaseResult] = useState('');
+  const [releaseReason, setReleaseReason] = useState('');
   const [recoverSubmitting, setRecoverSubmitting] = useState(false);
 
   const fetchPayouts = async () => {
@@ -526,18 +535,32 @@ export default function AdminPayoutsPage() {
 
   const submitRecovery = async () => {
     if (!recoverTarget || !recoverAction) return;
-    if (recoverAction === 'complete' && !recoverTransferId.trim()) {
-      showToast('error', 'Stripe transfer ID is required to complete a payout');
-      return;
-    }
-    if (recoverReason.trim().length < 10) {
-      showToast('error', 'Reason must be at least 10 characters');
-      return;
-    }
     setRecoverSubmitting(true);
     try {
-      const body: Record<string, string> = { action: recoverAction, reason: recoverReason.trim() };
-      if (recoverAction === 'complete') body.stripeTransferId = recoverTransferId.trim();
+      let body: Record<string, unknown>;
+      if (recoverAction === 'complete') {
+        body = {
+          action: 'complete',
+          evidence: {
+            stripeTransferId: recoverTransferId.trim(),
+            destinationAccount: recoverDestAccount.trim(),
+            transferAmount: parseFloat(recoverAmount),
+            currency: 'aud',
+            reason: recoverReason.trim(),
+          },
+        };
+      } else {
+        body = {
+          action: 'release',
+          evidence: {
+            stripeAccount: releaseAccount.trim(),
+            checkedAt: releaseCheckedAt,
+            method: releaseMethod,
+            result: releaseResult.trim(),
+            reason: releaseReason.trim(),
+          },
+        };
+      }
 
       const res = await fetch(`/api/admin/payouts/${recoverTarget.id}/recover`, {
         method: 'POST',
@@ -547,10 +570,9 @@ export default function AdminPayoutsPage() {
       const d = await res.json();
       if (res.ok) {
         showToast('success', d.message || `Payout ${recoverAction === 'complete' ? 'completed' : 'reservation released'} successfully`);
-        setRecoverTarget(null);
-        setRecoverAction(null);
-        setRecoverTransferId('');
-        setRecoverReason('');
+        setRecoverTarget(null); setRecoverAction(null);
+        setRecoverTransferId(''); setRecoverDestAccount(''); setRecoverAmount(''); setRecoverReason('');
+        setReleaseAccount(''); setReleaseCheckedAt(''); setReleaseResult(''); setReleaseReason('');
         fetchRecovery();
       } else {
         showToast('error', d.error || 'Recovery action failed');
@@ -1018,54 +1040,78 @@ export default function AdminPayoutsPage() {
               </div>
               <div className="p-6 space-y-4">
                 {recoverAction === 'complete' ? (
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-1">
-                      Stripe transfer ID <span className="text-destructive">*</span>
-                    </label>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Open the Stripe Dashboard, find the transfer for this payout, and copy its ID (starts with <code className="bg-secondary px-1 rounded">tr_</code>).
-                      This is your evidence that money moved.
-                    </p>
-                    <input
-                      type="text"
-                      value={recoverTransferId}
-                      onChange={e => setRecoverTransferId(e.target.value)}
-                      placeholder="tr_1AbcDef..."
-                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
+                  <>
+                    <p className="text-sm text-muted-foreground">Open Stripe Dashboard → Transfers, find the transfer for this payout, and copy the following details. These are your attestation that money moved.</p>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">Stripe transfer ID <span className="text-destructive">*</span></label>
+                      <input type="text" value={recoverTransferId} onChange={e => setRecoverTransferId(e.target.value)} placeholder="tr_1AbcDef..." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">Destination account (Stripe Connect) <span className="text-destructive">*</span></label>
+                      <input type="text" value={recoverDestAccount} onChange={e => setRecoverDestAccount(e.target.value)} placeholder={recoverTarget?.stripeAccountId ?? 'acct_...'} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                      <p className="text-xs text-muted-foreground mt-1">Expected: <code className="bg-secondary px-1 rounded">{recoverTarget?.stripeAccountId ?? '—'}</code></p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">Transfer amount (AUD) <span className="text-destructive">*</span></label>
+                      <input type="number" step="0.01" value={recoverAmount} onChange={e => setRecoverAmount(e.target.value)} placeholder={recoverTarget?.netAmount.toFixed(2)} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                      <p className="text-xs text-muted-foreground mt-1">Expected net: <strong>{recoverTarget ? fmt(recoverTarget.netAmount) : '—'}</strong></p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">Evidence narrative <span className="text-destructive">*</span></label>
+                      <textarea value={recoverReason} onChange={e => setRecoverReason(e.target.value)} rows={2} placeholder="e.g. Transfer confirmed in Stripe dashboard — tr_xxxx found under payout ref PAY-... to acct_... for $600.00 AUD." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                    </div>
+                  </>
                 ) : (
-                  <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 text-sm">
-                    <p className="font-semibold text-destructive mb-1">Releasing will return <strong>{fmt(recoverTarget.netAmount)}</strong> to the available balance.</p>
-                    <p className="text-muted-foreground">Only proceed if you have verified in Stripe that no transfer was created for idempotency key:</p>
-                    <code className="block mt-1 text-xs bg-secondary px-2 py-1 rounded font-mono break-all">{recoverTarget.idempotencyKey}</code>
-                  </div>
+                  <>
+                    <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 text-sm">
+                      <p className="font-semibold text-destructive mb-1">Only release if you have confirmed NO transfer exists.</p>
+                      <p className="text-muted-foreground">Releasing will return <strong>{recoverTarget ? fmt(recoverTarget.netAmount) : '—'}</strong> to the available balance. Query Stripe for idempotency key:</p>
+                      <code className="block mt-1 text-xs bg-secondary px-2 py-1 rounded font-mono break-all">{recoverTarget?.idempotencyKey}</code>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">Stripe account checked <span className="text-destructive">*</span></label>
+                      <input type="text" value={releaseAccount} onChange={e => setReleaseAccount(e.target.value)} placeholder={recoverTarget?.stripeAccountId ?? 'acct_...'} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1">When checked <span className="text-destructive">*</span></label>
+                        <input type="datetime-local" value={releaseCheckedAt.slice(0, 16)} onChange={e => setReleaseCheckedAt(new Date(e.target.value).toISOString())} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-foreground mb-1">How checked <span className="text-destructive">*</span></label>
+                        <select value={releaseMethod} onChange={e => setReleaseMethod(e.target.value as any)} className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary">
+                          <option value="stripe_dashboard">Stripe Dashboard</option>
+                          <option value="stripe_api">Stripe API</option>
+                          <option value="stripe_support">Stripe Support</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">Investigation result <span className="text-destructive">*</span></label>
+                      <textarea value={releaseResult} onChange={e => setReleaseResult(e.target.value)} rows={2} placeholder="e.g. No transfer found for idempotency key idem_xxxx. Stripe confirmed the request never completed successfully." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                      <p className="text-xs text-muted-foreground mt-1">Must explicitly state no transfer was found.</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1">Summary reason <span className="text-destructive">*</span></label>
+                      <textarea value={releaseReason} onChange={e => setReleaseReason(e.target.value)} rows={2} placeholder="e.g. Release approved — Stripe confirmed no transfer was created for this payout." className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none" />
+                    </div>
+                  </>
                 )}
-                <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
-                    Reason / evidence <span className="text-destructive">*</span>
-                  </label>
-                  <textarea
-                    value={recoverReason}
-                    onChange={e => setRecoverReason(e.target.value)}
-                    rows={3}
-                    placeholder={recoverAction === 'complete'
-                      ? 'e.g. Transfer confirmed in Stripe dashboard — tr_xxxx found under payout ref PAY-...'
-                      : 'e.g. Queried Stripe — no transfer found for idempotency key idem_xxxx. Stripe confirmed request never completed.'}
-                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-                  />
-                </div>
               </div>
               <div className="p-6 border-t border-border flex gap-3 justify-end">
                 <button
-                  onClick={() => { setRecoverTarget(null); setRecoverAction(null); setRecoverTransferId(''); setRecoverReason(''); }}
+                  onClick={() => { setRecoverTarget(null); setRecoverAction(null); }}
                   disabled={recoverSubmitting}
                   className="px-4 py-2 text-sm bg-secondary text-foreground rounded-lg hover:bg-secondary/80 disabled:opacity-50">
                   Cancel
                 </button>
                 <button
                   onClick={submitRecovery}
-                  disabled={recoverSubmitting || recoverReason.trim().length < 10 || (recoverAction === 'complete' && !recoverTransferId.trim())}
+                  disabled={recoverSubmitting || (
+                    recoverAction === 'complete'
+                      ? (!recoverTransferId.trim() || !recoverDestAccount.trim() || !recoverAmount || recoverReason.trim().length < 20)
+                      : (!releaseAccount.trim() || !releaseCheckedAt || !releaseResult.trim() || releaseReason.trim().length < 20)
+                  )}
                   className={`px-4 py-2 text-sm text-white rounded-lg disabled:opacity-50 ${recoverAction === 'complete' ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-destructive hover:bg-destructive/80'}`}>
                   {recoverSubmitting ? 'Submitting…' : recoverAction === 'complete' ? 'Complete payout' : 'Release reservation'}
                 </button>

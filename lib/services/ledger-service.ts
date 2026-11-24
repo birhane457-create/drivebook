@@ -389,6 +389,7 @@ export async function releasePayoutReservation(
   payoutId: string,
   netAmountFallback: number,
   failureReason: string,
+  expectedClaimToken?: string,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     // Lock PlatformLedger before reading the payout to prevent a concurrent
@@ -397,15 +398,25 @@ export async function releasePayoutReservation(
       SELECT 1 FROM "PlatformLedger" WHERE key = 'default' FOR UPDATE
     `;
 
-    // Read the persisted reservedAmount while holding the lock.
+    // Read the persisted reservedAmount (and claim token) while holding the lock.
     const existing = await tx.payout.findUnique({
       where: { id: payoutId },
-      select: { status: true, reservedAt: true, reservedAmount: true },
+      select: { status: true, reservedAt: true, reservedAmount: true, recoveryClaimToken: true },
     });
 
     if (!existing || existing.status !== 'PROCESSING') {
-      // Already terminal or not in PROCESSING — nothing to do.
       return;
+    }
+
+    // When a claim token is expected (admin manual release), enforce ownership.
+    // Prevents a stale administrator from releasing another worker's reservation.
+    if (expectedClaimToken !== undefined) {
+      if (existing.recoveryClaimToken !== expectedClaimToken) {
+        throw new Error(
+          'Release rejected: recovery claim no longer owned by this worker — ' +
+          'the claim may have expired and been reacquired.',
+        );
+      }
     }
 
     const hasReservation = existing.reservedAt !== null;

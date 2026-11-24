@@ -11,11 +11,11 @@
  *     holding funds.  An administrator must investigate and either complete or release.
  *
  *   failed — FAILED payouts whose reservation was already released (reservedAt IS NULL).
- *     These are shown for visibility and audit completeness but do not require recovery
- *     action — the funds have already been returned to the available balance.
+ *     These are shown for visibility only — no recovery action is needed.
  *
- * The distinction prevents administrators from treating already-resolved failures
- * as work items requiring investigation.
+ * Fix #6 — data minimisation: recoveryClaimToken is NOT returned.
+ * Only hasActiveClaim (boolean) and recoveryClaimExpiresAt are exposed so the UI
+ * can show "recovery in progress" without leaking the internal token value.
  *
  * Permission: finance.payouts.recover
  */
@@ -29,7 +29,7 @@ import { PERM } from '@/lib/rbac/permissions';
 
 export const dynamic = 'force-dynamic';
 
-// How long a PROCESSING payout must have been stuck before it appears in the queue.
+// How long a PROCESSING payout must have been stuck before appearing in the queue.
 // Very new PROCESSING payouts are likely still executing — not yet stuck.
 const PROCESSING_STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -42,16 +42,40 @@ export async function GET(req: NextRequest) {
     const staleThreshold = new Date(Date.now() - PROCESSING_STALE_THRESHOLD_MS);
 
     // ── Unresolved: PROCESSING with active reservation ──────────────────────
-    // These payouts have funds reserved but have not completed or been released.
-    // They require admin investigation before action.
     const unresolvedPayouts = await prisma.payout.findMany({
       where: {
         status: 'PROCESSING',
         reservedAt: { not: null },
-        updatedAt: { lte: staleThreshold }, // exclude payouts still actively running
+        updatedAt: { lte: staleThreshold },
       },
       include: {
-        provider: {
+        transactions: { select: { transactionId: true } },
+      },
+      orderBy: { reservedAt: 'asc' },
+    });
+
+    // ── Failed: reservation already released ─────────────────────────────────
+    const failedPayouts = await prisma.payout.findMany({
+      where: {
+        status: 'FAILED',
+        reservedAt: null,
+      },
+      include: {
+        transactions: { select: { transactionId: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: 50,
+    });
+
+    // ── Enrich with provider data (Payout has no Prisma relation to Provider) ─
+    const allProviderIds = Array.from(new Set([
+      ...unresolvedPayouts.map(p => p.providerId),
+      ...failedPayouts.map(p => p.providerId),
+    ]));
+
+    const providers = allProviderIds.length
+      ? await prisma.provider.findMany({
+          where: { id: { in: allProviderIds } },
           select: {
             id: true,
             name: true,
@@ -60,37 +84,12 @@ export async function GET(req: NextRequest) {
             payoutMethod: true,
             user: { select: { email: true } },
           },
-        },
-        transactions: { select: { transactionId: true } },
-      },
-      orderBy: { reservedAt: 'asc' }, // oldest first — most urgent
-    });
+        })
+      : [];
 
-    // ── Failed: PROCESSING payout already released ───────────────────────────
-    // Reservation released (reservedAt = null), status = FAILED.
-    // Shown for context; no recovery action needed.
-    const failedPayouts = await prisma.payout.findMany({
-      where: {
-        status: 'FAILED',
-        reservedAt: null,
-      },
-      include: {
-        provider: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-            stripeAccountId: true,
-            payoutMethod: true,
-          },
-        },
-        transactions: { select: { transactionId: true } },
-      },
-      orderBy: { updatedAt: 'desc' },
-      take: 50,
-    });
+    const providerMap = new Map(providers.map(p => [p.id, p]));
 
-    // ── Fetch recovery audit events for all unresolved payouts ───────────────
+    // ── Recovery audit history for unresolved payouts ────────────────────────
     const unresolvedIds = unresolvedPayouts.map(p => p.id);
     const recoveryAuditEvents = unresolvedIds.length
       ? await prisma.auditLog.findMany({
@@ -105,6 +104,9 @@ export async function GET(req: NextRequest) {
                 'PAYOUT_RECOVERY_EXPIRED',
                 'PAYOUT_COMMIT_FAILED',
                 'PAYOUT_UNCERTAIN',
+                'PAYOUT_ADMIN_RECOVERY_COMPLETED',
+                'PAYOUT_ADMIN_RESERVATION_RELEASED',
+                'PAYOUT_ADMIN_RECOVERY_FAILED',
               ],
             },
           },
@@ -122,7 +124,6 @@ export async function GET(req: NextRequest) {
         })
       : [];
 
-    // Group audit events by payoutId
     const auditByPayout: Record<string, typeof recoveryAuditEvents> = {};
     for (const event of recoveryAuditEvents) {
       if (!auditByPayout[event.targetId]) auditByPayout[event.targetId] = [];
@@ -131,77 +132,84 @@ export async function GET(req: NextRequest) {
 
     const now = Date.now();
 
-    const serializeUnresolved = unresolvedPayouts.map(p => ({
-      id: p.id,
-      payoutRef: p.payoutRef,
-      status: p.status,
-      requiresRecovery: true,
-      // Amounts
-      grossAmount: Number(p.grossAmount),
-      taxWithheld: Number(p.taxWithheld),
-      netAmount: Number(p.netAmount),
-      // Reservation
-      reservedAt: p.reservedAt?.toISOString() ?? null,
-      reservedAmount: p.reservedAmount ? Number(p.reservedAmount) : null,
-      reservationId: p.reservationId,
-      // Age of the reservation in minutes (for urgency display)
-      reservationAgeMinutes: p.reservedAt
-        ? Math.round((now - p.reservedAt.getTime()) / 60_000)
-        : null,
-      // Stripe
-      stripeTransferId: p.stripeTransferId,
-      stripeAccountId: p.provider.stripeAccountId,
-      idempotencyKey: p.idempotencyKey,
-      payoutMethod: p.payoutMethod,
-      // Failure context
-      failureReason: p.failureReason,
-      retryCount: p.retryCount,
-      // Recovery claim (shows if another recovery worker is currently active)
-      recoveryClaimToken: p.recoveryClaimToken,
-      recoveryClaimExpiresAt: p.recoveryClaimExpiresAt?.toISOString() ?? null,
-      hasActiveClaim: p.recoveryClaimToken !== null &&
+    const serializeUnresolved = unresolvedPayouts.map(p => {
+      const provider = providerMap.get(p.providerId);
+      const hasActiveClaim =
+        p.recoveryClaimToken !== null &&
         p.recoveryClaimExpiresAt !== null &&
-        p.recoveryClaimExpiresAt > new Date(),
-      // Instructor
-      providerId: p.providerId,
-      instructorName: p.provider.name,
-      instructorPhone: p.provider.phone,
-      instructorEmail: p.provider.user?.email ?? null,
-      // Timing
-      createdAt: p.createdAt.toISOString(),
-      updatedAt: p.updatedAt.toISOString(),
-      transactionCount: p.transactions.length,
-      // Recovery history
-      recoveryHistory: (auditByPayout[p.id] ?? []).map(e => ({
-        id: e.id,
-        action: e.action,
-        success: e.success,
-        errorMessage: e.errorMessage,
-        metadata: e.metadata,
-        createdAt: e.createdAt.toISOString(),
-        actorId: e.actorId,
-      })),
-    }));
+        p.recoveryClaimExpiresAt > new Date();
 
-    const serializeFailed = failedPayouts.map(p => ({
-      id: p.id,
-      payoutRef: p.payoutRef,
-      status: p.status,
-      requiresRecovery: false,
-      grossAmount: Number(p.grossAmount),
-      taxWithheld: Number(p.taxWithheld),
-      netAmount: Number(p.netAmount),
-      stripeTransferId: p.stripeTransferId,
-      failureReason: p.failureReason,
-      retryCount: p.retryCount,
-      providerId: p.providerId,
-      instructorName: p.provider.name,
-      instructorPhone: p.provider.phone,
-      payoutMethod: p.payoutMethod,
-      createdAt: p.createdAt.toISOString(),
-      updatedAt: p.updatedAt.toISOString(),
-      transactionCount: p.transactions.length,
-    }));
+      return {
+        id: p.id,
+        payoutRef: p.payoutRef,
+        status: p.status,
+        requiresRecovery: true,
+        // Amounts
+        grossAmount: Number(p.grossAmount),
+        taxWithheld: Number(p.taxWithheld),
+        netAmount: Number(p.netAmount),
+        // Reservation
+        reservedAt: p.reservedAt?.toISOString() ?? null,
+        reservedAmount: p.reservedAmount ? Number(p.reservedAmount) : null,
+        reservationId: p.reservationId,
+        reservationAgeMinutes: p.reservedAt
+          ? Math.round((now - p.reservedAt.getTime()) / 60_000)
+          : null,
+        // Stripe — needed for admin dashboard lookup
+        stripeTransferId: p.stripeTransferId,
+        stripeAccountId: provider?.stripeAccountId ?? null,
+        idempotencyKey: p.idempotencyKey,
+        payoutMethod: p.payoutMethod,
+        // Failure context
+        failureReason: p.failureReason,
+        retryCount: p.retryCount,
+        // Fix #6: recoveryClaimToken NOT returned — only the derived indicator
+        hasActiveClaim,
+        recoveryClaimExpiresAt: p.recoveryClaimExpiresAt?.toISOString() ?? null,
+        // Instructor
+        providerId: p.providerId,
+        instructorName: provider?.name ?? 'Unknown',
+        instructorPhone: provider?.phone ?? null,
+        instructorEmail: provider?.user?.email ?? null,
+        // Timing
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+        transactionCount: p.transactions.length,
+        // Recovery history
+        recoveryHistory: (auditByPayout[p.id] ?? []).map(e => ({
+          id: e.id,
+          action: e.action,
+          success: e.success,
+          errorMessage: e.errorMessage,
+          metadata: e.metadata,
+          createdAt: e.createdAt.toISOString(),
+          actorId: e.actorId,
+        })),
+      };
+    });
+
+    const serializeFailed = failedPayouts.map(p => {
+      const provider = providerMap.get(p.providerId);
+      return {
+        id: p.id,
+        payoutRef: p.payoutRef,
+        status: p.status,
+        requiresRecovery: false,
+        grossAmount: Number(p.grossAmount),
+        taxWithheld: Number(p.taxWithheld),
+        netAmount: Number(p.netAmount),
+        stripeTransferId: p.stripeTransferId,
+        failureReason: p.failureReason,
+        retryCount: p.retryCount,
+        providerId: p.providerId,
+        instructorName: provider?.name ?? 'Unknown',
+        instructorPhone: provider?.phone ?? null,
+        payoutMethod: p.payoutMethod,
+        createdAt: p.createdAt.toISOString(),
+        updatedAt: p.updatedAt.toISOString(),
+        transactionCount: p.transactions.length,
+      };
+    });
 
     return NextResponse.json({
       unresolved: serializeUnresolved,
@@ -212,7 +220,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err) {
-    console.error('[RECOVERY QUEUE] Error:', err);
+    console.error('[RECOVERY QUEUE]', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
