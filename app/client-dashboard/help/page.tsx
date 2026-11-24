@@ -125,7 +125,7 @@ const faqs = [
       },
       {
         q: 'How do I change my password?',
-        a: 'Go to Profile → Change Password. You\'ll need to enter your current password to set a new one.',
+        a: 'Password changes are not available inside the client dashboard. Use the Forgot Password link on the login page, enter your account email, and follow the reset link sent to you.',
       },
       {
         q: 'How do I contact my instructor?',
@@ -292,12 +292,12 @@ export default function ClientHelpPage() {
                 <span className="text-xs text-muted-foreground/60">1800 DRIVEBOOK</span>
               </span>
             </a>
-            <a href="#"
+            <a href="mailto:support@drivebook.com.au?subject=DriveBook%20support%20request"
               className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-blue-500/60 transition">
               <MessageCircle className="w-5 h-5 text-primary shrink-0" />
               <span className="flex flex-col">
-                <span className="text-xs font-semibold text-foreground">Live Chat</span>
-                <span className="text-xs text-muted-foreground/60">Available 9 AM – 6 PM</span>
+                <span className="text-xs font-semibold text-foreground">Email Support</span>
+                <span className="text-xs text-muted-foreground/60">Send a support request</span>
               </span>
             </a>
           </div>
