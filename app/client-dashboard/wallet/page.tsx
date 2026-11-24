@@ -295,7 +295,7 @@ export default function WalletPage() {
             <div className="divide-y divide-border">
               {wallet.transactions.map((transaction) => {
                 const amount = Number(transaction.amount);
-                const isCredit = transaction.type === 'CREDIT';
+                const isCredit = transaction.type === 'CREDIT' || transaction.type === 'PLATFORM_SUBSIDY';
                 return (
                   <div key={transaction.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
