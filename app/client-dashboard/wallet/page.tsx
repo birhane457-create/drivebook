@@ -13,6 +13,14 @@ interface Wallet {
   totalSpent: number;
   creditsRemaining: number;
   totalBookedHours: number;
+  transactions?: Array<{
+    id: string;
+    type: string;
+    amount: number | string;
+    description?: string | null;
+    createdAt: string;
+    expiresAt?: string | null;
+  }>;
 }
 
 export default function WalletPage() {
@@ -280,6 +288,35 @@ export default function WalletPage() {
           </div>
         </div>
 
+        {/* Recent wallet transactions, including credit expiry dates */}
+        {wallet.transactions && wallet.transactions.length > 0 && (
+          <section className="bg-card/60 rounded-2xl border border-border p-6 mb-8 shadow-lg shadow-slate-950/20">
+            <h2 className="text-xl font-bold text-foreground mb-4">Recent Transactions</h2>
+            <div className="divide-y divide-border">
+              {wallet.transactions.map((transaction) => {
+                const amount = Number(transaction.amount);
+                const isCredit = transaction.type === 'CREDIT';
+                return (
+                  <div key={transaction.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">{transaction.description || (isCredit ? 'Wallet credit' : 'Wallet debit')}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(transaction.createdAt).toLocaleDateString('en-AU')}
+                        {transaction.expiresAt
+                          ? ` · Expires ${new Date(transaction.expiresAt).toLocaleDateString('en-AU')}`
+                          : isCredit ? ' · No expiry date' : ''}
+                      </p>
+                    </div>
+                    <span className={`text-sm font-bold ${isCredit ? 'text-emerald-400' : 'text-foreground'}`}>
+                      {isCredit ? '+' : '−'}${Math.abs(amount).toFixed(2)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Information Box */}
         <div className="bg-blue-500/10 border-l-4 border-blue-500 rounded-2xl p-6">
           <h3 className="font-semibold text-primary mb-2">💡 How Credits Work</h3>
@@ -287,7 +324,7 @@ export default function WalletPage() {
             <li>• Credits represent the balance available in your wallet</li>
             <li>• Each booking deducts the lesson price from your credits</li>
             <li>• When credits run out, you can add more at any time</li>
-            <li>• Credits don't expire and can be used across all instructors</li>
+            <li>• Credits with an expiry date are excluded from your available balance after that date. Check the expiry shown beside each recent credit transaction.</li>
             <li>• If a booking is cancelled, credits are refunded within 3-5 business days</li>
           </ul>
         </div>
