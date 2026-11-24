@@ -160,7 +160,7 @@ export default function ClientBookingsPage() {
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }`}
             >
-              All Bookings ({pagination.total})
+              All Bookings
             </button>
             <button
               onClick={() => { setFilter('upcoming'); void loadData(1, 'upcoming'); }}
@@ -171,7 +171,7 @@ export default function ClientBookingsPage() {
               }`}
             >
               {/* NF-04: use upcomingCount/pastCount from API — not a slice of the current page */}
-              Upcoming ({profile?.upcomingCount ?? 0})
+              Upcoming
             </button>
             <button
               onClick={() => { setFilter('past'); void loadData(1, 'past'); }}
@@ -181,7 +181,7 @@ export default function ClientBookingsPage() {
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }`}
             >
-              Past ({profile?.pastCount ?? 0})
+              Past
             </button>
           </div>
         </div>
