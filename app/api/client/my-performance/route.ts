@@ -100,6 +100,11 @@ export async function GET(req: NextRequest) {
           assessmentType: o.assessmentType,
           lessonTopics: o.lessonTopics,
           passed: o.passed,
+          performanceScore: o.performanceScore,
+          lessonFeedback: o.lessonFeedback ?? [],
+          studentStrengths: o.studentStrengths ?? [],
+          focusAreas: o.focusAreas ?? [],
+          whiteboardSketchUrl: o.whiteboardSketchUrl ?? null,
         };
       });
 
@@ -149,7 +154,7 @@ export async function GET(req: NextRequest) {
       passed: booking.passed ?? null,
       feedback: decodeFeedback(booking.lessonFeedback).slice(0, 3),
       strengths: decodeFeedback(booking.studentStrengths),
-      notes: booking.providerNotes,
+      notes: booking.instructorNotes,
     }));
 
     // Top strengths
