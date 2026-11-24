@@ -42,6 +42,10 @@ export const PERM = {
   FINANCE_PAYOUTS_PROCESS:             'finance.payouts.process',
   FINANCE_PAYOUTS_HOLD:                'finance.payouts.hold',
   FINANCE_PAYOUTS_RESOLVE:             'finance.payouts.resolve',
+  // PH5-SCH-22b: manual recovery of stuck PROCESSING/FAILED payouts
+  // Distinct from RESOLVE (booking dispute resolution) — this permission
+  // gates evidence-based completion and reservation release for Stripe transfers.
+  FINANCE_PAYOUTS_RECOVER:             'finance.payouts.recover',
 
   FINANCE_CREDITS_VIEW:                'finance.credits.view',
   FINANCE_CREDITS_MANAGE:              'finance.credits.manage',

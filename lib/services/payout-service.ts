@@ -384,7 +384,7 @@ function buildStripeTransferParams(
 // to give 1 hour of operational margin before automatic recovery is unsafe.
 const STRIPE_IDEMPOTENCY_SAFE_WINDOW_MS = 23 * 60 * 60 * 1000;
 
-async function recoverProcessingPayout(
+export async function recoverProcessingPayout(
   payoutId: string,
   adminUserId: string,
 ): Promise<PayoutResult> {

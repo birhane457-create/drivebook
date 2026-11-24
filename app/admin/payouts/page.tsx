@@ -58,7 +58,41 @@ interface PayoutData {
     pendingTransferCount: number; sentCount: number;
   };
 }
-type Tab = 'eligible' | 'manual' | 'withheld' | 'disputes';
+// PH5-SCH-22b: recovery queue types
+interface RecoveryAuditEvent {
+  id: string; action: string; success: boolean;
+  errorMessage?: string | null; metadata?: Record<string, unknown> | null;
+  createdAt: string; actorId: string;
+}
+interface UnresolvedPayout {
+  id: string; payoutRef: string; status: string; requiresRecovery: true;
+  grossAmount: number; taxWithheld: number; netAmount: number;
+  reservedAt: string | null; reservedAmount: number | null; reservationId: string | null;
+  reservationAgeMinutes: number | null;
+  stripeTransferId: string | null; stripeAccountId: string | null;
+  idempotencyKey: string; payoutMethod: string;
+  failureReason: string | null; retryCount: number;
+  recoveryClaimToken: string | null; recoveryClaimExpiresAt: string | null;
+  hasActiveClaim: boolean;
+  providerId: string; instructorName: string; instructorPhone: string | null;
+  instructorEmail: string | null;
+  createdAt: string; updatedAt: string; transactionCount: number;
+  recoveryHistory: RecoveryAuditEvent[];
+}
+interface FailedPayout {
+  id: string; payoutRef: string; status: string; requiresRecovery: false;
+  grossAmount: number; taxWithheld: number; netAmount: number;
+  stripeTransferId: string | null; failureReason: string | null; retryCount: number;
+  providerId: string; instructorName: string; instructorPhone: string | null;
+  payoutMethod: string; createdAt: string; updatedAt: string; transactionCount: number;
+}
+interface RecoveryData {
+  unresolved: UnresolvedPayout[];
+  failed: FailedPayout[];
+  counts: { unresolved: number; failed: number };
+}
+
+type Tab = 'eligible' | 'manual' | 'withheld' | 'disputes' | 'recovery';
 type ResolveAction = 'refund_client' | 'approve_for_payout' | 'charge_instructor' | 'void' | 'split';
 type NoShowParty = 'provider' | 'customer' | 'both';
 
@@ -454,6 +488,7 @@ function CaseCard({ txn, instructorName, onResolve }: { txn: WithheldTxn | Dispu
 // Page
 export default function AdminPayoutsPage() {
   const [data, setData] = useState<PayoutData | null>(null);
+  const [recoveryData, setRecoveryData] = useState<RecoveryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('eligible');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -462,13 +497,12 @@ export default function AdminPayoutsPage() {
   const [markSentTarget, setMarkSentTarget] = useState<ManualPayout | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<ManualPayout | null>(null);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-
-  useEffect(() => { fetchPayouts(); }, []);
-
-  const showToast = (type: 'success' | 'error', message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 4000);
-  };
+  // Recovery modal state
+  const [recoverTarget, setRecoverTarget] = useState<UnresolvedPayout | null>(null);
+  const [recoverAction, setRecoverAction] = useState<'complete' | 'release' | null>(null);
+  const [recoverTransferId, setRecoverTransferId] = useState('');
+  const [recoverReason, setRecoverReason] = useState('');
+  const [recoverSubmitting, setRecoverSubmitting] = useState(false);
 
   const fetchPayouts = async () => {
     setLoading(true);
@@ -478,6 +512,51 @@ export default function AdminPayoutsPage() {
       else showToast('error', 'Failed to load payout data.');
     } catch { showToast('error', 'Failed to load payout data.'); }
     finally { setLoading(false); }
+  };
+
+  const fetchRecovery = async () => {
+    try {
+      const res = await fetch('/api/admin/payouts/recovery');
+      if (res.ok) setRecoveryData(await res.json());
+      // 403 means no finance.payouts.recover permission — silently ignore
+    } catch { /* non-critical */ }
+  };
+
+  useEffect(() => { fetchPayouts(); fetchRecovery(); }, []);
+
+  const submitRecovery = async () => {
+    if (!recoverTarget || !recoverAction) return;
+    if (recoverAction === 'complete' && !recoverTransferId.trim()) {
+      showToast('error', 'Stripe transfer ID is required to complete a payout');
+      return;
+    }
+    if (recoverReason.trim().length < 10) {
+      showToast('error', 'Reason must be at least 10 characters');
+      return;
+    }
+    setRecoverSubmitting(true);
+    try {
+      const body: Record<string, string> = { action: recoverAction, reason: recoverReason.trim() };
+      if (recoverAction === 'complete') body.stripeTransferId = recoverTransferId.trim();
+
+      const res = await fetch(`/api/admin/payouts/${recoverTarget.id}/recover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await res.json();
+      if (res.ok) {
+        showToast('success', d.message || `Payout ${recoverAction === 'complete' ? 'completed' : 'reservation released'} successfully`);
+        setRecoverTarget(null);
+        setRecoverAction(null);
+        setRecoverTransferId('');
+        setRecoverReason('');
+        fetchRecovery();
+      } else {
+        showToast('error', d.error || 'Recovery action failed');
+      }
+    } catch { showToast('error', 'Network error — recovery action not sent'); }
+    finally { setRecoverSubmitting(false); }
   };
 
   const toggle = (id: string) => setExpanded(prev => {
@@ -610,6 +689,7 @@ export default function AdminPayoutsPage() {
             { key: 'manual' as Tab, label: `Manual Transfers (${manualCount})`, alert: manualCount > 0 },
             { key: 'withheld' as Tab, label: `Withheld (${data.withheld.reduce((s: any, w: any) => s + w.transactions.length, 0)})` },
             { key: 'disputes' as Tab, label: `Disputes (${data.disputes.length})` },
+            { key: 'recovery' as Tab, label: `Recovery (${recoveryData?.counts.unresolved ?? 0})`, alert: (recoveryData?.counts.unresolved ?? 0) > 0 },
           ]).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${tab === t.key ? 'bg-primary text-foreground' : 'text-muted-foreground hover:bg-secondary'}`}>
@@ -811,8 +891,188 @@ export default function AdminPayoutsPage() {
             <p>Manual Transfers: admin must physically transfer funds, then mark sent + confirm received before ledger updates.</p>
             <p>Withheld: cancelled or no-show — expand each case to see who, what, why, and the recommended action.</p>
             <p>Disputes: both parties contested — review carefully. "Charge Instructor" deducts from their next payout.</p>
+            <p>Recovery: stuck PROCESSING payouts with active fund reservations. Verify in Stripe dashboard before completing or releasing. Each action requires documented evidence.</p>
           </div>
         </div>
+
+        {/* RECOVERY */}
+        {tab === 'recovery' && (
+          <div className="space-y-4">
+            {!recoveryData ? (
+              <div className="p-8 text-center text-muted-foreground">Loading recovery queue…</div>
+            ) : (
+              <>
+                {recoveryData.unresolved.length === 0 && recoveryData.failed.length === 0 && (
+                  <div className="p-12 text-center bg-card rounded-lg border border-border">
+                    <CheckCircle className="h-14 w-14 text-emerald-400 mx-auto mb-3" />
+                    <p className="text-lg font-semibold text-foreground">No stuck payouts</p>
+                    <p className="text-sm text-muted-foreground mt-1">All payouts have resolved cleanly.</p>
+                  </div>
+                )}
+
+                {/* Unresolved — require admin action */}
+                {recoveryData.unresolved.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle className="h-5 w-5 text-destructive" />
+                      <h3 className="font-semibold text-foreground">Stuck PROCESSING — funds reserved, action required ({recoveryData.unresolved.length})</h3>
+                    </div>
+                    <div className="bg-card rounded-lg border border-border divide-y divide-border">
+                      {recoveryData.unresolved.map(p => (
+                        <div key={p.id} className="p-5">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold text-foreground">{p.payoutRef}</span>
+                                <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full">PROCESSING {p.reservationAgeMinutes != null ? `· ${p.reservationAgeMinutes}m ago` : ''}</span>
+                                {p.hasActiveClaim && <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">Recovery in progress</span>}
+                              </div>
+                              <p className="text-sm text-muted-foreground mt-1">{p.instructorName} · {p.instructorPhone ?? 'no phone'}{p.instructorEmail ? ` · ${p.instructorEmail}` : ''}</p>
+                              <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                                <span>Net reserved: <strong className="text-foreground">{fmt(p.netAmount)}</strong></span>
+                                <span>Method: <strong className="text-foreground">{p.payoutMethod}</strong></span>
+                                <span>Stripe transfer ID: <strong className="text-foreground font-mono">{p.stripeTransferId ?? '—'}</strong></span>
+                                <span>Stripe account: <strong className="text-foreground font-mono text-xs">{p.stripeAccountId ?? '—'}</strong></span>
+                                <span>Idempotency key: <strong className="text-foreground font-mono text-xs">{p.idempotencyKey.slice(0, 16)}…</strong></span>
+                                <span>Retry count: <strong className="text-foreground">{p.retryCount}</strong></span>
+                                {p.failureReason && <span className="col-span-2 text-destructive">Failure: {p.failureReason}</span>}
+                              </div>
+                              {p.recoveryHistory.length > 0 && (
+                                <div className="mt-3">
+                                  <button onClick={() => toggle(p.id + '-history')} className="text-xs text-primary hover:underline flex items-center gap-1">
+                                    <Clock className="h-3 w-3" /> Recovery history ({p.recoveryHistory.length} events)
+                                  </button>
+                                  {expanded.has(p.id + '-history') && (
+                                    <div className="mt-2 space-y-1">
+                                      {p.recoveryHistory.map(e => (
+                                        <div key={e.id} className="text-xs bg-secondary rounded px-3 py-1.5">
+                                          <span className={e.success ? 'text-emerald-400' : 'text-destructive'}>{e.action}</span>
+                                          <span className="text-muted-foreground ml-2">{new Date(e.createdAt).toLocaleString()}</span>
+                                          {e.errorMessage && <span className="text-muted-foreground ml-2">— {e.errorMessage.slice(0, 80)}</span>}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-col gap-2 shrink-0">
+                              <button
+                                onClick={() => { setRecoverTarget(p); setRecoverAction('complete'); setRecoverTransferId(p.stripeTransferId ?? ''); setRecoverReason(''); }}
+                                disabled={p.hasActiveClaim}
+                                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white text-xs rounded-lg disabled:opacity-40">
+                                Complete
+                              </button>
+                              <button
+                                onClick={() => { setRecoverTarget(p); setRecoverAction('release'); setRecoverTransferId(''); setRecoverReason(''); }}
+                                disabled={p.hasActiveClaim}
+                                className="px-3 py-1.5 bg-destructive/80 hover:bg-destructive text-white text-xs rounded-lg disabled:opacity-40">
+                                Release
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Failed — no action needed, shown for context */}
+                {recoveryData.failed.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <Info className="h-5 w-5 text-muted-foreground" />
+                      <h3 className="font-semibold text-muted-foreground">Recently failed — reservation already released ({recoveryData.failed.length})</h3>
+                    </div>
+                    <div className="bg-card rounded-lg border border-border divide-y divide-border">
+                      {recoveryData.failed.map(p => (
+                        <div key={p.id} className="p-4 flex items-center gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-foreground">{p.payoutRef}</span>
+                              <span className="text-xs bg-secondary text-muted-foreground px-2 py-0.5 rounded-full">FAILED</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-0.5">{p.instructorName} · {fmt(p.netAmount)}</p>
+                            {p.failureReason && <p className="text-xs text-muted-foreground mt-0.5 truncate">{p.failureReason}</p>}
+                          </div>
+                          <span className="text-xs text-muted-foreground shrink-0">{new Date(p.updatedAt).toLocaleDateString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Recovery action modal */}
+        {recoverTarget && recoverAction && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg">
+              <div className="p-6 border-b border-border">
+                <h2 className="text-lg font-semibold text-foreground">
+                  {recoverAction === 'complete' ? 'Complete payout' : 'Release reservation'}
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">{recoverTarget.payoutRef} · {recoverTarget.instructorName}</p>
+              </div>
+              <div className="p-6 space-y-4">
+                {recoverAction === 'complete' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">
+                      Stripe transfer ID <span className="text-destructive">*</span>
+                    </label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Open the Stripe Dashboard, find the transfer for this payout, and copy its ID (starts with <code className="bg-secondary px-1 rounded">tr_</code>).
+                      This is your evidence that money moved.
+                    </p>
+                    <input
+                      type="text"
+                      value={recoverTransferId}
+                      onChange={e => setRecoverTransferId(e.target.value)}
+                      placeholder="tr_1AbcDef..."
+                      className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 text-sm">
+                    <p className="font-semibold text-destructive mb-1">Releasing will return <strong>{fmt(recoverTarget.netAmount)}</strong> to the available balance.</p>
+                    <p className="text-muted-foreground">Only proceed if you have verified in Stripe that no transfer was created for idempotency key:</p>
+                    <code className="block mt-1 text-xs bg-secondary px-2 py-1 rounded font-mono break-all">{recoverTarget.idempotencyKey}</code>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-foreground mb-1">
+                    Reason / evidence <span className="text-destructive">*</span>
+                  </label>
+                  <textarea
+                    value={recoverReason}
+                    onChange={e => setRecoverReason(e.target.value)}
+                    rows={3}
+                    placeholder={recoverAction === 'complete'
+                      ? 'e.g. Transfer confirmed in Stripe dashboard — tr_xxxx found under payout ref PAY-...'
+                      : 'e.g. Queried Stripe — no transfer found for idempotency key idem_xxxx. Stripe confirmed request never completed.'}
+                    className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                  />
+                </div>
+              </div>
+              <div className="p-6 border-t border-border flex gap-3 justify-end">
+                <button
+                  onClick={() => { setRecoverTarget(null); setRecoverAction(null); setRecoverTransferId(''); setRecoverReason(''); }}
+                  disabled={recoverSubmitting}
+                  className="px-4 py-2 text-sm bg-secondary text-foreground rounded-lg hover:bg-secondary/80 disabled:opacity-50">
+                  Cancel
+                </button>
+                <button
+                  onClick={submitRecovery}
+                  disabled={recoverSubmitting || recoverReason.trim().length < 10 || (recoverAction === 'complete' && !recoverTransferId.trim())}
+                  className={`px-4 py-2 text-sm text-white rounded-lg disabled:opacity-50 ${recoverAction === 'complete' ? 'bg-emerald-700 hover:bg-emerald-600' : 'bg-destructive hover:bg-destructive/80'}`}>
+                  {recoverSubmitting ? 'Submitting…' : recoverAction === 'complete' ? 'Complete payout' : 'Release reservation'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {toast && (
