@@ -285,6 +285,7 @@ export default function ClientBookingDetailPage() {
             <DetailRow icon={DollarSign} label="Payment">{booking.isPaid ? 'Paid' : booking.status === 'awaiting_payment' ? 'Awaiting payment' : 'Not marked as paid'}</DetailRow>
             {booking.bookingType && <DetailRow icon={Car} label="Booking type">{booking.bookingType.replace(/_/g, ' ')}</DetailRow>}
             {booking.isPackageBooking && <DetailRow icon={BookOpen} label="Package booking">{booking.packageHours ? `${booking.packageHours} hours package` : 'Package lesson'}</DetailRow>}
+            {booking.packageExpiryDate && <DetailRow icon={Calendar} label="Package expiry">{formatDateTime(booking.packageExpiryDate, { day: 'numeric', month: 'long', year: 'numeric' })}</DetailRow>}
           </div>
           {booking.notes && <div className="border-t border-slate-100 px-5 py-4 sm:px-6"><h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900"><FileText className="h-4 w-4 text-slate-500" />Your booking notes</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{booking.notes}</p></div>}
         </section>
