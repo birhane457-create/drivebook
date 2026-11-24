@@ -571,14 +571,20 @@ describe('RC1 | Concurrent recovery — exactly one acquires claim', () => {
     taggedPayouts.push(tag);
   });
 
-  it('RC1: only one recovery worker acquires the claim', async () => {
+  it('RC1: second recovery worker does not reach Stripe while first holds the claim', async () => {
+    // Design: use a controlled promise to hold Worker 1 inside the Stripe mock.
+    // While Worker 1 is blocked (claim acquired, Stripe call pending), Worker 2
+    // starts.  We assert Worker 2 does not call Stripe — proving the claim
+    // prevented the second worker from reaching the external operation.
+    // Worker 1 is then released; we assert one PAID transition and one ledger entry.
+
     await setLedger({ totalCollected: 1000 });
 
     const payout = await createTestPayout(provider.provider.id, 300, `${tag}`);
     const payoutId = payout.id;
     const adminId = 'admin_rc1_test';
 
-    // Set payout to PROCESSING with active reservation to simulate stuck-in-recovery state
+    // Seed payout as PROCESSING with active reservation (simulates stuck-in-recovery state)
     await prisma.payout.update({
       where: { id: payoutId },
       data: {
@@ -595,31 +601,68 @@ describe('RC1 | Concurrent recovery — exactly one acquires claim', () => {
       data: { totalPayoutReserved: { increment: 300 } },
     });
 
-    const mockTransferId = 'tr_rc1_recovery';
-    mockStripeCreate.mockResolvedValue({ id: mockTransferId, amount: 30000 });
-    mockStripeRetrieve.mockResolvedValue({ id: mockTransferId, amount: 30000 });
+    // Controlled promise: blocks Worker 1 inside the Stripe mock until released
+    let releaseWorker1!: () => void;
+    const worker1Reached = new Promise<void>(resolveReached => {
+      let resolveRelease!: () => void;
+      const holdPromise = new Promise<void>(r => { resolveRelease = r; });
+      releaseWorker1 = resolveRelease;
 
-    // Fire two concurrent recovery attempts
-    const [r1, r2] = await Promise.allSettled([
-      executePayout(payoutId, adminId),
-      executePayout(payoutId, adminId),
-    ]);
+      const mockTransferId = 'tr_rc1_recovery';
+      mockStripeCreate.mockImplementation(async () => {
+        resolveReached(); // signal: Worker 1 is now inside Stripe
+        await holdPromise; // block until released
+        return { id: mockTransferId, amount: 30000 };
+      });
+      mockStripeRetrieve.mockImplementation(async () => {
+        resolveReached();
+        await holdPromise;
+        return { id: mockTransferId, amount: 30000 };
+      });
+    });
 
-    const succeeded = [r1, r2].filter(r => r.status === 'fulfilled');
+    // Start Worker 1 — it will acquire the claim and block at Stripe
+    const worker1Promise = executePayout(payoutId, adminId);
 
-    // Both may appear to succeed (second sees PAID status) OR only one does —
-    // the key assertion is that the payout is PAID exactly once
+    // Wait until Worker 1 is confirmed inside the Stripe mock (claim is now held)
+    await worker1Reached;
+
+    // Worker 2 starts while Worker 1's claim is active
+    const worker2StripeCallCount = mockStripeCreate.mock.calls.length
+      + mockStripeRetrieve.mock.calls.length;
+
+    const worker2Promise = executePayout(payoutId, adminId);
+
+    // Wait for Worker 2 to settle — it must NOT call Stripe
+    // (a reasonable wait; Worker 2 should return quickly once it fails the claim check)
+    await Promise.allSettled([worker2Promise]);
+
+    const worker2StripeCallCountAfter = mockStripeCreate.mock.calls.length
+      + mockStripeRetrieve.mock.calls.length;
+
+    // ⚠️ KEY ASSERTION: Worker 2 did not initiate a Stripe call while Worker 1 held the claim
+    expect(worker2StripeCallCountAfter).toBe(worker2StripeCallCount);
+
+    // Now release Worker 1
+    releaseWorker1();
+    await worker1Promise;
+
+    // Assert: Stripe called exactly once total (Worker 1 only)
+    expect(mockStripeCreate.mock.calls.length + mockStripeRetrieve.mock.calls.length).toBe(1);
+
+    // Assert: exactly one PAID transition
     const finalPayout = await prisma.payout.findUnique({ where: { id: payoutId } });
     expect(finalPayout?.status).toBe('PAID');
-    expect(finalPayout?.recoveryClaimToken).toBeNull(); // claim cleared after completion
+    expect(finalPayout?.recoveryClaimToken).toBeNull();
+    expect(finalPayout?.reservedAt).toBeNull();
 
-    // LedgerEntry written exactly once
+    // Assert: LedgerEntry written exactly once
     const entries = await prisma.ledgerEntry.findMany({
       where: { referenceId: payoutId, type: 'PAYOUT_PAID' },
     });
     expect(entries.length).toBe(1);
 
-    // totalPayoutReserved decremented exactly once
+    // Assert: totalPayoutReserved released exactly once
     const ledger = await getLedger();
     expect(ledger.totalPayoutReserved).toBe(0);
   });

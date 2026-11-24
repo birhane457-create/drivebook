@@ -12,11 +12,18 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Safety guard — never run against Sydney production
+// Safety guard — never run against Sydney production without explicit flag
 const url = process.env.DATABASE_URL || '';
-if (url.includes('jflrqxigfiiqednfacuf')) {
-  console.error('ERROR: DATABASE_URL points at Sydney production — aborting');
+const allowProduction = process.argv.includes('--allow-production');
+
+if (url.includes('jflrqxigfiiqednfacuf') && !allowProduction) {
+  console.error('ERROR: DATABASE_URL points at Sydney production — pass --allow-production to confirm');
   process.exit(1);
+}
+
+if (url.includes('jflrqxigfiiqednfacuf') && allowProduction) {
+  console.warn('⚠️  WARNING: Running against SYDNEY PRODUCTION database');
+  console.warn('   Project: jflrqxigfiiqednfacuf');
 }
 
 async function columnExists(table, column) {
