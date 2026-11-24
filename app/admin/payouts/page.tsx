@@ -1,4 +1,4 @@
-'use client';
+﻿﻿'use client';
 import { AdminPageLayout } from '@/components/ui'
 
 import { useEffect, useState } from 'react';
@@ -150,7 +150,7 @@ function MarkSentModal({ payout, onClose, onDone }: {
   const [bankReference, setBankReference] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
+  const fmt = (n: number | string | null | undefined) => `$${(Number(n) || 0).toFixed(2)}`;
 
   const submit = async () => {
     if (!bankReference.trim()) { setError('Bank reference is required'); return; }
@@ -214,7 +214,7 @@ function ConfirmReceivedModal({ payout, onClose, onDone }: {
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
+  const fmt = (n: number | string | null | undefined) => `$${(Number(n) || 0).toFixed(2)}`;
 
   const submit = async () => {
     setLoading(true); setError('');
@@ -277,7 +277,7 @@ function ResolveModal({ target, onClose, onDone }: {
 
   const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   const fmtTime = (s?: string) => s ? new Date(s).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '—';
-  const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
+  const fmt = (n: number | string | null | undefined) => `$${(Number(n) || 0).toFixed(2)}`;
 
   const actions: { key: ResolveAction; label: string; desc: string; who: string; consequence: string; style: string }[] = [
     { key: 'refund_client', label: 'Refund Client', desc: `${fmt(target.amount)} returned to client wallet`, who: target.customerName, consequence: target.isPackageBooking ? 'Credit added back to package balance' : 'Wallet balance restored', style: 'border-blue-300 bg-primary/10' },
@@ -417,7 +417,7 @@ function CaseCard({ txn, instructorName, onResolve }: { txn: WithheldTxn | Dispu
   const [open, setOpen] = useState(false);
   const party = parseNoShowParty(txn.description, (txn as any).noShowParty);
   const partyConfig = party ? PARTY_CONFIG[party] : null;
-  const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
+  const fmt = (n: number | string | null | undefined) => `$${(Number(n) || 0).toFixed(2)}`;
   const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
   const fmtTime = (s?: string) => s ? new Date(s).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }) : '—';
   const isNoShow = txn.bookingStatus === 'NO_SHOW';
@@ -648,7 +648,7 @@ export default function AdminPayoutsPage() {
       noShowParty: parseNoShowParty(t.description, (t as any).noShowParty),
     });
 
-  const fmt = (n: number) => `$${(n || 0).toFixed(2)}`;
+  const fmt = (n: number | string | null | undefined) => `$${(Number(n) || 0).toFixed(2)}`;
   const fmtDate = (s: string) => s ? new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
   const manualCount = (data?.stats.pendingTransferCount ?? 0) + (data?.stats.sentCount ?? 0);
