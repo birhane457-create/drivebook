@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     const filterWhere = filter === 'upcoming'
       ? {
           OR: [
-            { status: 'CONFIRMED', endTime: { gt: now } },
+            { status: 'CONFIRMED', OR: [{ endTime: null }, { endTime: { gt: now } }] },
             { status: 'PENDING_PAYMENT' },
             { status: 'PENDING' },
           ],
