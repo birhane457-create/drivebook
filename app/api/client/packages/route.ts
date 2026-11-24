@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
         // Current instructor rate for new-booking estimate (may differ from locked rate)
         currentHourlyRate: Number(packageBooking.provider.hourlyRate ?? packageBooking.lockedHourlyRate ?? 0),
         status: status,
-        instructor: packageBooking.provider,
+        provider: packageBooking.provider,
         canScheduleMore: canSchedule,
         bookings: childBookings.map((b: any) => ({
           id: b.id,
