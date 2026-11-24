@@ -403,16 +403,19 @@ export async function releasePayoutReservation(
       select: { status: true, reservedAt: true, reservedAmount: true },
     });
 
-    if (!existing || existing.status !== 'PROCESSING' || !existing.reservedAt) {
-      // Already terminal or no reservation — nothing to release.
+    if (!existing || existing.status !== 'PROCESSING') {
+      // Already terminal or not in PROCESSING — nothing to do.
       return;
     }
 
-    const amountToRelease = existing.reservedAmount
-      ? Number(existing.reservedAmount)
-      : netAmountFallback;
+    const hasReservation = existing.reservedAt !== null;
+    const amountToRelease = hasReservation
+      ? (existing.reservedAmount ? Number(existing.reservedAmount) : netAmountFallback)
+      : 0;
 
-    // Clear reservation fields so a future retry can create a new reservation.
+    // Mark FAILED and clear all reservation/claim fields.
+    // If no reservation was ever stamped (reservedAt = null), still mark FAILED
+    // so the payout row reflects the definitive outcome.
     await tx.payout.update({
       where: { id: payoutId },
       data: {
@@ -422,16 +425,18 @@ export async function releasePayoutReservation(
         reservedAt: null,
         reservedAmount: null,
         reservationId: null,
-        // Clear recovery claim — a new attempt starts clean.
         recoveryClaimToken: null,
         recoveryClaimExpiresAt: null,
       },
     });
 
-    await tx.platformLedger.update({
-      where: { key: 'default' },
-      data: { totalPayoutReserved: { decrement: amountToRelease } },
-    });
+    // Only decrement if we had an active reservation
+    if (hasReservation && amountToRelease > 0) {
+      await tx.platformLedger.update({
+        where: { key: 'default' },
+        data: { totalPayoutReserved: { decrement: amountToRelease } },
+      });
+    }
   });
 }
 
