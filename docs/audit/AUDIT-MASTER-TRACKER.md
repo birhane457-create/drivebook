@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.96 (PH5-SCH-21/22 closed: ledger atomicity fixes complete)
-**Last Updated:** 2026-11-23 (v6.96 � PH5-SCH-21/22 closed; FinancialLedger + PlatformLedger atomicity verified; 85/85 tests PASS)
+**Version:** 6.97 (reconciliation: PB-SEC-01/02/03 registered; FIN-series retired; BLOCKER-001 scope clarified)
+**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-01/02/03 registered at FINDING stage | v6.96 2026-11-23: PH5-SCH-21/22 closed; 85/85 PASS)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -696,6 +696,59 @@ These items were raised during the audit and verified source-safe. Recorded here
 | Concurrent double-spend (`POST /api/bookings`) | Balance re-checked inside SERIALIZABLE tx; pre-check is fast-reject only | ? VERIFIED SAFE |
 | Slot double-booking | Three-layer guard: Booking table + SlotReservation + PostgreSQL GiST constraint | ? VERIFIED SAFE |
 | Idempotency (`POST /api/public/bookings/bulk`) | `BookingIdempotencyKey` persisted inside same `$transaction` as `Booking.create` | ? VERIFIED SAFE |
+
+
+### 8.7 — Handoff Reconciliation: Unregistered Public-Booking Findings (v6.97, 2026-11-25)
+
+**Source:** Handoff audit `audit/handoff-summary` branch (commits `1ca30af3`, `7c4efbef`). Reconciliation performed 2026-11-25 against tracker v6.96 and current main source.
+
+**FIN-series IDs retired:** The handoff referenced FIN-001 through FIN-011. That series was produced in a prior session context and never registered in this tracker. FIN-001 and FIN-002 map to the already-closed PH5-SCH-22 family (ledger atomicity). FIN-003 (no durable parent checkout record) is unverified; not registered until verified. The FIN-series IDs are not carried forward.
+
+**BLOCKER-001 scope clarification (not a new finding):** `create-intent` comment line 244: "Use booking.price always — never accept amount from client for booking payments." Webhook line 1168 uses `packageTotalPaid || booking.price`, which equals `booking.price` for a single-lesson booking. Whether a Book Now package sets both fields consistently requires a source trace of `app/api/public/bookings/bulk/route.ts`. Recorded in Section 8.6 as requiring verification; no new tracker row until the trace resolves it.
+
+**H-01 and H-02 status confirmed closed:** Source reading in this session confirmed fixes present in current main (`lib/services/booking-service.ts` line 852 sums child `Booking.price`; `app/api/client/confirm-package-booking/route.ts` line 309 sets `price: lessonPrice`). Tracker rows unchanged.
+
+---
+
+#### PB-SEC-01 — Guest booking links to existing account without credential verification
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-01 | Guest booking links to existing account without credential verification | HIGH | CONFIRMED | VERIFIED — `app/api/public/bookings/bulk/route.ts` line 602: `userId = existingUser.id` with no password, OTP, or session auth. Comment line 601: "Existing user — just link booking to their account, no password change." | NOT-STARTED | N/A | OPEN | Reconciliation 2026-11-25; branch `7c4efbef` | none |
+
+**Code location:** `app/api/public/bookings/bulk/route.ts` lines 369–602
+**Condition:** Guest email matching an existing `User` record causes `userId = existingUser.id` with no credential check.
+**Attack vector:** Any party knowing a registered user's email can link a booking to that account without authentication.
+**Impact:** Booking appears in victim's account. If wallet-funded path is involved, financial loss also occurs. No prior-action signal to victim.
+**Fix requires:** Policy decision — (a) reject guest flow if email matches existing account and require login, (b) OTP verification before linking, or (c) post-booking claim flow.
+
+---
+
+#### PB-SEC-02 — Short-notice booking accepted by payment endpoint, rejected by webhook
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-02 | Short-notice booking (`PENDING`) accepted by create-intent but rejected by webhook — customer charged, booking never confirmed | HIGH | CONFIRMED | VERIFIED — `create-intent` line 237 accepts `PENDING` and `PENDING_PAYMENT`; webhook line 1161 rejects non-`PENDING_PAYMENT` without confirming; bulk route creates short-notice as `status: 'PENDING'`. All three files source-verified this session. | NOT-STARTED | N/A | OPEN | Reconciliation 2026-11-25; branch `7c4efbef` | none |
+
+**Code location:** `app/api/public/bookings/bulk/route.ts` (creates `PENDING`); `app/api/payments/create-intent/route.ts` line 237 (accepts both statuses); `app/api/stripe/webhook/route.ts` line 1161 (rejects non-`PENDING_PAYMENT`)
+**Condition:** Short-notice bookings bypass the webhook's strict state gate. Customer can pay; webhook rejects; booking never confirmed.
+**Impact:** Customer charged. Booking remains `PENDING`. Slot hold expires. No confirmation. Requires manual admin intervention to refund.
+**Fix requires:** Policy decision — (a) `create-intent` rejects `PENDING` until instructor approves, or (b) short-notice created as `PENDING_PAYMENT` with post-payment approval flow.
+
+---
+
+#### PB-SEC-03 — Guest payment page discards `checkoutUrl`, payment proceeds without booking token
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-03 | Guest payment page discards `checkoutUrl` from bulk booking response — payment proceeds without booking token | HIGH | CONFIRMED (partial) | PARTIAL — `app/api/public/bookings/bulk/route.ts` lines ~590–610 confirmed to return `checkoutUrl`; `app/book/[instructorId]/payment/page.tsx` not yet read; full verification requires confirming the returned URL is not followed | NOT-STARTED | N/A | OPEN (verification incomplete) | Reconciliation 2026-11-25; branch `7c4efbef` | none |
+
+**Code location:** `app/book/[instructorId]/payment/page.tsx` (file not yet read); `app/api/public/bookings/bulk/route.ts` lines ~590–610
+**Condition:** Bulk route returns `{ checkoutUrl }` on success. The tokenized page at `app/booking/[id]/payment/page.tsx` correctly uses the `token` param. If the guest page ignores `checkoutUrl`, payment proceeds without the booking token.
+**Impact:** Payment may succeed in Stripe but not be associated with the booking. Booking remains `PENDING_PAYMENT`, slot expires, customer has no confirmation.
+**Next required action:** Read `app/book/[instructorId]/payment/page.tsx` and confirm whether `checkoutUrl` is used or discarded before this finding advances past PARTIAL verification.
+
+---
 
 ---
 
