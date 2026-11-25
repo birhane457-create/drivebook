@@ -185,7 +185,7 @@ export default function WalletPage() {
               </div>
               <div className="bg-orange-500/10 rounded-2xl p-4 border border-orange-700/40">
                 <p className="text-sm text-muted-foreground font-semibold">Booking Costs</p>
-                <p className="text-2xl font-bold text-orange-300 mt-2">${wallet.totalSpent.toFixed(2)}</p>
+                <p className="text-2xl font-bold text-orange-600 mt-2">${wallet.totalSpent.toFixed(2)}</p>
               </div>
               <div className={`rounded-2xl p-4 border ${
                 wallet.creditsRemaining > 0
@@ -195,7 +195,7 @@ export default function WalletPage() {
                 <p className="text-sm text-muted-foreground font-semibold">Available Balance</p>
                 <p className={`text-2xl font-bold mt-2 ${
                   wallet.creditsRemaining > 0
-                    ? 'text-emerald-400'
+                    ? 'text-emerald-800'
                     : 'text-destructive'
                 }`}>
                   ${wallet.creditsRemaining.toFixed(2)}
@@ -237,12 +237,12 @@ export default function WalletPage() {
             {/* Total Credits */}
             <div className="bg-green-500/10 border border-green-700/50 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-emerald-400">Total Credits (Money In)</h3>
-                <span className="text-2xl font-bold text-emerald-400">
+                <h3 className="font-semibold text-emerald-800">Total Credits (Money In)</h3>
+                <span className="text-2xl font-bold text-emerald-800">
                   +${wallet.totalPaid.toFixed(2)}
                 </span>
               </div>
-              <p className="text-sm text-emerald-400/80">
+              <p className="text-sm text-emerald-800/90">
                 All money added to your wallet, including initial deposits and top-ups.
               </p>
             </div>
@@ -274,7 +274,7 @@ export default function WalletPage() {
             </div>
           </div>
 
-          <div className="mt-4 text-xs text-muted-foreground/60 italic">
+          <div className="mt-4 text-xs text-muted-foreground italic">
             Note: Duration adjustments (increase/decrease) are included in the debit/credit totals for accounting purposes, 
             but your "Net Booking Costs" above shows only actual booking expenses.
           </div>

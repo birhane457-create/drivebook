@@ -148,9 +148,9 @@ export default function ClientPackagesPage() {
           <div className="bg-card/60 backdrop-blur rounded-2xl border border-border p-4 md:p-6 border-t-4 border-green-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all md:col-span-2 lg:col-span-1">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs md:text-sm text-muted-foreground font-semibold">Credit Balance</p>
-              <Wallet className="h-5 w-5 text-emerald-400" />
+              <Wallet className="h-5 w-5 text-emerald-800" />
             </div>
-            <p className="text-2xl md:text-3xl font-bold text-emerald-400">
+            <p className="text-2xl md:text-3xl font-bold text-emerald-800">
               ${walletBalance.toFixed(2)}
             </p>
             <p className="text-xs text-muted-foreground/60 mt-1">
@@ -171,7 +171,7 @@ export default function ClientPackagesPage() {
           <div className="bg-card/60 backdrop-blur rounded-2xl border border-border p-4 md:p-6 border-t-4 border-violet-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs md:text-sm text-muted-foreground font-semibold">Lessons Used</p>
-              <TrendingUp className="h-5 w-5 text-orange-400" />
+              <TrendingUp className="h-5 w-5 text-orange-800" />
             </div>
             <p className="text-2xl md:text-3xl font-bold text-orange-400">{data.summary.used.toFixed(1)}h</p>
             <p className="text-xs text-muted-foreground/60 mt-1">Across all packages</p>
@@ -181,7 +181,7 @@ export default function ClientPackagesPage() {
           <div className="bg-card/60 backdrop-blur rounded-2xl border border-border p-4 md:p-6 border-t-4 border-amber-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs md:text-sm text-muted-foreground font-semibold">Expiring Soon</p>
-              <AlertTriangle className="h-5 w-5 text-amber-400" />
+              <AlertTriangle className="h-5 w-5 text-amber-800" />
             </div>
             <p className="text-2xl md:text-3xl font-bold text-amber-400">{data.summary.expiring_soon}</p>
             <p className="text-xs text-muted-foreground/60 mt-1">Within 7 days</p>
@@ -286,7 +286,7 @@ export default function ClientPackagesPage() {
                         ) : (
                           <p className="text-xs text-muted-foreground/60">Rate unavailable</p>
                         )}
-                        <p className="text-xs text-muted-foreground/50 mt-1">from your balance</p>
+                        <p className="text-xs text-muted-foreground mt-1">from your balance</p>
                       </div>
                       {/* Secondary: lessons consumed */}
                       <div className="bg-orange-900/20 rounded-lg p-3 text-center border border-orange-700/30">
@@ -294,7 +294,7 @@ export default function ClientPackagesPage() {
                           <Clock className="h-3 w-3 text-muted-foreground" />
                           <p className="text-xs text-muted-foreground">Lessons Used</p>
                         </div>
-                        <p className="text-lg font-semibold text-orange-400">{pkg.hoursUsed.toFixed(1)}h</p>
+                        <p className="text-lg font-semibold text-orange-800">{pkg.hoursUsed.toFixed(1)}h</p>
                       </div>
                       {/* Secondary: package total for reference */}
                       <div className="bg-secondary/50 rounded-lg p-3 text-center border border-white/5">

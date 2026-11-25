@@ -212,7 +212,7 @@ export default function ClientBookingsPage() {
                   href={`/client-dashboard/bookings/${booking.id}`}
                   className={`block bg-card/60 rounded-2xl border border-border p-6 hover:bg-card/80 hover:shadow-lg hover:shadow-blue-600/10 transition-all ${
                     booking.status === 'completed' || booking.status === 'cancelled' || booking.status === 'expired'
-                      ? 'opacity-60' : ''
+                      ? 'opacity-100' : ''
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
