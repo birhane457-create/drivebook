@@ -89,7 +89,7 @@ if (existingUser) {
 **Files:** 
 - `app/api/public/bookings/bulk/route.ts` (creates `PENDING`)
 - `app/api/payments/create-intent/route.ts` (accepts `PENDING`)
-- `app/api/webhooks/stripe/route.ts` (only confirms `PENDING_PAYMENT`)
+- `app/api/stripe/webhook/route.ts` (only confirms `PENDING_PAYMENT`)
 
 **Issue:** Short-notice bookings created as `PENDING` (waiting approval), payment endpoint accepts them, payment succeeds, webhook ignores them (only processes `PENDING_PAYMENT`).
 
@@ -422,21 +422,26 @@ if (booking.status === 'PENDING_PAYMENT') {
 // app/book/[instructorId]/payment/page.tsx
 
 // CURRENT (WRONG):
-const response = await fetch('/api/payments/create-intent', {
-  body: JSON.stringify({ bookingId, amount })
-});
+// This component calls create-intent without a token, then tries to use
+// the response for payment — but the token is never passed.
 
 // CORRECT:
-const response = await fetch('/api/payments/create-intent', {
-  body: JSON.stringify({ bookingId, amount })
+// The bulk booking route (app/api/public/bookings/bulk/route.ts) already
+// returns { checkoutUrl } in its success response (verified in source).
+// The guest payment page should read that returned checkoutUrl and redirect.
+
+const response = await fetch('/api/public/bookings/bulk', {
+  method: 'POST',
+  body: JSON.stringify(bookingPayload)
 });
 
 if (response.ok) {
   const data = await response.json();
   
-  // Backend returns: { paymentUrl: `/booking/${id}/payment?token=xyz` }
-  if (data.paymentUrl) {
-    router.push(data.paymentUrl); // ← Use tokenized URL
+  // Backend returns: { checkoutUrl: `/booking/${id}/payment?token=xyz` }
+  // Property verified in app/api/public/bookings/bulk/route.ts source.
+  if (data.checkoutUrl) {
+    router.push(data.checkoutUrl); // ← Use the returned tokenized URL
     return;
   }
 }
@@ -508,7 +513,7 @@ git checkout <previous-stable-commit>
 
 **Payment Flow:**
 - `app/api/payments/create-intent/route.ts` - Creates PaymentIntent
-- `app/api/webhooks/stripe/route.ts` - Handles payment completion
+- `app/api/stripe/webhook/route.ts` - Handles payment completion and ledger entries (`payment_intent.succeeded`, `checkout.session.completed`)
 - `app/book/[instructorId]/payment/page.tsx` - Guest payment page (WRONG)
 - `app/booking/[id]/payment/page.tsx` - Tokenized payment page (CORRECT)
 
@@ -516,8 +521,7 @@ git checkout <previous-stable-commit>
 - `app/api/bookings/route.ts` - Logged-in booking (commit 221ca08d)
 - `app/api/public/bookings/bulk/route.ts` - Guest booking (commit 10b30fea1)
 
-**Financial:**
-- `app/api/webhooks/stripe/route.ts` - Ledger entries created here
+**Note:** `app/api/webhooks/stripe/route.ts` also exists but handles subscription webhooks, not booking payment confirmation.
 
 ### Database Schema (Relevant Fields)
 
