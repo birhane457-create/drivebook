@@ -892,7 +892,7 @@ export default function ClientDashboard() {
                   
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Total Balance</span>
+                      <span className="text-muted-foreground">Eligible Credits</span>
                       <span className="text-2xl font-bold text-foreground">
                         ${profile.wallet.totalPaid?.toFixed(2) || '0.00'}
                       </span>
