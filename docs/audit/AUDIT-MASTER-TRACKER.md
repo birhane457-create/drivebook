@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.97 (reconciliation: PB-SEC-01 reclassified MEDIUM + design decision recorded; PB-SEC-02/03 registered; FIN-series retired; BLOCKER-001 scope clarified)
-**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-01 reclassified MEDIUM + OTP/magic-link design recorded; PB-SEC-02 VERIFIED/OPEN HIGH; PB-SEC-03 PARTIAL/OPEN HIGH; GPT independent review required before any fix proceeds | v6.96 2026-11-23: PH5-SCH-21/22 closed; 85/85 PASS)
+**Version:** 6.97 (reconciliation: PB-SEC-01-04 registered/updated; FIN-series retired; BLOCKER-001 scope clarified)
+**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-04 registered VERIFIED/OPEN MEDIUM: payment link opens new tab, original tab never navigates forward | PB-SEC-01 MEDIUM OTP design; PB-SEC-02/03 HIGH OPEN; GPT review required before fixes)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -768,6 +768,24 @@ When a guest enters an email that matches an existing `User` record, before `use
 **Condition:** Bulk route returns `{ checkoutUrl }` on success. The tokenized page at `app/booking/[id]/payment/page.tsx` correctly uses the `token` param. If the guest page ignores `checkoutUrl`, payment proceeds without the booking token.
 **Impact:** Payment may succeed in Stripe but not be associated with the booking. Booking remains `PENDING_PAYMENT`, slot expires, customer has no confirmation.
 **Next required action:** Read `app/book/[instructorId]/payment/page.tsx` and confirm whether `checkoutUrl` is used or discarded before this finding advances past PARTIAL verification.
+
+---
+
+#### PB-SEC-04 — Payment link opens new tab; original booking tab never navigates forward
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-04 | Payment link opens new tab after booking submission — original tab stays on `/book/[instructorId]` and never advances to payment or confirmation | MEDIUM | CONFIRMED | VERIFIED — `components/subdomain/SubdomainBookingWizard.tsx` line 311: `target="_blank"` on the payment link; original tab renders in-place confirmation screen but does not navigate. `BulkBookingForm.tsx` line 240/242 uses `window.location.href` (correct) but is not the component rendered on `/book/[instructorId]`. Source-verified this session. | NOT-STARTED | N/A | OPEN | Source trace 2026-11-25; branch `tracker-update-v6.97` | PB-ARCH-01 (related) |
+
+**Code location:** `components/subdomain/SubdomainBookingWizard.tsx` lines 308–315
+**Condition:** After `handleSubmit` succeeds, the wizard sets `paymentOpened = true` and renders a confirmation screen with `<a href={paymentUrl} target="_blank">Complete Payment →</a>`. The original tab stays on `/book/[instructorId]` at the confirmation screen. It never navigates to the payment page.
+**Correct behaviour (reference):** `components/BulkBookingForm.tsx` lines 240–242 use `window.location.href` for a hard forward navigation to the payment page. Same outcome should apply in `SubdomainBookingWizard`.
+**Impact:**
+- Customer who does not notice or cannot open the new tab (pop-up blocker) has no payment link in front of them on the original tab.
+- After payment completes in the new tab, the original tab still shows the booking origin page. No forward confirmation flow.
+- 'Start a new booking' button (line 320) resets the wizard to step 1 in-place — it does not navigate away. A customer who clicks it after paying loses the payment confirmation context.
+**Fix:** Remove `target="_blank"` from the payment link. Replace the `<a>` with `window.location.href = paymentUrl` or `router.push(paymentUrl)` so the original tab navigates forward to the payment page, matching the `BulkBookingForm` behaviour.
+**Note on PB-SEC-03 relationship:** PB-SEC-03 concerns whether `checkoutUrl` from the bulk booking response is used at all. PB-SEC-04 is a separate issue — the URL is constructed and stored in `paymentUrl` correctly (line 212), but the navigation mechanism opens a new tab instead of replacing the current page. Both must be fixed independently.
 
 ---
 
