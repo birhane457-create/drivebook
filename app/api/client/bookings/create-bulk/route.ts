@@ -221,14 +221,14 @@ export async function POST(request: NextRequest) {
     const priceChanges = cartItems.flatMap(item => {
       const info = eligibilityMap.get(item.providerId)!;
       const currentPrice = parseFloat((info.hourlyRate * item.duration).toFixed(2));
-      return Math.abs(currentPrice - item.price) > 0.01
+      return item.expectedPrice !== undefined && Math.abs(currentPrice - item.expectedPrice) > 0.01
         ? [{
             cartItemId: item.id ?? null,
             providerId: item.providerId,
             date: item.date,
             time: item.time,
             duration: item.duration,
-            submittedPrice: item.price,
+            submittedPrice: item.expectedPrice,
             currentPrice,
           }]
         : [];
