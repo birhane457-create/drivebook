@@ -79,11 +79,9 @@ export async function GET(
         displayStatus = 'upcoming';
     }
 
-    // Price guard for old package bug
-    const price =
-      raw.isPackageBooking && raw.packageTotalPaid && booking.price === raw.packageTotalPaid
-        ? booking.provider.hourlyRate
-        : booking.price;
+    // Return the persisted booking amount. Replacing a package amount with
+    // the instructor's hourly rate would misrepresent what this booking cost.
+    const price = booking.price;
 
     // Merge outcome fields from extension table (falls back to Booking cols)
     const outcome = await mergeLessonOutcome(booking.id, raw)
@@ -103,9 +101,16 @@ export async function GET(
       pickupAddress: raw.pickupAddress || null,
       notes: raw.notes || null,
       isPackageBooking: raw.isPackageBooking || false,
-      packageHours: raw.packageHours || null,
+      packageHours: raw.packageHours ?? null,
+      packageHoursRemaining: raw.packageHoursRemaining === null || raw.packageHoursRemaining === undefined
+        ? null
+        : Number(raw.packageHoursRemaining),
+      packageTotalPaid: raw.packageTotalPaid === null || raw.packageTotalPaid === undefined
+        ? null
+        : Number(raw.packageTotalPaid),
+      cancellationStatus: raw.cancellationStatus ?? null,
       isReviewed: raw.isReviewed || false,
-      performanceScore: (outcome as any).performanceScore || null,
+      performanceScore: (outcome as any).performanceScore ?? null,
       instructorNotes: (outcome as any).instructorNotes || null,
       lessonFeedback: (outcome as any).lessonFeedback || [],
       studentStrengths: (outcome as any).studentStrengths || [],
