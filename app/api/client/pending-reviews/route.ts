@@ -17,18 +17,25 @@ export async function GET() {
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const user = await prisma.user.findUnique({ where: { email: session!.user!.email } });
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const client = await prisma.customer.findFirst({ where: { userId: user.id } });
-    if (!client) return NextResponse.json([]);
+    const clients = await prisma.customer.findMany({
+      where: { userId: user.id },
+      select: { id: true },
+    });
+    const clientIds = clients.map((client) => client.id);
+    if (clientIds.length === 0) return NextResponse.json([]);
 
     const now = new Date();
 
     const bookings = await prisma.booking.findMany({
       where: {
-        customerId: client.id,
+        customerId: { in: clientIds },
         status: { in: ['CONFIRMED', 'COMPLETED'] },
         startTime: { lt: now },
         customerRating: null,
