@@ -132,9 +132,10 @@ export default function ClientDashboard() {
   const [currentInstructor, setCurrentInstructor] = useState<CurrentInstructorData | null>(null);
   const [averagePerformance, setAveragePerformance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [successBanner, setSuccessBanner] = useState<{ title: string; description: string } | null>(null);
   const [activeTab, setActiveTab] = useState('bookings');
   const [showAddCredits, setShowAddCredits] = useState(false);
-  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
   const [showTransactionHistory, setShowTransactionHistory] = useState(false);
   const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
   const [showSwitchConfirm, setShowSwitchConfirm] = useState(false);
@@ -163,23 +164,24 @@ export default function ClientDashboard() {
   } | null>(null);
 
   useEffect(() => {
-    // Handle success params from multiple payment flows:
-    //   ?bookingSuccess    — old wizard confirmation
-    //   ?payment=success   — marketplace card payment confirmation
-    //   ?payment=later     — book-later Stripe checkout return (Stripe adds ?session_id=...)
-    //   ?payment=processing — card processing
     const paymentParam = searchParams?.get('payment');
-    const isSuccess = searchParams?.get('bookingSuccess') || paymentParam === 'success' || paymentParam === 'later' || paymentParam === 'processing';
-    if (isSuccess) {
-      setShowSuccessBanner(true);
-      const refreshData = async () => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        await loadData();
-      };
-      refreshData();
-      const timer = setTimeout(() => setShowSuccessBanner(false), 5000);
-      return () => clearTimeout(timer);
+    const bookingSuccess = searchParams?.get('bookingSuccess');
+    if (bookingSuccess || paymentParam === 'success') {
+      setSuccessBanner({ title: 'Booking confirmed!', description: 'Your booking has been confirmed. Check your email for the booking details.' });
+    } else if (paymentParam === 'later') {
+      setSuccessBanner({ title: 'Booking request received', description: 'Your booking is awaiting payment. Open My Bookings to review its current status and payment options.' });
+    } else if (paymentParam === 'processing') {
+      setSuccessBanner({ title: 'Payment processing', description: 'Your payment is still being processed. The booking status will update when confirmation is received.' });
+    } else {
+      return;
     }
+    const refreshData = async () => {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await loadData();
+    };
+    void refreshData();
+    const timer = setTimeout(() => setSuccessBanner(null), 7000);
+    return () => clearTimeout(timer);
   }, [searchParams]);
 
   useEffect(() => {
@@ -197,35 +199,27 @@ export default function ClientDashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      // Run all four fetches in parallel — previously sequential, now ~3× faster
+      setDashboardError(null);
       const [profileRes, walletRes, instructorRes, performanceRes] = await Promise.all([
-        fetch('/api/client/profile'),
-        fetch('/api/client/wallet'),
-        fetch('/api/client/current-instructor'),
-        fetch('/api/client/my-performance')
+        fetch('/api/client/profile', { cache: 'no-store' }),
+        fetch('/api/client/wallet', { cache: 'no-store' }),
+        fetch('/api/client/current-instructor', { cache: 'no-store' }),
+        fetch('/api/client/my-performance', { cache: 'no-store' })
       ]);
-
-      if (profileRes.ok && walletRes.ok) {
-        const [profileData, walletData] = await Promise.all([
-          profileRes.json(),
-          walletRes.json()
-        ]);
-        setProfile({
-          ...profileData,
-          wallet: walletData
-        });
+      if (!profileRes.ok || !walletRes.ok) {
+        throw new Error('Unable to load your bookings or wallet. Please try again.');
       }
-
-      if (instructorRes.ok) {
-        setCurrentInstructor(await instructorRes.json());
-      }
-
+      const [profileData, walletData] = await Promise.all([profileRes.json(), walletRes.json()]);
+      setProfile({ ...profileData, wallet: walletData });
+      if (instructorRes.ok) setCurrentInstructor(await instructorRes.json());
+      else setCurrentInstructor(null);
       if (performanceRes.ok) {
         const performanceData = await performanceRes.json();
-        setAveragePerformance(performanceData.averagePerformance);
-      }
+        setAveragePerformance(typeof performanceData.averagePerformance === 'number' ? performanceData.averagePerformance : null);
+      } else setAveragePerformance(null);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading client dashboard:', error);
+      setDashboardError(error instanceof Error ? error.message : 'Failed to load your dashboard. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -247,7 +241,8 @@ export default function ClientDashboard() {
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-muted-foreground">Failed to load dashboard</p>
+          <p className="text-muted-foreground mb-4">{dashboardError || 'Failed to load dashboard'}</p>
+          <button type="button" onClick={() => void loadData()} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Try again</button>
         </div>
       </div>
     );
@@ -311,13 +306,20 @@ export default function ClientDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8">
+        {dashboardError && profile && (
+          <div role="alert" className="mb-6 p-4 bg-amber-900/20 border border-amber-700/50 rounded-xl flex items-center justify-between gap-3">
+            <p className="text-sm text-amber-200">{dashboardError}</p>
+            <button type="button" onClick={() => void loadData()} className="shrink-0 rounded-lg border border-amber-600 px-3 py-1.5 text-sm font-semibold text-amber-100 hover:bg-amber-900/40">Try again</button>
+          </div>
+        )}
+
         {/* Success Banner */}
-        {showSuccessBanner && (
+        {successBanner && (
           <div className="mb-6 p-4 bg-green-900/20 border border-green-700/50 rounded-xl flex items-start gap-3">
             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-emerald-600">Booking confirmed!</p>
-              <p className="text-sm text-green-400/80">Your lesson(s) have been booked successfully. Check your email for confirmation.</p>
+              <p className="font-semibold text-emerald-600">{successBanner.title}</p>
+              <p className="text-sm text-green-400/80">{successBanner.description}</p>
             </div>
           </div>
         )}
