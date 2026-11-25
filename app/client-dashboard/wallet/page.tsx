@@ -132,7 +132,7 @@ export default function WalletPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           {/* Eligible Credits */}
           <div className="bg-card/60 rounded-2xl border border-border p-6 border-t-4 border-blue-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
-            <p className="text-muted-foreground text-sm font-semibold mb-2">Total Credits Added</p>
+            <p className="text-muted-foreground text-sm font-semibold mb-2">Eligible Credits</p>
             <p className="text-4xl font-bold text-foreground mb-1">
               ${wallet.totalPaid.toFixed(2)}
             </p>
@@ -141,7 +141,7 @@ export default function WalletPage() {
 
           {/* Wallet Debits */}
           <div className="bg-card/60 rounded-2xl border border-border p-6 border-t-4 border-purple-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
-            <p className="text-muted-foreground text-sm font-semibold mb-2">Net Booking Costs</p>
+            <p className="text-muted-foreground text-sm font-semibold mb-2">Wallet Debits</p>
             <p className="text-4xl font-bold text-foreground mb-1">
               ${wallet.totalSpent.toFixed(2)}
             </p>
@@ -290,7 +290,7 @@ export default function WalletPage() {
 
           <div className="mt-4 text-xs text-muted-foreground italic">
             Note: Duration adjustments (increase/decrease) are included in the debit/credit totals for accounting purposes, 
-            but your "Net Booking Costs" above shows only actual booking expenses.
+            but your "Wallet Debits" above shows only actual booking expenses.
           </div>
         </div>
 
