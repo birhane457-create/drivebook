@@ -61,8 +61,9 @@ export default function WalletPage() {
   useEffect(() => {
     // Auto-open modal if ?topup= param is present
     const topup = searchParams.get('topup');
-    if (topup && parseFloat(topup) > 0) {
-      setInitialTopUp(topup);
+    const amount = topup ? Number(topup) : NaN;
+    if (Number.isFinite(amount) && amount >= 10 && amount <= 10000) {
+      setInitialTopUp(String(amount));
       setShowAddCredits(true);
     }
   }, [searchParams]);
@@ -311,12 +312,9 @@ export default function WalletPage() {
         <StripeProvider>
           <AddCreditsModal
             isOpen={showAddCredits}
-            onClose={() => { 
-              setShowAddCredits(false); 
+            onClose={() => {
+              setShowAddCredits(false);
               setInitialTopUp(undefined);
-              // P0 FIX #8b: Reload after modal closes
-              // Wait for webhook to process, then refresh balance
-              setTimeout(() => loadData(), 1500);
             }}
             onSuccess={() => {
               loadData();
