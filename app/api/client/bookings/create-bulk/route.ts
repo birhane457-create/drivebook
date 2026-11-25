@@ -54,6 +54,7 @@ const cartItemSchema = z.object({
   time: z.string().regex(/^([0-1]?\d|2[0-3]):[0-5]\d$/),
   duration: z.number().min(0.5).max(8),
   price: z.number().nonnegative(), // client hint only â€” server recalculates
+  expectedPrice: z.number().nonnegative().optional(), // displayed price for explicit customer reconfirmation
   pickupLocation: z.string().min(0).max(300).optional(),
   service: z.string().min(0).max(500).optional(),
   pdaTest: pdaDetailsSchema.optional(),
