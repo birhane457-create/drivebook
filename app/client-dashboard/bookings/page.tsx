@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -80,13 +80,7 @@ export default function ClientBookingsPage() {
 
   // One effect owns initial loading and filter changes. Separate session and
   // filter effects caused duplicate requests on the first authenticated render.
-  useEffect(() => {
-    if (session?.user?.email) {
-      void loadData(1, filter);
-    }
-  }, [session?.user?.email, filter]);
-
-  const loadData = async (page: number, currentFilter: 'all' | 'upcoming' | 'past' = filter) => {
+  const loadData = useCallback(async (page: number, currentFilter: 'all' | 'upcoming' | 'past' = filter) => {
     try {
       setLoading(true);
       setLoadError(null);
@@ -108,11 +102,18 @@ export default function ClientBookingsPage() {
       }
     } catch (error) {
       console.error('Error loading bookings:', error);
+      setProfile(null);
       setLoadError('We could not load your bookings. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  useEffect(() => {
+    if (session?.user?.email) {
+      void loadData(1, filter);
+    }
+  }, [session?.user?.email, filter, loadData]);
 
   if (status === 'loading' || loading) {
     return (
