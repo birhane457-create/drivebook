@@ -101,7 +101,7 @@ export default function WalletPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Wallet & Credits</h1>
-              <p className="text-primary/80 mt-2">Manage your account balance and payment methods</p>
+              <p className="text-primary mt-2">Manage your account balance and payment methods</p>
             </div>
             <Link
               href="/client-dashboard"
@@ -283,7 +283,7 @@ export default function WalletPage() {
         {/* Information Box */}
         <div className="bg-blue-500/10 border-l-4 border-blue-500 rounded-2xl p-6">
           <h3 className="font-semibold text-primary mb-2">💡 How Credits Work</h3>
-          <ul className="text-sm text-primary/80 space-y-2">
+          <ul className="text-sm text-primary space-y-2">
             <li>• Credits represent the balance available in your wallet</li>
             <li>• Each booking deducts the lesson price from your credits</li>
             <li>• When credits run out, you can add more at any time</li>

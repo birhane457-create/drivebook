@@ -303,7 +303,7 @@ export default function ClientDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Welcome back, {profile.user.name}!</h1>
-              <p className="text-primary/80 mt-2">Track your learning progress</p>
+              <p className="text-primary/90 mt-2">Track your learning progress</p>
             </div>
 
           </div>
@@ -335,7 +335,7 @@ export default function ClientDashboard() {
           <div className="mb-8 bg-card border border-border rounded-2xl overflow-hidden">
             {/* Card header */}
             <div className="bg-blue-600/20 border-b border-border px-5 py-3">
-              <p className="text-primary/80 text-sm font-semibold">👨‍🏫 Your Current Instructor</p>
+              <p className="text-primary/900 text-sm font-semibold">👨‍🏫 Your Current Instructor</p>
             </div>
 
             <div className="p-5">
@@ -406,7 +406,7 @@ export default function ClientDashboard() {
                           <p className="text-xs font-semibold text-muted-foreground">{service.name}</p>
                           <p className="text-xs text-muted-foreground">per hour</p>
                         </div>
-                        <p className="text-base font-bold text-blue-400">${currentInstructor.currentInstructor!.hourlyRate.toFixed(2)}</p>
+                        <p className="text-base font-bold text-blue-900">${currentInstructor.currentInstructor!.hourlyRate.toFixed(2)}</p>
                       </div>
                     );
                   }
@@ -505,7 +505,7 @@ export default function ClientDashboard() {
         {currentInstructor?.packageInfo && (
           <div className="mb-6 bg-card border border-border rounded-2xl overflow-hidden">
             <div className="bg-violet-900/30 border-b border-border px-5 py-3 flex items-center justify-between">
-              <p className="text-primary/80 text-sm font-semibold">📦 Your Package & Credits</p>
+              <p className="text-primary/900 text-sm font-semibold">📦 Your Package & Credits</p>
               <span className="text-muted-foreground text-xs">Wallet balance: <span className="text-foreground font-bold">${profile?.wallet.creditsRemaining?.toFixed(2) ?? '0.00'}</span></span>
             </div>
             <div className="p-5">
@@ -516,11 +516,11 @@ export default function ClientDashboard() {
                 </div>
                 <div className="bg-orange-900/20 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground mb-1">Used</p>
-                  <p className="text-xl font-bold text-orange-400">{currentInstructor.packageInfo.usedHours}h</p>
+                  <p className="text-xl font-bold text-orange-900">{currentInstructor.packageInfo.usedHours}h</p>
                 </div>
                 <div className="bg-green-900/20 rounded-lg p-3">
                   <p className="text-xs text-muted-foreground mb-1">Remaining</p>
-                  <p className="text-xl font-bold text-green-400">{currentInstructor.packageInfo.remainingHours}h</p>
+                  <p className="text-xl font-bold text-green-900">{currentInstructor.packageInfo.remainingHours}h</p>
                 </div>
               </div>
               {/* Progress bar */}
@@ -548,7 +548,7 @@ export default function ClientDashboard() {
                   {pastBookings.length}
                 </p>
                 {(upcomingBookings.length > 0 || awaitingPaymentBookings.length > 0) && (
-                  <p className="text-xs text-primary/80 mt-1">
+                  <p className="text-xs text-primary mt-1">
                     + {upcomingBookings.length + awaitingPaymentBookings.length} upcoming/pending
                   </p>
                 )}
@@ -581,7 +581,7 @@ export default function ClientDashboard() {
                 <p className="text-2xl md:text-3xl font-bold text-foreground mt-2">
                   {averagePerformance ? `${averagePerformance}%` : '—'}
                 </p>
-                <Link href="/client-dashboard/progress" className="text-xs text-purple-300 mt-1 hover:text-purple-200 transition">
+                <Link href="/client-dashboard/progress" className="text-xs text-purple-700 mt-1 hover:text-purple-200 transition">
                   View detailed progress →
                 </Link>
               </div>
@@ -711,11 +711,11 @@ export default function ClientDashboard() {
                           {/* Expandable contact panel */}
                           {expandedBookingId === booking.id && (
                             <div className="border-t border-border bg-blue-900/20 px-4 py-3 flex flex-wrap gap-4 items-center">
-                              <p className="text-xs font-semibold text-primary/80 w-full">Contact {booking.provider?.name || 'Unknown Instructor'}</p>
+                              <p className="text-xs font-semibold text-primary w-full">Contact {booking.provider?.name || 'Unknown Instructor'}</p>
                               {booking.provider?.phone && (
                                 <a
                                   href={`tel:${booking.provider?.phone}`}
-                                  className="flex items-center gap-2 text-sm text-primary/80 hover:text-primary/80 bg-secondary px-3 py-1.5 rounded-lg border border-border hover:border-blue-400 transition"
+                                  className="flex items-center gap-2 text-sm text-primary hover:text-primary bg-secondary px-3 py-1.5 rounded-lg border border-border hover:border-blue-400 transition"
                                 >
                                   <Phone className="w-4 h-4" />
                                   {booking.provider?.phone}
@@ -1025,7 +1025,7 @@ export default function ClientDashboard() {
                           <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
                             transaction.status === 'completed'
                               ? 'bg-green-900/40 text-emerald-600'
-                              : 'bg-blue-900/40 text-primary/80'
+                              : 'bg-blue-900/40 text-primary'
                           }`}>
                             {transaction.status}
                           </span>

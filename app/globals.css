@@ -83,7 +83,7 @@
 
     /* text — dark on light */
     --foreground:         222 47% 11%;     /* near-black — max contrast */
-    --muted-foreground:   220 9% 40%;      /* dark grey — readable in daylight */
+    --muted-foreground:   220 12% 30%;     /* darker grey — strong daylight readability */
     --card-foreground:    222 47% 11%;
 
     /* borders — very soft on white */

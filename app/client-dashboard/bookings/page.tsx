@@ -147,7 +147,7 @@ export default function ClientBookingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">My Bookings</h1>
-              <p className="text-primary/80 mt-2">
+              <p className="text-primary mt-2">
                 {profile.upcomingCount} upcoming • {profile.pastCount} completed
               </p>
             </div>
