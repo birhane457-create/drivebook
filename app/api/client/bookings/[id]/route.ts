@@ -110,7 +110,7 @@ export async function GET(
         : Number(raw.packageTotalPaid),
       cancellationStatus: raw.cancellationStatus ?? null,
       isReviewed: raw.isReviewed || false,
-      performanceScore: (outcome as any).performanceScore || null,
+      performanceScore: (outcome as any).performanceScore ?? null,
       instructorNotes: (outcome as any).instructorNotes || null,
       lessonFeedback: (outcome as any).lessonFeedback || [],
       studentStrengths: (outcome as any).studentStrengths || [],
