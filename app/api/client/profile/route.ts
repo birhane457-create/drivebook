@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getProfileBookingCounts } from '@/lib/services/profile-counts';
 import { toBookingDurationMinutes } from '@/lib/utils/booking-duration';
+import { z } from 'zod';
 
 
 export const dynamic = 'force-dynamic';
@@ -249,33 +250,39 @@ export async function PUT(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { name, phone, address } = body;
+    const profileSchema = z.object({
+      name: z.string().trim().min(1, 'Full name is required').max(120),
+      phone: z.string().trim().max(30).default(''),
+      address: z.string().trim().max(500).default(''),
+    });
+    const parsed = profileSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || 'Invalid profile information' },
+        { status: 400 }
+      );
+    }
+    const { name, phone, address } = parsed.data;
 
     const user = await prisma.user.findUnique({
       where: { email: session!.user!.email },
-      include: {
-        customers: true
-      }
+      include: { customers: { select: { id: true } } },
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Update all client records for this user to keep consistency
-    if ((user as any).customers.length > 0) {
-      await prisma.customer.updateMany({
-        where: { userId: user.id },
-        data: {
-            name,
-            phone,
-            defaultPickupAddress: address || null
-          }
-      });
-    }
+    // Keep the login identity and every linked customer record in sync.
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { name } });
+      if (user.customers.length > 0) {
+        await tx.customer.updateMany({
+          where: { userId: user.id },
+          data: { name, phone, defaultPickupAddress: address || null },
+        });
+      }
+    });
 
     return NextResponse.json({
       success: true,
