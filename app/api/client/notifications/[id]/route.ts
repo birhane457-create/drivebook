@@ -30,6 +30,9 @@ export async function PATCH(
         { status: 401 }
       );
     }
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Get current user
     const user = await prisma.user.findUnique({
@@ -45,6 +48,9 @@ export async function PATCH(
 
     const body = await req.json();
     const { isRead } = body;
+    if (typeof isRead !== 'boolean') {
+      return NextResponse.json({ error: 'isRead must be a boolean' }, { status: 400 });
+    }
 
     // Get the notification
     const notification = await prisma.notification.findUnique({
@@ -96,6 +102,9 @@ export async function DELETE(
         { error: 'Unauthorized' },
         { status: 401 }
       );
+    }
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Get current user
