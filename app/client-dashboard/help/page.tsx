@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import {
-  HelpCircle, Mail, Phone, MessageCircle, BookOpen, CreditCard,
+  HelpCircle, Mail, BookOpen, CreditCard,
   Calendar, ChevronDown, ChevronUp, Search, TrendingUp, Star,
   RefreshCw, XCircle, Wallet, User, AlertCircle,
 } from 'lucide-react';
@@ -45,19 +45,19 @@ const faqs = [
       },
       {
         q: 'How do I add credits?',
-        a: 'Go to Wallet → Add Credits. You can add any amount. A DriveBook platform fee (currently 3.6%) is included in the top-up to cover payment processing costs.',
+        a: 'Go to Wallet → Add Credits. Top-ups are available from $10 to $10,000. The current DriveBook platform fee is shown in the checkout breakdown before you pay.',
       },
       {
         q: 'I received a payment link from my instructor — what do I do?',
-        a: 'Click the link in the email. It will pre-fill the exact amount needed (lesson cost + DriveBook platform fee). Once you top up, let your instructor know and they\'ll confirm the booking.',
+        a: 'Open the link and review the top-up amount and DriveBook platform fee shown at checkout before paying. Your instructor can confirm the booking after the payment is received.',
       },
       {
         q: 'What is the DriveBook platform fee?',
-        a: 'A DriveBook platform fee (currently 3.6%) is applied when you top up your wallet. This covers payment processing costs. It\'s shown clearly before you confirm any top-up.',
+        a: 'A DriveBook platform fee may apply to wallet top-ups. The current rate and amount are shown before you confirm payment. This is DriveBook\'s platform fee, not Stripe\'s card-processing fee.',
       },
       {
         q: 'Can I get a refund to my wallet?',
-        a: 'If a booking is cancelled, credits are returned to your wallet automatically. Refunds to your original payment method are handled case-by-case — contact support.',
+        a: 'Cancellation outcomes depend on the booking type and applicable policy. Some requests require review before a wallet credit or refund is issued. Check the booking status and contact support if the outcome is unclear.',
       },
     ],
   },
@@ -75,7 +75,7 @@ const faqs = [
       },
       {
         q: 'How do I cancel a booking?',
-        a: 'Go to My Bookings → tap the booking → Cancel. Cancellation fees may apply depending on how close to the lesson time you cancel. The policy is shown before you confirm.',
+        a: 'Open the booking from My Bookings and use Cancel Booking if the option is available. The cancellation outcome depends on the booking type and timing. Package cancellation requests may require admin review; wait for the decision before assuming a refund has been issued.',
       },
       {
         q: 'What if my instructor cancels?',
@@ -121,7 +121,7 @@ const faqs = [
     items: [
       {
         q: 'How do I update my profile?',
-        a: 'Go to Profile in the nav. You can update your name, phone, address, and profile photo.',
+        a: 'Go to Profile in the nav. You can update your name, phone number, and default pickup address. Your email address is read-only.',
       },
       {
         q: 'How do I change my password?',
@@ -274,33 +274,15 @@ export default function ClientHelpPage() {
         {/* Contact support */}
         <div className="bg-blue-900/20 border border-blue-700/40 rounded-xl p-6">
           <h2 className="text-lg font-bold text-foreground mb-1">Still need help?</h2>
-          <p className="text-sm text-muted-foreground mb-5">Our support team is available Mon–Fri, 9 AM – 6 PM.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <a href="mailto:support@drivebook.com.au"
-              className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-blue-500/60 transition">
-              <Mail className="w-5 h-5 text-primary shrink-0" />
-              <span className="flex flex-col">
-                <span className="text-xs font-semibold text-foreground">Email</span>
-                <span className="text-xs text-muted-foreground/60">support@drivebook.com.au</span>
-              </span>
-            </a>
-            <a href="tel:1800DRIVEBOOK"
-              className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-blue-500/60 transition">
-              <Phone className="w-5 h-5 text-primary shrink-0" />
-              <span className="flex flex-col">
-                <span className="text-xs font-semibold text-foreground">Phone</span>
-                <span className="text-xs text-muted-foreground/60">1800 DRIVEBOOK</span>
-              </span>
-            </a>
-            <a href="#"
-              className="flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-blue-500/60 transition">
-              <MessageCircle className="w-5 h-5 text-primary shrink-0" />
-              <span className="flex flex-col">
-                <span className="text-xs font-semibold text-foreground">Live Chat</span>
-                <span className="text-xs text-muted-foreground/60">Available 9 AM – 6 PM</span>
-              </span>
-            </a>
-          </div>
+          <p className="text-sm text-muted-foreground mb-5">For account, booking, or payment questions, email the support team.</p>
+          <a href="mailto:support@drivebook.com.au"
+            className="inline-flex items-center gap-3 p-4 bg-card rounded-xl border border-border hover:border-blue-500/60 transition">
+            <Mail className="w-5 h-5 text-primary shrink-0" />
+            <span className="flex flex-col">
+              <span className="text-xs font-semibold text-foreground">Email support</span>
+              <span className="text-xs text-muted-foreground/60">support@drivebook.com.au</span>
+            </span>
+          </a>
         </div>
       </div>
     </div>
