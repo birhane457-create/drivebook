@@ -73,33 +73,30 @@ export async function GET(req: NextRequest) {
       take: 100,
     });
 
-    // Fetch DrivingLessonOutcome records for these bookings
+    // Fetch complete outcome rows. The previous partial merge omitted score and
+    // feedback arrays, causing the dashboard's progress summary to throw.
     const bookingIds = bookingsRaw.map((b: any) => b.id);
-    const outcomes = await (prisma as any).drivingLessonOutcome.findMany({
-      where: {
-        bookingId: { in: bookingIds },
-        feedbackGivenAt: { not: null },
-      },
-    });
-
-    // Build a lookup map of bookingId -> outcome
-    const outcomeMap = new Map<string, any>();
-    for (const o of outcomes) {
-      outcomeMap.set(o.bookingId, o);
-    }
-
-    // Merge outcome fields onto bookings
+    const outcomes = bookingIds.length > 0
+      ? await (prisma as any).drivingLessonOutcome.findMany({
+          where: { bookingId: { in: bookingIds }, feedbackGivenAt: { not: null } },
+        })
+      : [];
+    const outcomeMap = new Map<string, any>(outcomes.map((outcome: any) => [outcome.bookingId, outcome]));
     const bookingsWithFeedback = bookingsRaw
-      .filter((b: any) => outcomeMap.has(b.id))
-      .map((b: any) => {
-        const o = outcomeMap.get(b.id);
+      .filter((booking: any) => outcomeMap.has(booking.id))
+      .map((booking: any) => {
+        const outcome = outcomeMap.get(booking.id);
         return {
-          ...b,
-          instructorNotes: o.instructorNotes,
-          feedbackGivenAt: o.feedbackGivenAt,
-          assessmentType: o.assessmentType,
-          lessonTopics: o.lessonTopics,
-          passed: o.passed,
+          ...booking,
+          instructorNotes: outcome.instructorNotes ?? null,
+          feedbackGivenAt: outcome.feedbackGivenAt ?? null,
+          assessmentType: outcome.assessmentType ?? 'COACHING',
+          lessonTopics: outcome.lessonTopics ?? null,
+          passed: outcome.passed ?? null,
+          performanceScore: outcome.performanceScore ?? null,
+          lessonFeedback: Array.isArray(outcome.lessonFeedback) ? outcome.lessonFeedback : [],
+          studentStrengths: Array.isArray(outcome.studentStrengths) ? outcome.studentStrengths : [],
+          focusAreas: Array.isArray(outcome.focusAreas) ? outcome.focusAreas : [],
         };
       });
 
@@ -149,7 +146,7 @@ export async function GET(req: NextRequest) {
       passed: booking.passed ?? null,
       feedback: decodeFeedback(booking.lessonFeedback).slice(0, 3),
       strengths: decodeFeedback(booking.studentStrengths),
-      notes: booking.providerNotes,
+      notes: booking.instructorNotes,
     }));
 
     // Top strengths
