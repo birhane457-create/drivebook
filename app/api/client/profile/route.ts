@@ -60,11 +60,6 @@ export async function GET(req: NextRequest) {
       statusConditions.push({ status: 'EXPIRED' });
     }
 
-    const bookingWhere = {
-      customerId: { in: [] as string[] },
-      ...(requestedStatuses ? { OR: statusConditions } : {}),
-    };
-
     const user = await prisma.user.findUnique({
       where: { email: session!.user!.email },
       include: {
