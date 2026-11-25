@@ -29,21 +29,41 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '10')))
     const skip = (page - 1) * limit
 
-    // Optional status filter — maps display-side filter to DB statuses
-    const statusParam = searchParams.get('status') // e.g. "upcoming,awaiting_payment,awaiting_confirmation"
-    const dbStatusFilter: string[] | undefined = statusParam
-      ? statusParam.split(',').flatMap((s: string) => {
-          switch (s.trim()) {
-            case 'upcoming':              return ['CONFIRMED'];
-            case 'awaiting_payment':      return ['PENDING_PAYMENT'];
-            case 'awaiting_confirmation': return ['PENDING'];
-            case 'completed':             return ['COMPLETED', 'NO_SHOW'];
-            case 'cancelled':             return ['CANCELLED'];
-            case 'expired':               return ['EXPIRED'];
-            default: return [];
-          }
-        })
-      : undefined;
+    // Filter by the same business meaning used by the dashboard tabs.
+    // In particular, CONFIRMED bookings are split by scheduled end time:
+    // an overdue booking must not remain in the Upcoming tab while cron runs.
+    const statusParam = searchParams.get('status');
+    const requestedStatuses = statusParam
+      ? new Set(statusParam.split(',').map((value) => value.trim()).filter(Boolean))
+      : null;
+    const now = new Date();
+    const statusConditions: any[] = [];
+
+    if (!requestedStatuses || requestedStatuses.has('upcoming')) {
+      statusConditions.push({
+        status: 'CONFIRMED',
+        OR: [{ endTime: null }, { endTime: { gt: now } }],
+      });
+    }
+    if (!requestedStatuses || requestedStatuses.has('awaiting_payment')) {
+      statusConditions.push({ status: 'PENDING_PAYMENT' });
+    }
+    if (!requestedStatuses || requestedStatuses.has('awaiting_confirmation')) {
+      statusConditions.push({ status: 'PENDING' });
+    }
+    if (!requestedStatuses || requestedStatuses.has('completed')) {
+      statusConditions.push({ status: { in: ['COMPLETED', 'NO_SHOW'] } });
+      statusConditions.push({
+        status: 'CONFIRMED',
+        endTime: { not: null, lte: now },
+      });
+    }
+    if (!requestedStatuses || requestedStatuses.has('cancelled')) {
+      statusConditions.push({ status: 'CANCELLED' });
+    }
+    if (!requestedStatuses || requestedStatuses.has('expired')) {
+      statusConditions.push({ status: 'EXPIRED' });
+    }
 
     const user = await prisma.user.findUnique({
       where: { email: session!.user!.email },
@@ -86,19 +106,16 @@ export async function GET(req: NextRequest) {
     }
 
     // Get total count
-    const total = await prisma.booking.count({
-      where: {
-        customerId: { in: clientIds },
-        ...(dbStatusFilter ? { status: { in: dbStatusFilter } } : {}),
-      },
-    })
+    const where = {
+      customerId: { in: clientIds },
+      ...(requestedStatuses ? { OR: statusConditions } : {}),
+    };
+
+    const total = await prisma.booking.count({ where });
 
     // Get user's bookings via customerId only
     const bookingsRaw = await prisma.booking.findMany({
-      where: {
-        customerId: { in: clientIds },
-        ...(dbStatusFilter ? { status: { in: dbStatusFilter } } : {}),
-      },
+      where,
       include: {
         provider: {
           select: {
@@ -122,7 +139,6 @@ export async function GET(req: NextRequest) {
     }
     const bookings = Array.from(bookingMap.values());
 
-    const now = new Date();
     const upcomingBookings = bookings.filter((b: any) => {
       if (!b.startTime) return false;
       return b.startTime > now && b.status === 'CONFIRMED';
