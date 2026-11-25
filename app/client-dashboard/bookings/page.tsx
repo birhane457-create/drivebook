@@ -79,14 +79,27 @@ export default function ClientBookingsPage() {
 
   useEffect(() => {
     if (session?.user?.email) {
-      loadData(1);
+      loadData(1, filter);
     }
   }, [session]);
 
-  const loadData = async (page: number) => {
+  // Reload when filter changes so server filters appropriately
+  useEffect(() => {
+    if (session?.user?.email) {
+      loadData(1, filter);
+    }
+  }, [filter]);
+
+  const loadData = async (page: number, currentFilter?: string) => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/client/profile?page=${page}&limit=10`);
+      const f = currentFilter ?? filter;
+      const statusParam = f === 'upcoming'
+        ? '&status=upcoming,awaiting_payment,awaiting_confirmation'
+        : f === 'past'
+        ? '&status=completed,cancelled,expired'
+        : '';
+      const res = await fetch(`/api/client/profile?page=${page}&limit=10${statusParam}`);
       if (res.ok) {
         const data = await res.json();
         setProfile(data);
@@ -123,13 +136,8 @@ export default function ClientBookingsPage() {
     );
   }
 
-  const upcomingBookings = profile?.bookings.filter((b: any) => b.status === 'upcoming' || b.status === 'awaiting_payment' || b.status === 'awaiting_confirmation'
-  ) ?? [];
-  const pastBookings = profile?.bookings.filter((b: any) => b.status === 'completed' || b.status === 'cancelled' || b.status === 'expired'
-  ) ?? [];
-  const filteredBookings = filter === 'upcoming' ? upcomingBookings :
-    filter === 'past' ? pastBookings :
-    profile?.bookings ?? [];
+  // Bookings are now filtered server-side via ?status= param
+  const filteredBookings = profile?.bookings ?? [];
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">

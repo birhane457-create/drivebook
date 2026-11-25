@@ -24,6 +24,22 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '10')))
     const skip = (page - 1) * limit
 
+    // Optional status filter — maps display-side filter to DB statuses
+    const statusParam = searchParams.get('status') // e.g. "upcoming,awaiting_payment,awaiting_confirmation"
+    const dbStatusFilter: string[] | undefined = statusParam
+      ? statusParam.split(',').flatMap((s: string) => {
+          switch (s.trim()) {
+            case 'upcoming':              return ['CONFIRMED'];
+            case 'awaiting_payment':      return ['PENDING_PAYMENT'];
+            case 'awaiting_confirmation': return ['PENDING'];
+            case 'completed':             return ['COMPLETED', 'NO_SHOW'];
+            case 'cancelled':             return ['CANCELLED'];
+            case 'expired':               return ['EXPIRED'];
+            default: return [];
+          }
+        })
+      : undefined;
+
     const user = await prisma.user.findUnique({
       where: { email: session!.user!.email },
       include: {
@@ -66,12 +82,18 @@ export async function GET(req: NextRequest) {
 
     // Get total count
     const total = await prisma.booking.count({
-      where: { customerId: { in: clientIds } },
+      where: {
+        customerId: { in: clientIds },
+        ...(dbStatusFilter ? { status: { in: dbStatusFilter } } : {}),
+      },
     })
 
     // Get user's bookings via customerId only
     const bookingsRaw = await prisma.booking.findMany({
-      where: { customerId: { in: clientIds } },
+      where: {
+        customerId: { in: clientIds },
+        ...(dbStatusFilter ? { status: { in: dbStatusFilter } } : {}),
+      },
       include: {
         provider: {
           select: {

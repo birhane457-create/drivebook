@@ -4,313 +4,213 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
-  Calendar,
-  MapPin,
-  Clock,
-  DollarSign,
-  Plus,
-  CheckCircle,
-  AlertCircle,
-  Loader2,
-  BookOpen,
-  ArrowRight,
-  User,
-  Phone,
+  Calendar, MapPin, Clock, DollarSign, Plus, CheckCircle,
+  AlertCircle, Loader2, BookOpen, User, ChevronDown, ChevronUp,
 } from 'lucide-react';
-
-interface Instructor {
-  id: string;
-  name: string;
-  profileImage?: string;
-  phone?: string;
-  offersTestPackage: boolean;
-  testPackagePrice?: number;
-  testPackageDuration?: number;
-}
 
 interface PDATest {
   id: string;
-  providerId: string;
-  instructor?: Instructor;
   testDate: string;
   testTime: string;
-  testCenterName: string;
-  testCenterAddress: string;
-  result?: string;
-  price: number;
   status: string;
-  bookedAt?: string;
+  price: number;
+  result: string | null;
+  config: { name: string; durationMinutes: number; price: number } | null;
+  testCentre: { name: string; address: string } | null;
+  provider: { id: string; name: string } | null;
 }
 
-interface InstructorWithBookings {
-  provider: Instructor;
-  bookedTests: PDATest[];
-  canAddTest: boolean;
-}
+const STATUS_STYLE: Record<string, { label: string; badge: string }> = {
+  PENDING:   { label: 'Upcoming',   badge: 'bg-amber-900/30 text-amber-300 border border-amber-700/40' },
+  CONFIRMED: { label: 'Confirmed',  badge: 'bg-emerald-900/30 text-emerald-300 border border-emerald-700/40' },
+  COMPLETED: { label: 'Completed',  badge: 'bg-sky-900/30 text-primary border border-sky-700/40' },
+  CANCELLED: { label: 'Cancelled',  badge: 'bg-rose-900/30 text-rose-300 border border-rose-700/40' },
+  PASSED:    { label: 'Passed ✓',   badge: 'bg-green-900/30 text-green-300 border border-green-700/40' },
+  FAILED:    { label: 'Not Passed', badge: 'bg-orange-900/30 text-orange-300 border border-orange-700/40' },
+};
 
 export default function ClientPDATestsPage() {
   const { data: session } = useSession();
-  const [instructorsData, setInstructorsData] = useState<InstructorWithBookings[]>([]);
+  const [tests, setTests] = useState<PDATest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expandedInstructor, setExpandedInstructor] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchPDATestsData();
+    if (session?.user) loadTests();
   }, [session]);
 
-  const fetchPDATestsData = async () => {
+  const loadTests = async () => {
     try {
       setLoading(true);
       setError(null);
-
-      // Fetch instructors the student has booked with
-      const instructorsRes = await fetch('/api/client/instructors');
-      if (!instructorsRes.ok) {
-        throw new Error('Failed to load instructors');
-      }
-      const instructors = await instructorsRes.json();
-
-      // Fetch available PDA tests
-      const testsRes = await fetch('/api/pda-bookings/available');
-      const tests = testsRes.ok ? await testsRes.json() : [];
-
-      // Organize by instructor
-      const organized: InstructorWithBookings[] = instructors
-        .filter((inst: Instructor) => inst.offersTestPackage)
-        .map((inst: Instructor) => ({
-          provider: inst,
-          bookedTests: tests.filter((t: PDATest) => t.providerId === inst.id),
-          canAddTest: inst.testPackagePrice && inst.testPackagePrice > 0,
-        }));
-
-      setInstructorsData(organized);
-    } catch (err) {
-      console.error('Error fetching PDA tests:', err);
+      const res = await fetch('/api/pda-bookings');
+      if (!res.ok) throw new Error('Failed to load PDA tests');
+      const data = await res.json();
+      setTests(data.bookings ?? []);
+    } catch {
       setError('Failed to load PDA test information. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (!session?.user) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-yellow-800">
-          <AlertCircle className="w-5 h-5 inline mr-2" />
-          Please log in to view PDA tests
-        </div>
-      </div>
-    );
-  }
+  const upcoming = tests.filter(t => t.status === 'PENDING' || t.status === 'CONFIRMED');
+  const past = tests.filter(t => t.status === 'COMPLETED' || t.status === 'CANCELLED' || t.status === 'PASSED' || t.status === 'FAILED');
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">PDA Test Management</h1>
-        <p className="text-gray-600">
-          Prepare for your driving test with PDA packages from your instructors
-        </p>
-      </div>
+    <div className="min-h-screen bg-background text-foreground pb-24">
+      <div className="max-w-2xl mx-auto px-4 py-8">
 
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 text-red-800 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-          <div>{error}</div>
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-foreground mb-1">PDA Test Management</h1>
+          <p className="text-muted-foreground text-sm">Your practical driving assessment bookings</p>
         </div>
-      )}
 
-      {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mr-3" />
-          <span className="text-gray-600">Loading PDA tests...</span>
-        </div>
-      ) : instructorsData.length === 0 ? (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
-          <BookOpen className="w-12 h-12 mx-auto mb-4 text-blue-600" />
-          <h3 className="text-lg font-semibold mb-2 text-blue-900">No PDA Tests Available</h3>
-          <p className="text-blue-700 mb-4">
-            Your instructors don't currently offer PDA test packages. Book a lesson to get started!
-          </p>
-          <Link
-            href="/book"
-            className="inline-flex items-center gap-2 bg-primary text-foreground px-6 py-2 rounded-lg font-semibold hover:bg-primary/90 transition"
-          >
-            Browse Instructors <ArrowRight className="w-4 h-4" />
-          </Link>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {instructorsData.map((data) => (
-            <div
-              key={data.provider?.id ?? ''}
-              className="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden"
-            >
-              {/* Instructor Header */}
-              <button
-                onClick={() =>
-                  setExpandedInstructor(
-                    expandedInstructor === (data.provider?.id ?? '')
-                      ? null
-                      : (data.provider?.id ?? '')
-                  )
-                }
-                className="w-full p-6 flex items-start gap-4 hover:bg-gray-50 transition text-left"
-              >
-                {/* Instructor Avatar */}
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-foreground font-bold text-lg flex-shrink-0">
-                  {data.provider?.name ?? 'Unknown'.charAt(0).toUpperCase()}
-                </div>
+        {/* Error */}
+        {error && (
+          <div className="mb-4 bg-destructive/10 border border-destructive/30 rounded-xl p-4 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <p className="text-sm text-destructive">{error}</p>
+          </div>
+        )}
 
-                {/* Instructor Info */}
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-gray-900">{data.provider?.name ?? 'Unknown'}</h3>
-                  <div className="flex flex-wrap gap-3 mt-2 text-sm text-gray-600">
-                    {data.provider?.phone && (
-                      <div className="flex items-center gap-1">
-                        <Phone className="w-4 h-4" />
-                        {data.provider?.phone}
-                      </div>
-                    )}
-                    {data.provider.testPackageDuration && (
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {Math.floor((data.provider.testPackageDuration || 0) / 60)}h{' '}
-                        {((data.provider.testPackageDuration || 0) % 60)}m prep
-                      </div>
-                    )}
-                    {data.provider.testPackagePrice && (
-                      <div className="flex items-center gap-1 font-semibold text-blue-600">
-                        <DollarSign className="w-4 h-4" />
-                        {data.provider.testPackagePrice.toFixed(2)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Expand Arrow */}
-                <div className="text-gray-600">
-                  {expandedInstructor === (data.provider?.id ?? '') ? (
-                    <svg
-                      className="w-6 h-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 14l-7-7m0 0l-7 7m7-7v12"
-                      />
-                    </svg>
-                  ) : (
-                    <svg
-                      className="w-6 h-6"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 10l7 7 7-7"
-                      />
-                    </svg>
-                  )}
-                </div>
-              </button>
-
-              {/* Expanded Content */}
-              {expandedInstructor === (data.provider?.id ?? '') && (
-                <div className="border-t border-gray-200 p-6 bg-gray-50">
-                  {/* Booked Tests */}
-                  {data.bookedTests.length > 0 && (
-                    <div className="mb-6">
-                      <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                        <CheckCircle className="w-5 h-5 text-green-600" />
-                        Booked PDA Tests ({data.bookedTests.length})
-                      </h4>
-                      <div className="space-y-3">
-                        {data.bookedTests.map((test) => (
-                          <div
-                            key={test.id}
-                            className="bg-white rounded p-4 border-l-4 border-green-600"
-                          >
-                            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 text-sm">
-                              <div>
-                                <p className="text-gray-600">Date & Time</p>
-                                <p className="font-semibold">
-                                  {new Date(test.testDate).toLocaleDateString('en-AU', {
-                                    weekday: 'short',
-                                    month: 'short',
-                                    day: 'numeric',
-                                  })}{' '}
-                                  at {test.testTime}
-                                </p>
-                              </div>
-                              <div>
-                                <p className="text-gray-600">Test Centre</p>
-                                <p className="font-semibold">{test.testCenterName}</p>
-                              </div>
-                              <div>
-                                <p className="text-gray-600">Status</p>
-                                <p className="font-semibold text-green-600">
-                                  {test.result ? `Result: ${test.result}` : 'Pending'}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Add Test Button */}
-                  {data.canAddTest && (
-                    <div>
-                      <Link
-                        href={`/client-dashboard/pda-tests/book?providerId=${data.provider?.id ?? ''}`}
-                        className="inline-flex items-center gap-2 bg-primary text-foreground px-6 py-3 rounded-lg font-semibold hover:bg-primary/90 transition"
-                      >
-                        <Plus className="w-5 h-5" />
-                        Book PDA Test Package
-                      </Link>
-                    </div>
-                  )}
-
-                  {!data.canAddTest && data.bookedTests.length === 0 && (
-                    <div className="text-center py-4 text-gray-600">
-                      <p>No PDA tests available at this time.</p>
-                    </div>
-                  )}
-                </div>
-              )}
+        {/* Loading */}
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-8 h-8 animate-spin text-primary mr-3" />
+            <span className="text-muted-foreground">Loading your PDA tests…</span>
+          </div>
+        ) : (
+          <>
+            {/* Stats row */}
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              <div className="bg-card rounded-2xl border border-border p-4">
+                <p className="text-xs text-muted-foreground mb-1">Upcoming</p>
+                <p className="text-3xl font-bold text-foreground">{upcoming.length}</p>
+              </div>
+              <div className="bg-card rounded-2xl border border-border p-4">
+                <p className="text-xs text-muted-foreground mb-1">Completed</p>
+                <p className="text-3xl font-bold text-foreground">{past.length}</p>
+              </div>
             </div>
-          ))}
+
+            {/* Book new test CTA */}
+            <Link
+              href="/client-dashboard/pda-tests/book"
+              className="flex items-center justify-between w-full p-4 mb-6 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-2xl transition group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                  <Plus className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground text-sm">Book a PDA Test</p>
+                  <p className="text-xs text-muted-foreground">Schedule with your instructor</p>
+                </div>
+              </div>
+              <BookOpen className="w-5 h-5 text-primary group-hover:translate-x-1 transition-transform" />
+            </Link>
+
+            {/* Upcoming tests */}
+            {upcoming.length > 0 && (
+              <section className="mb-6">
+                <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Upcoming</h2>
+                <div className="space-y-3">
+                  {upcoming.map(test => (
+                    <TestCard key={test.id} test={test} expanded={expanded === test.id} onToggle={() => setExpanded(expanded === test.id ? null : test.id)} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Past tests */}
+            {past.length > 0 && (
+              <section>
+                <h2 className="text-sm font-semibold text-muted-foreground mb-3 uppercase tracking-wide">History</h2>
+                <div className="space-y-3">
+                  {past.map(test => (
+                    <TestCard key={test.id} test={test} expanded={expanded === test.id} onToggle={() => setExpanded(expanded === test.id ? null : test.id)} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {tests.length === 0 && (
+              <div className="bg-card rounded-2xl border border-border p-10 text-center">
+                <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="font-semibold text-foreground mb-2">No PDA tests booked yet</h3>
+                <p className="text-muted-foreground text-sm mb-6">When you book a PDA test with your instructor, it will appear here.</p>
+                <Link
+                  href="/client-dashboard/pda-tests/book"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition"
+                >
+                  <Plus className="w-4 h-4" />Book your first PDA test
+                </Link>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TestCard({ test, expanded, onToggle }: { test: PDATest; expanded: boolean; onToggle: () => void }) {
+  const cfg = STATUS_STYLE[test.status] ?? STATUS_STYLE.PENDING;
+  const testDate = test.testDate ? new Date(test.testDate).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+  return (
+    <div className="bg-card rounded-2xl border border-border overflow-hidden">
+      <button onClick={onToggle} className="w-full text-left p-4 flex items-start gap-3 hover:bg-secondary/30 transition">
+        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+          <User className="w-5 h-5 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="font-semibold text-foreground text-sm truncate">{test.config?.name ?? 'PDA Test'}</p>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg.badge}`}>{cfg.label}</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">{test.provider?.name ?? 'Instructor'}</p>
+        </div>
+        <div className="shrink-0 text-muted-foreground">
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border p-4 space-y-2 text-sm">
+          <div className="flex items-center gap-2 text-foreground">
+            <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
+            {testDate} at {test.testTime ?? '—'}
+          </div>
+          {test.testCentre && (
+            <div className="flex items-start gap-2 text-foreground">
+              <MapPin className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+              <span>{test.testCentre.name} — {test.testCentre.address}</span>
+            </div>
+          )}
+          {test.config?.durationMinutes && (
+            <div className="flex items-center gap-2 text-foreground">
+              <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+              {test.config.durationMinutes >= 60
+                ? `${Math.floor(test.config.durationMinutes / 60)}h${test.config.durationMinutes % 60 ? ` ${test.config.durationMinutes % 60}m` : ''}`
+                : `${test.config.durationMinutes}min`}
+            </div>
+          )}
+          <div className="flex items-center gap-2 text-foreground">
+            <DollarSign className="w-4 h-4 text-muted-foreground shrink-0" />
+            ${Number(test.price).toFixed(2)}
+          </div>
+          {test.result && (
+            <div className="flex items-center gap-2 font-medium">
+              <CheckCircle className="w-4 h-4 text-muted-foreground shrink-0" />
+              Result: {test.result}
+            </div>
+          )}
         </div>
       )}
-
-      {/* Info Box */}
-      <div className="mt-8 bg-blue-50 rounded-lg p-6 border border-blue-200">
-        <h3 className="font-semibold text-blue-900 mb-2">About PDA Tests</h3>
-        <ul className="space-y-2 text-sm text-blue-800">
-          <li className="flex items-start gap-2">
-            <span className="text-blue-600 font-bold">•</span>
-            <span>PDA tests are specialised driving test preparation packages offered by your instructors</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-blue-600 font-bold">•</span>
-            <span>Book a test to prepare comprehensively for your driving examination</span>
-          </li>
-          <li className="flex items-start gap-2">
-            <span className="text-blue-600 font-bold">•</span>
-            <span>Tests are scheduled at licensed test centres in your area</span>
-          </li>
-        </ul>
-      </div>
     </div>
   );
 }

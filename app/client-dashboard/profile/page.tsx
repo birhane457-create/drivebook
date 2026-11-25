@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { User, Mail, Phone, MapPin, Edit2, Save, X, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Edit2, Save, X, CheckCircle, AlertCircle, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface ProfileData {
   name: string;
@@ -36,6 +36,11 @@ export default function ClientProfilePage() {
   const [formData, setFormData] = useState({ name: '', phone: '', address: '' });
   const [toast, setToast] = useState<ToastState>(null);
 
+  // Change password state
+  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwShow, setPwShow] = useState({ current: false, next: false, confirm: false });
+
   function showToast(type: 'success' | 'error', message: string) {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4000);
@@ -61,9 +66,28 @@ export default function ClientProfilePage() {
     }
   };
 
-  const handleSave = async () => {
+  const handlePasswordChange = async () => {
+    if (pwForm.next !== pwForm.confirm) { showToast('error', 'New passwords do not match'); return; }
+    if (pwForm.next.length < 8) { showToast('error', 'New password must be at least 8 characters'); return; }
     try {
-      setSaving(true);
+      setPwSaving(true);
+      const res = await fetch('/api/client/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: pwForm.current, newPassword: pwForm.next }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPwForm({ current: '', next: '', confirm: '' });
+        showToast('success', 'Password changed successfully');
+      } else {
+        showToast('error', data.error || 'Failed to change password');
+      }
+    } catch { showToast('error', 'An error occurred. Please try again.'); }
+    finally { setPwSaving(false); }
+  };
+
+  const handleSave = async () => {
       const res = await fetch('/api/client/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -218,6 +242,47 @@ export default function ClientProfilePage() {
           <div className="space-y-1.5 text-sm text-muted-foreground">
             <p><span className="text-foreground font-medium">Account Type:</span> Client</p>
             <p><span className="text-foreground font-medium">Email:</span> {session?.user?.email}</p>
+          </div>
+        </div>
+
+        {/* Change Password */}
+        <div className="mt-4 bg-card rounded-2xl border border-border p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+            <Lock className="w-4 h-4 text-muted-foreground" />Change Password
+          </h2>
+          <div className="space-y-3">
+            {[
+              { label: 'Current password', key: 'current' as const },
+              { label: 'New password', key: 'next' as const },
+              { label: 'Confirm new password', key: 'confirm' as const },
+            ].map(({ label, key }) => (
+              <div key={key}>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">{label}</label>
+                <div className="relative">
+                  <input
+                    type={pwShow[key] ? 'text' : 'password'}
+                    value={pwForm[key]}
+                    onChange={e => setPwForm(f => ({ ...f, [key]: e.target.value }))}
+                    className="w-full px-3 py-2 pr-10 border border-border bg-background text-foreground rounded-lg focus:ring-2 focus:ring-primary focus:outline-none text-sm"
+                    placeholder={label}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPwShow(s => ({ ...s, [key]: !s[key] }))}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {pwShow[key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button
+              onClick={handlePasswordChange}
+              disabled={pwSaving || !pwForm.current || !pwForm.next || !pwForm.confirm}
+              className="w-full py-2 px-4 bg-primary text-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition"
+            >
+              {pwSaving ? 'Changing…' : 'Change Password'}
+            </button>
           </div>
         </div>
 

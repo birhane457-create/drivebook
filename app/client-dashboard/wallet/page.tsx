@@ -287,7 +287,7 @@ export default function WalletPage() {
             <li>• Credits represent the balance available in your wallet</li>
             <li>• Each booking deducts the lesson price from your credits</li>
             <li>• When credits run out, you can add more at any time</li>
-            <li>• Credits don't expire and can be used across all instructors</li>
+            <li>• Credits are valid for 12 months from the date of purchase — check your expiry in Packages</li>
             <li>• If a booking is cancelled, credits are refunded within 3-5 business days</li>
           </ul>
         </div>
