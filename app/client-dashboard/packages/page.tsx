@@ -8,7 +8,7 @@
 //   - Estimate uses CURRENT instructor rate (not locked purchase rate)
 //   - Estimate is informational only — no hours are reserved or guaranteed
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Package, Clock, AlertTriangle, TrendingUp, Loader2, CalendarDays, BookOpen, DollarSign, Wallet } from 'lucide-react';
 import { estimateHours } from '@/lib/utils/estimate-hours';
@@ -25,7 +25,7 @@ interface ChildBooking {
 interface PackageData {
   id: string;
   purchaseDate: string;
-  expiryDate: string;
+  expiryDate: string | null;
   hoursTotal: number;
   hoursUsed: number;
   hoursRemaining: number;
@@ -59,23 +59,31 @@ interface PackagesResponse {
 export default function ClientPackagesPage() {
   const [data, setData] = useState<PackagesResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchPackages();
-  }, []);
-
-  const fetchPackages = async () => {
+  const fetchPackages = useCallback(async () => {
     try {
-      const res = await fetch('/api/client/packages');
-      if (res.ok) {
-        setData(await res.json());
+      setLoading(true);
+      setLoadError(null);
+      const res = await fetch('/api/client/packages', { cache: 'no-store' });
+      const response = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(response?.error || 'Unable to load your packages.');
+      if (!response || !Array.isArray(response.packages) || !response.wallet || !response.summary) {
+        throw new Error('Package information was incomplete. Please try again.');
       }
+      setData(response);
     } catch (error) {
       console.error('Failed to fetch packages:', error);
+      setLoadError(error instanceof Error ? error.message : 'Unable to load your packages.');
+      setData(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void fetchPackages();
+  }, [fetchPackages]);
 
   if (loading) {
     return (
@@ -98,7 +106,8 @@ export default function ClientPackagesPage() {
           <div className="bg-card/60 backdrop-blur rounded-2xl border border-border shadow-lg shadow-slate-950/20 p-12 text-center">
             <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-2">Error Loading Packages</h3>
-            <p className="text-muted-foreground text-sm">Please try refreshing the page.</p>
+            <p className="text-muted-foreground text-sm">{loadError || 'Please try refreshing the page.'}</p>
+            <button type="button" onClick={() => void fetchPackages()} className="mt-5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Try again</button>
           </div>
         </div>
       </div>
@@ -110,18 +119,23 @@ export default function ClientPackagesPage() {
     return Math.round((pkg.hoursUsed / pkg.hoursTotal) * 100);
   };
 
-  const getDaysUntilExpiry = (expiryDate: string) => {
-    const now = new Date();
+  const getDaysUntilExpiry = (expiryDate: string | null) => {
+    if (!expiryDate) return null;
     const expiry = new Date(expiryDate);
+    if (Number.isNaN(expiry.getTime())) return null;
+    const now = new Date();
     return Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   };
 
   const isExpiringSoon = (pkg: PackageData) => {
     const d = getDaysUntilExpiry(pkg.expiryDate);
-    return d <= 7 && d >= 0;
+    return d !== null && d <= 7 && d >= 0;
   };
 
-  const isExpired = (pkg: PackageData) => getDaysUntilExpiry(pkg.expiryDate) < 0;
+  const isExpired = (pkg: PackageData) => {
+    const days = getDaysUntilExpiry(pkg.expiryDate);
+    return days !== null && days < 0;
+  };
 
   // PB-UI-03 FIX: use shared estimateHours utility (lib/utils/estimate-hours.ts)
   // Uses CURRENT instructor rate (currentHourlyRate from provider.hourlyRate).
@@ -262,7 +276,7 @@ export default function ClientPackagesPage() {
                             expiringSoon && !expired ? 'text-amber-400' : expired ? 'text-destructive' : 'text-foreground'
                           }`}
                         >
-                          {new Date(pkg.expiryDate).toLocaleDateString('en-AU', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {pkg.expiryDate ? new Date(pkg.expiryDate).toLocaleDateString('en-AU', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No expiry date recorded'}
                         </p>
                       </div>
                     </div>

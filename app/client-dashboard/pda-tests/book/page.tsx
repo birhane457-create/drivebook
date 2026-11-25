@@ -39,6 +39,7 @@ export default function BookPDATestPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [successDetails, setSuccessDetails] = useState<{ price: number; remainingBalance: number } | null>(null);
   const checkoutRequestRef = useRef<{ signature: string; key: string } | null>(null);
 
@@ -51,7 +52,12 @@ export default function BookPDATestPage() {
 
   // Load instructor and PDA configs
   useEffect(() => {
-    if (!providerId || status !== 'authenticated') return;
+    if (status !== 'authenticated') return;
+    if (!providerId) {
+      setError('Choose an instructor before booking a PDA test.');
+      setLoading(false);
+      return;
+    }
 
     const loadData = async () => {
       try {
@@ -85,7 +91,7 @@ export default function BookPDATestPage() {
     };
 
     loadData();
-  }, [providerId, status]);
+  }, [providerId, status, retryCount]);
 
   const handleFormSubmit = async (data: {
     testCentreId: string;
@@ -163,6 +169,18 @@ export default function BookPDATestPage() {
     );
   }
 
+  if (!providerId) {
+    return (
+      <div className="min-h-screen bg-background py-8">
+        <div className="max-w-2xl mx-auto px-4">
+          <h1 className="text-2xl font-bold text-foreground mb-3">Choose an instructor</h1>
+          <p className="text-muted-foreground mb-6">Select an instructor first. You can then choose from their available PDA test packages.</p>
+          <button type="button" onClick={() => router.push('/client-dashboard/book-lesson')} className="rounded-lg bg-primary px-5 py-3 font-semibold text-primary-foreground">Find an instructor</button>
+        </div>
+      </div>
+    );
+  }
+
   if (!instructor || pdaConfigs.length === 0) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 py-8">
@@ -179,8 +197,9 @@ export default function BookPDATestPage() {
             <AlertCircle className="w-12 h-12 mx-auto mb-4 text-amber-400" />
             <h2 className="text-2xl font-bold text-foreground mb-2">PDA Tests Not Available</h2>
             <p className="text-foreground mb-6">
-              This instructor does not currently offer PDA test packages.
+              {error || 'This instructor does not currently offer PDA test packages.'}
             </p>
+            {error && <button type="button" onClick={() => setRetryCount((count) => count + 1)} className="mb-4 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground">Try loading again</button>}
             <button
               onClick={() => router.back()}
               className="px-6 py-3 bg-primary hover:bg-primary/90 text-foreground font-semibold rounded-lg transition"

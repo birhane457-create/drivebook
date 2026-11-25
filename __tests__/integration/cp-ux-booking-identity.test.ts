@@ -117,7 +117,7 @@ afterEach(() => {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
-  mocks.getServerSession.mockResolvedValue({ user: { id: 'user-1', email: 'client@example.com' } })
+  mocks.getServerSession.mockResolvedValue({ user: { id: 'user-1', email: 'client@example.com', role: 'CLIENT' } })
   mocks.getWalletBalance.mockResolvedValue({ balance: 500 })
   mocks.checkDoubleBooking.mockResolvedValue(false)
   mocks.checkProviderEligible.mockResolvedValue({
@@ -302,6 +302,32 @@ describe('client wallet booking flow with mocked Prisma', () => {
       }),
     })
   })
+
+  it('asks the client to confirm when the displayed lesson price is stale', async () => {
+    const response = await createWalletBooking(request('/api/client/bookings/create-bulk', {
+      cart: [{
+        providerId: 'provider-1',
+        instructorName: 'Instructor',
+        date: '2099-01-02',
+        time: '10:00',
+        duration: 1,
+        price: 1, // Untrusted hint is ignored for pricing.
+        expectedPrice: 50, // Price previously displayed to the customer.
+      }],
+    }));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'PRICE_CHANGED',
+      priceChanges: [{
+        providerId: 'provider-1',
+        submittedPrice: 50,
+        currentPrice: 60,
+      }],
+    });
+    expect(mocks.transaction).not.toHaveBeenCalled();
+    expect(mocks.txWalletTransactionCreate).not.toHaveBeenCalled();
+  });
 
   it('replays a completed checkout without opening another transaction', async () => {
     const body = {

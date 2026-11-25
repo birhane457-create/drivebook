@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { TrendingUp, Star, BookOpen, AlertCircle, ChevronDown, ChevronUp, Loader2, Target, Award } from 'lucide-react';
 import Link from 'next/link';
 
@@ -46,15 +46,34 @@ const ASSESSMENT_BADGE: Record<string, { label: string; icon: string; bg: string
 export default function ClientProgressPage() {
   const [data, setData] = useState<PerformanceData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch('/api/client/my-performance')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => setData(d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const loadProgress = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const res = await fetch('/api/client/my-performance', { cache: 'no-store' });
+      const response = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(response?.error || 'Unable to load your progress.');
+      if (!response || response.success !== true || !Array.isArray(response.recentFeedback) ||
+          !Array.isArray(response.strengths) || !Array.isArray(response.focusAreas) ||
+          !Array.isArray(response.progressChart)) {
+        throw new Error('Progress information was incomplete. Please try again.');
+      }
+      setData(response);
+    } catch (error) {
+      console.error('Error loading client progress:', error);
+      setData(null);
+      setLoadError(error instanceof Error ? error.message : 'Unable to load your progress.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadProgress();
+  }, [loadProgress]);
 
   if (loading) {
     return (
@@ -75,8 +94,9 @@ export default function ClientProgressPage() {
           <p className="text-muted-foreground mb-8">Track your learning journey based on instructor feedback</p>
           <div className="bg-card/60 rounded-2xl border border-border p-12 text-center">
             <TrendingUp className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No feedback yet</h3>
-            <p className="text-muted-foreground text-sm mb-6">Complete lessons and your instructor will add coaching notes here.</p>
+            <h3 className="text-lg font-semibold mb-2">{loadError ? 'Progress unavailable' : 'No feedback yet'}</h3>
+            <p className="text-muted-foreground text-sm mb-6">{loadError || 'Complete lessons and your instructor will add coaching notes here.'}</p>
+            {loadError && <button type="button" onClick={() => void loadProgress()} className="mb-6 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Try again</button>}
             <Link href="/client-dashboard/bookings" className="inline-flex items-center gap-2 px-5 py-2.5 bg-secondary rounded-lg text-sm font-semibold hover:bg-secondary/70 border border-border transition">
               <BookOpen className="h-4 w-4" /> View Bookings
             </Link>

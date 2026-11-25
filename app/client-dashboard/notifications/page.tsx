@@ -1,8 +1,8 @@
 ﻿'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Bell, Loader2, Trash2, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Bell, Loader2, CheckCircle } from 'lucide-react';
 import NotificationItem from '@/components/NotificationItem';
 
 interface Notification {
@@ -23,83 +23,86 @@ export default function NotificationsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [typeFilter, setTypeFilter] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadNotifications();
-  }, [page, typeFilter]);
-
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({
-        page: page.toString(),
-        limit: '20',
-      });
-      if (typeFilter) {
-        params.append('type', typeFilter);
+      setLoadError(null);
+      const params = new URLSearchParams({ page: page.toString(), limit: '20' });
+      if (typeFilter) params.append('type', typeFilter);
+      const res = await fetch(`/api/client/notifications?${params}`, { cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'Unable to load notifications.');
+      if (!data || !Array.isArray(data.notifications) || !Number.isFinite(data.unreadCount) || !Number.isFinite(data.totalPages)) {
+        throw new Error('Notification information was incomplete. Please try again.');
       }
-
-      const res = await fetch(`/api/client/notifications?${params}`);
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(data.notifications);
-        setUnreadCount(data.unreadCount);
-        setTotalPages(data.totalPages);
-      }
+      setNotifications(data.notifications);
+      setUnreadCount(data.unreadCount);
+      setTotalPages(Math.max(1, data.totalPages));
     } catch (error) {
       console.error('Error loading notifications:', error);
+      setLoadError(error instanceof Error ? error.message : 'Unable to load notifications.');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, typeFilter]);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
 
   const handleMarkAsRead = async (id: string) => {
+    setActionError(null);
+    const target = notifications.find((notification) => notification.id === id);
+    if (!target || target.isRead) return;
     try {
-      await fetch(`/api/client/notifications/${id}`, {
+      const res = await fetch(`/api/client/notifications/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isRead: true }),
       });
-      setUnreadCount(Math.max(0, unreadCount - 1));
-      setNotifications(notifications.map(n =>
-        n.id === id ? { ...n, isRead: true } : n
+      if (!res.ok) throw new Error('Could not mark this notification as read.');
+      setUnreadCount((count) => Math.max(0, count - 1));
+      setNotifications((items) => items.map((notification) =>
+        notification.id === id ? { ...notification, isRead: true } : notification
       ));
     } catch (error) {
       console.error('Error marking notification as read:', error);
+      setActionError(error instanceof Error ? error.message : 'Could not update this notification.');
     }
   };
 
   const handleDelete = async (id: string) => {
+    setActionError(null);
     try {
-      await fetch(`/api/client/notifications/${id}`, {
-        method: 'DELETE',
-      });
-      const wasUnread = notifications.find(n => n.id === id)?.isRead === false;
-      if (wasUnread) {
-        setUnreadCount(Math.max(0, unreadCount - 1));
+      const res = await fetch(`/api/client/notifications/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Could not delete this notification.');
+      const wasUnread = notifications.find((notification) => notification.id === id)?.isRead === false;
+      if (wasUnread) setUnreadCount((count) => Math.max(0, count - 1));
+      if (notifications.length === 1 && page > 1) {
+        setPage((currentPage) => currentPage - 1);
+      } else {
+        setNotifications((items) => items.filter((notification) => notification.id !== id));
       }
-      setNotifications(notifications.filter(n => n.id !== id));
     } catch (error) {
       console.error('Error deleting notification:', error);
+      setActionError(error instanceof Error ? error.message : 'Could not delete this notification.');
     }
   };
 
   const handleMarkAllAsRead = async () => {
+    setActionError(null);
     try {
-      const unreadNotifications = notifications.filter(n => !n.isRead);
-      await Promise.all(
-        unreadNotifications.map(n =>
-          fetch(`/api/client/notifications/${n.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ isRead: true }),
-          })
-        )
-      );
+      const res = await fetch('/api/client/notifications', { method: 'PATCH' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'Could not mark all notifications as read.');
       setUnreadCount(0);
-      setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+      setNotifications((items) => items.map((notification) => ({ ...notification, isRead: true })));
     } catch (error) {
       console.error('Error marking all as read:', error);
+      setActionError(error instanceof Error ? error.message : 'Could not update all notifications.');
     }
   };
 
@@ -143,11 +146,19 @@ export default function NotificationsPage() {
       </header>
 
       <div className="max-w-4xl mx-auto px-4 py-8">
+        {loadError && (
+          <div role="alert" className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
+            <p className="text-sm text-foreground">{loadError}</p>
+            <button type="button" onClick={() => void loadNotifications()} className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Retry</button>
+          </div>
+        )}
+        {actionError && <p role="alert" className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-foreground">{actionError}</p>}
+
         {/* Filter */}
-        {types.length > 0 && (
+        {(types.length > 0 || typeFilter !== '') && (
           <div className="mb-6 flex gap-2 flex-wrap">
             <button
-              onClick={() => setTypeFilter('')}
+              onClick={() => { setPage(1); setTypeFilter(''); }}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
                 typeFilter === ''
                   ? 'bg-primary text-foreground'
@@ -159,7 +170,7 @@ export default function NotificationsPage() {
             {types.map(type => (
               <button
                 key={type}
-                onClick={() => setTypeFilter(type)}
+                onClick={() => { setPage(1); setTypeFilter(type); }}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
                   typeFilter === type
                     ? 'bg-primary text-foreground'

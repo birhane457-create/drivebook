@@ -47,12 +47,14 @@ const pdaBookingSchema = pdaDetailsSchema.extend({
 });
 
 const cartItemSchema = z.object({
+  id: z.string().min(1).max(64).optional(),
   providerId: z.string().min(1),
   instructorName: z.string().min(1),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time: z.string().regex(/^([0-1]?\d|2[0-3]):[0-5]\d$/),
   duration: z.number().min(0.5).max(8),
   price: z.number().nonnegative(), // client hint only â€” server recalculates
+  expectedPrice: z.number().nonnegative().optional(), // displayed price for explicit customer reconfirmation
   pickupLocation: z.string().min(0).max(300).optional(),
   service: z.string().min(0).max(500).optional(),
   pdaTest: pdaDetailsSchema.optional(),
@@ -92,6 +94,9 @@ export async function POST(request: NextRequest) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const clientIdempotencyKey = request.headers.get('Idempotency-Key')?.trim();
@@ -214,9 +219,31 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const priceChanges = cartItems.flatMap(item => {
+      const info = eligibilityMap.get(item.providerId)!;
+      const currentPrice = parseFloat((info.hourlyRate * item.duration).toFixed(2));
+      return item.expectedPrice !== undefined && Math.abs(currentPrice - item.expectedPrice) > 0.01
+        ? [{
+            cartItemId: item.id ?? null,
+            providerId: item.providerId,
+            date: item.date,
+            time: item.time,
+            duration: item.duration,
+            submittedPrice: item.expectedPrice,
+            currentPrice,
+          }]
+        : [];
+    });
+    if (priceChanges.length > 0) {
+      return NextResponse.json({
+        error: 'An instructor rate changed. Review the updated lesson price before booking.',
+        code: 'PRICE_CHANGED',
+        priceChanges,
+      }, { status: 409 });
+    }
+
     const recalculatedItems = cartItems.map(item => {
       const info = eligibilityMap.get(item.providerId)!;
-      // price = current hourlyRate x duration (hours) - rate NOT locked at wallet purchase
       const serverPrice = parseFloat((info.hourlyRate * item.duration).toFixed(2));
       return { ...item, price: serverPrice };
     });

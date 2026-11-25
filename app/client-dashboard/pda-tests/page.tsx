@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
@@ -21,6 +21,7 @@ interface PDATest {
 }
 
 const STATUS_STYLE: Record<string, { label: string; badge: string }> = {
+  PENDING_PAYMENT: { label: 'Awaiting Payment', badge: 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/40' },
   PENDING:   { label: 'Upcoming',   badge: 'bg-amber-900/30 text-amber-300 border border-amber-700/40' },
   CONFIRMED: { label: 'Confirmed',  badge: 'bg-emerald-900/30 text-emerald-300 border border-emerald-700/40' },
   COMPLETED: { label: 'Completed',  badge: 'bg-sky-900/30 text-primary border border-sky-700/40' },
@@ -36,26 +37,27 @@ export default function ClientPDATestsPage() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (session?.user) loadTests();
-  }, [session]);
-
-  const loadTests = async () => {
+  const loadTests = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/api/pda-bookings');
-      if (!res.ok) throw new Error('Failed to load PDA tests');
-      const data = await res.json();
-      setTests(data.bookings ?? []);
-    } catch {
-      setError('Failed to load PDA test information. Please try again.');
+      const res = await fetch('/api/pda-bookings', { cache: 'no-store' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'Failed to load PDA tests');
+      if (!data || !Array.isArray(data.bookings)) throw new Error('PDA test information was incomplete.');
+      setTests(data.bookings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load PDA test information. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const upcoming = tests.filter(t => t.status === 'PENDING' || t.status === 'CONFIRMED');
+  useEffect(() => {
+    if (session?.user) void loadTests();
+  }, [session?.user, loadTests]);
+
+  const upcoming = tests.filter(t => t.status === 'PENDING_PAYMENT' || t.status === 'PENDING' || t.status === 'CONFIRMED');
   const past = tests.filter(t => t.status === 'COMPLETED' || t.status === 'CANCELLED' || t.status === 'PASSED' || t.status === 'FAILED');
 
   return (
@@ -72,7 +74,7 @@ export default function ClientPDATestsPage() {
         {error && (
           <div className="mb-4 bg-destructive/10 border border-destructive/30 rounded-xl p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-            <p className="text-sm text-destructive">{error}</p>
+            <div className="min-w-0 flex-1"><p className="text-sm text-destructive">{error}</p><button type="button" onClick={() => void loadTests()} className="mt-2 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">Try again</button></div>
           </div>
         )}
 
@@ -98,7 +100,7 @@ export default function ClientPDATestsPage() {
 
             {/* Book new test CTA */}
             <Link
-              href="/client-dashboard/pda-tests/book"
+              href="/client-dashboard/book-lesson"
               className="flex items-center justify-between w-full p-4 mb-6 bg-primary/10 hover:bg-primary/20 border border-primary/30 rounded-2xl transition group"
             >
               <div className="flex items-center gap-3">
@@ -107,7 +109,7 @@ export default function ClientPDATestsPage() {
                 </div>
                 <div>
                   <p className="font-semibold text-foreground text-sm">Book a PDA Test</p>
-                  <p className="text-xs text-muted-foreground">Schedule with your instructor</p>
+                  <p className="text-xs text-muted-foreground">Choose an instructor, then select a PDA test</p>
                 </div>
               </div>
               <BookOpen className="w-5 h-5 text-primary group-hover:translate-x-1 transition-transform" />
@@ -146,7 +148,7 @@ export default function ClientPDATestsPage() {
                   href="/client-dashboard/pda-tests/book"
                   className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-foreground rounded-xl text-sm font-semibold hover:bg-primary/90 transition"
                 >
-                  <Plus className="w-4 h-4" />Book your first PDA test
+                  <Plus className="w-4 h-4" />Find an instructor to book a PDA test
                 </Link>
               </div>
             )}

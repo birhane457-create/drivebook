@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getProfileBookingCounts } from '@/lib/services/profile-counts';
 import { toBookingDurationMinutes } from '@/lib/utils/booking-duration';
+import { z } from 'zod';
 
 
 export const dynamic = 'force-dynamic';
@@ -18,27 +19,51 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     // Pagination params
     const { searchParams } = new URL(req.url)
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '10')))
     const skip = (page - 1) * limit
 
-    // Optional status filter — maps display-side filter to DB statuses
-    const statusParam = searchParams.get('status') // e.g. "upcoming,awaiting_payment,awaiting_confirmation"
-    const dbStatusFilter: string[] | undefined = statusParam
-      ? statusParam.split(',').flatMap((s: string) => {
-          switch (s.trim()) {
-            case 'upcoming':              return ['CONFIRMED'];
-            case 'awaiting_payment':      return ['PENDING_PAYMENT'];
-            case 'awaiting_confirmation': return ['PENDING'];
-            case 'completed':             return ['COMPLETED', 'NO_SHOW'];
-            case 'cancelled':             return ['CANCELLED'];
-            case 'expired':               return ['EXPIRED'];
-            default: return [];
-          }
-        })
-      : undefined;
+    // Filter by the same business meaning used by the dashboard tabs.
+    // In particular, CONFIRMED bookings are split by scheduled end time:
+    // an overdue booking must not remain in the Upcoming tab while cron runs.
+    const statusParam = searchParams.get('status');
+    const requestedStatuses = statusParam
+      ? new Set(statusParam.split(',').map((value) => value.trim()).filter(Boolean))
+      : null;
+    const now = new Date();
+    const statusConditions: any[] = [];
+
+    if (!requestedStatuses || requestedStatuses.has('upcoming')) {
+      statusConditions.push({
+        status: 'CONFIRMED',
+        OR: [{ endTime: null }, { endTime: { gt: now } }],
+      });
+    }
+    if (!requestedStatuses || requestedStatuses.has('awaiting_payment')) {
+      statusConditions.push({ status: 'PENDING_PAYMENT' });
+    }
+    if (!requestedStatuses || requestedStatuses.has('awaiting_confirmation')) {
+      statusConditions.push({ status: 'PENDING' });
+    }
+    if (!requestedStatuses || requestedStatuses.has('completed')) {
+      statusConditions.push({ status: { in: ['COMPLETED', 'NO_SHOW'] } });
+      statusConditions.push({
+        status: 'CONFIRMED',
+        endTime: { not: null, lte: now },
+      });
+    }
+    if (!requestedStatuses || requestedStatuses.has('cancelled')) {
+      statusConditions.push({ status: 'CANCELLED' });
+    }
+    if (!requestedStatuses || requestedStatuses.has('expired')) {
+      statusConditions.push({ status: 'EXPIRED' });
+    }
 
     const user = await prisma.user.findUnique({
       where: { email: session!.user!.email },
@@ -81,19 +106,16 @@ export async function GET(req: NextRequest) {
     }
 
     // Get total count
-    const total = await prisma.booking.count({
-      where: {
-        customerId: { in: clientIds },
-        ...(dbStatusFilter ? { status: { in: dbStatusFilter } } : {}),
-      },
-    })
+    const where = {
+      customerId: { in: clientIds },
+      ...(requestedStatuses ? { OR: statusConditions } : {}),
+    };
+
+    const total = await prisma.booking.count({ where });
 
     // Get user's bookings via customerId only
     const bookingsRaw = await prisma.booking.findMany({
-      where: {
-        customerId: { in: clientIds },
-        ...(dbStatusFilter ? { status: { in: dbStatusFilter } } : {}),
-      },
+      where,
       include: {
         provider: {
           select: {
@@ -117,7 +139,6 @@ export async function GET(req: NextRequest) {
     }
     const bookings = Array.from(bookingMap.values());
 
-    const now = new Date();
     const upcomingBookings = bookings.filter((b: any) => {
       if (!b.startTime) return false;
       return b.startTime > now && b.status === 'CONFIRMED';
@@ -248,34 +269,44 @@ export async function PUT(req: NextRequest) {
       );
     }
 
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await req.json();
-    const { name, phone, address } = body;
+    const profileSchema = z.object({
+      name: z.string().trim().min(1, 'Full name is required').max(120),
+      phone: z.string().trim().max(30).default(''),
+      address: z.string().trim().max(500).default(''),
+    });
+    const parsed = profileSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || 'Invalid profile information' },
+        { status: 400 }
+      );
+    }
+    const { name, phone, address } = parsed.data;
 
     const user = await prisma.user.findUnique({
       where: { email: session!.user!.email },
-      include: {
-        customers: true
-      }
+      include: { customers: { select: { id: true } } },
     });
 
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Update all client records for this user to keep consistency
-    if ((user as any).customers.length > 0) {
-      await prisma.customer.updateMany({
-        where: { userId: user.id },
-        data: {
-            name,
-            phone,
-            defaultPickupAddress: address || null
-          }
-      });
-    }
+    // Keep the login identity and every linked customer record in sync.
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: user.id }, data: { name } });
+      if (user.customers.length > 0) {
+        await tx.customer.updateMany({
+          where: { userId: user.id },
+          data: { name, phone, defaultPickupAddress: address || null },
+        });
+      }
+    });
 
     return NextResponse.json({
       success: true,

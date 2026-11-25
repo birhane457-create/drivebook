@@ -136,7 +136,7 @@ export default function BookLessonPage() {
     if (selectedDate && selectedService && selectedInstructor) {
       checkAvailability();
     }
-  }, [selectedDate, selectedService?.duration]);
+  }, [selectedDate, selectedService?.duration, selectedInstructor?.id]);
 
   // Load client data on mount
   useEffect(() => {
@@ -222,9 +222,10 @@ export default function BookLessonPage() {
 
       if (profileRes.ok) {
         const profile = await profileRes.json();
-        setClientLocation(profile.address || '');
-        setPickupLocation(profile.address || '');
-        setUserLocation(profile.address || '');
+        const savedAddress = profile.user?.address || '';
+        setClientLocation(savedAddress);
+        setPickupLocation(savedAddress);
+        setUserLocation(savedAddress);
       }
 
       if (walletRes.ok) {
@@ -1091,7 +1092,7 @@ export default function BookLessonPage() {
 
                       console.log('Submitting cart with items:', cart.length);
                       const checkoutBody = {
-                        cart,
+                        cart: cart.map(item => ({ ...item, expectedPrice: item.price })),
                         pdaBookings: pdaCart.map(item => {
                           const parentBookingIndex = item.parentLessonId
                             ? cart.findIndex(lesson => lesson.id === item.parentLessonId)
@@ -1135,7 +1136,22 @@ export default function BookLessonPage() {
                               ? { ...item, price: data.currentPrice }
                               : item,
                           ));
-                          throw new Error(`PDA price changed to $${data.currentPrice.toFixed(2)}. Review the updated total and confirm again.`);
+                          throw new Error(`PDA price changed to ${data.currentPrice.toFixed(2)}. Review the updated total and confirm again.`);
+                        }
+                        if (res.status === 409 && data.code === 'PRICE_CHANGED' && Array.isArray(data.priceChanges)) {
+                          setCart(current => current.map(item => {
+                            const change = data.priceChanges.find((entry: any) =>
+                              entry.cartItemId
+                                ? entry.cartItemId === item.id
+                                : entry.providerId === item.providerId && entry.date === item.date &&
+                                  entry.time === item.time && entry.duration === item.duration
+                            );
+                            return change && Number.isFinite(Number(change.currentPrice))
+                              ? { ...item, price: Number(change.currentPrice) }
+                              : item;
+                          }));
+                          setError('An instructor rate changed. Updated prices are now shown in your cart. Review the new total and confirm again.');
+                          return;
                         }
                         throw new Error(data.error || 'Booking failed');
                       }
@@ -1281,10 +1297,10 @@ export default function BookLessonPage() {
                             <div key={idx} className="p-2 bg-secondary/50 border border-border rounded text-xs">
                               <div className="flex items-center justify-between">
                                 <span className="text-foreground font-medium capitalize">
-                                  {tx.type === 'PAYMENT' ? '💳 Payment' : tx.type === 'REFUND' ? '↩️ Refund' : tx.type === 'ADJUSTMENT' ? '⚙️ Adjustment' : '📝 ' + tx.type}
+                                  {tx.type === 'CREDIT' ? 'Credit' : tx.type === 'DEBIT' ? 'Debit' : tx.type}
                                 </span>
-                                <span className={tx.amount > 0 ? 'text-emerald-400 font-semibold' : 'text-destructive font-semibold'}>
-                                  {tx.amount > 0 ? '+' : ''} ${(tx.amount / 100).toFixed(2)}
+                                <span className={tx.type === 'CREDIT' ? 'text-emerald-400 font-semibold' : 'text-destructive font-semibold'}>
+                                  {tx.type === 'CREDIT' ? '+' : tx.type === 'DEBIT' ? '−' : ''} ${Number(tx.amount).toFixed(2)}
                                 </span>
                               </div>
                               <p className="text-muted-foreground mt-1">

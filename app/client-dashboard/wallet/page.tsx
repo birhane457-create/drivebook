@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -21,8 +21,36 @@ export default function WalletPage() {
   const searchParams = useSearchParams();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [loading, setLoading] = useState(true);
+  const [walletError, setWalletError] = useState<string | null>(null);
   const [showAddCredits, setShowAddCredits] = useState(false);
   const [initialTopUp, setInitialTopUp] = useState<string | undefined>(undefined);
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setWalletError(null);
+      const walletRes = await fetch('/api/client/wallet', { cache: 'no-store' });
+      const walletData = await walletRes.json().catch(() => null);
+      if (!walletRes.ok) {
+        throw new Error(walletData?.error || 'Failed to load wallet. Please try again.');
+      }
+      const numericFields = ['totalPaid', 'totalSpent', 'creditsRemaining'];
+      if (!walletData || numericFields.some((field) => !Number.isFinite(Number(walletData[field])))) {
+        throw new Error('Wallet returned incomplete balance information. Please try again.');
+      }
+      setWallet({
+        totalPaid: Number(walletData.totalPaid),
+        totalSpent: Number(walletData.totalSpent),
+        creditsRemaining: Number(walletData.creditsRemaining),
+        totalBookedHours: Number(walletData.totalBookedHours ?? 0),
+      });
+    } catch (error) {
+      console.error('Error loading wallet:', error);
+      setWalletError(error instanceof Error ? error.message : 'Failed to load wallet. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -33,39 +61,18 @@ export default function WalletPage() {
   useEffect(() => {
     // Auto-open modal if ?topup= param is present
     const topup = searchParams.get('topup');
-    if (topup && parseFloat(topup) > 0) {
-      setInitialTopUp(topup);
+    const amount = topup ? Number(topup) : NaN;
+    if (Number.isFinite(amount) && amount >= 10 && amount <= 10000) {
+      setInitialTopUp(String(amount));
       setShowAddCredits(true);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    if (session?.user?.email) {
-      loadData();
-      
-      // P0 FIX #8: Re-load wallet after modal closes
-      // After payment succeeds, webhook might not have processed yet
-      // Set up a polling timer to refresh balance after 2 seconds
-      const reloadTimer = setTimeout(() => {
-        loadData();
-      }, 2000);
-      
-      return () => clearTimeout(reloadTimer);
-    }
-  }, [session]);
+    if (session?.user?.email) void loadData();
+  }, [session?.user?.email, loadData]);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const walletRes = await fetch('/api/client/wallet');
-      const walletData = await walletRes.json();
-      setWallet(walletData);
-    } catch (error) {
-      console.error('Error loading wallet:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+
 
   if (status === 'loading' || loading) {
     return (
@@ -83,7 +90,8 @@ export default function WalletPage() {
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-muted-foreground">Failed to load wallet</p>
+          <p className="text-muted-foreground mb-4">{walletError || 'Failed to load wallet'}</p>
+          <button type="button" onClick={() => void loadData()} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Try again</button>
         </div>
       </div>
     );
@@ -95,6 +103,12 @@ export default function WalletPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-20">
+      {walletError && wallet && (
+        <div role="alert" className="mx-auto mt-4 flex max-w-6xl items-center justify-between gap-3 rounded-xl border border-amber-700/50 bg-amber-900/20 px-4 py-3">
+          <p className="text-sm text-amber-100">{walletError}</p>
+          <button type="button" onClick={() => void loadData()} className="shrink-0 rounded-lg border border-amber-600 px-3 py-1.5 text-sm font-semibold text-amber-100">Retry</button>
+        </div>
+      )}
       {/* Header */}
       <header className="bg-card/60 backdrop-blur border-b border-border shadow-lg shadow-slate-950/20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -116,22 +130,22 @@ export default function WalletPage() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Wallet Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {/* Total Credits Added */}
+          {/* Eligible Credits */}
           <div className="bg-card/60 rounded-2xl border border-border p-6 border-t-4 border-blue-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
-            <p className="text-muted-foreground text-sm font-semibold mb-2">Total Credits Added</p>
+            <p className="text-muted-foreground text-sm font-semibold mb-2">Eligible Credits</p>
             <p className="text-4xl font-bold text-foreground mb-1">
               ${wallet.totalPaid.toFixed(2)}
             </p>
-            <p className="text-xs text-muted-foreground/60">Money you've added to wallet</p>
+            <p className="text-xs text-muted-foreground/60">Unexpired wallet credits before spending</p>
           </div>
 
-          {/* Net Booking Costs */}
+          {/* Wallet Debits */}
           <div className="bg-card/60 rounded-2xl border border-border p-6 border-t-4 border-purple-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
-            <p className="text-muted-foreground text-sm font-semibold mb-2">Net Booking Costs</p>
+            <p className="text-muted-foreground text-sm font-semibold mb-2">Wallet Debits</p>
             <p className="text-4xl font-bold text-foreground mb-1">
               ${wallet.totalSpent.toFixed(2)}
             </p>
-            <p className="text-xs text-muted-foreground">Actual cost of your bookings</p>
+            <p className="text-xs text-muted-foreground">Confirmed wallet debits, including booking and duration adjustments</p>
           </div>
 
           {/* Current Balance */}
@@ -276,7 +290,7 @@ export default function WalletPage() {
 
           <div className="mt-4 text-xs text-muted-foreground italic">
             Note: Duration adjustments (increase/decrease) are included in the debit/credit totals for accounting purposes, 
-            but your "Net Booking Costs" above shows only actual booking expenses.
+            but your "Wallet Debits" above shows only actual booking expenses.
           </div>
         </div>
 
@@ -298,12 +312,9 @@ export default function WalletPage() {
         <StripeProvider>
           <AddCreditsModal
             isOpen={showAddCredits}
-            onClose={() => { 
-              setShowAddCredits(false); 
+            onClose={() => {
+              setShowAddCredits(false);
               setInitialTopUp(undefined);
-              // P0 FIX #8b: Reload after modal closes
-              // Wait for webhook to process, then refresh balance
-              setTimeout(() => loadData(), 1500);
             }}
             onSuccess={() => {
               loadData();

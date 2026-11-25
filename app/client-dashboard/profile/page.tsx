@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { User, Mail, Phone, MapPin, Edit2, Save, X, CheckCircle, AlertCircle, Lock, Eye, EyeOff } from 'lucide-react';
 
@@ -31,6 +31,7 @@ export default function ClientProfilePage() {
   const { data: session } = useSession();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({ name: '', phone: '', address: '' });
@@ -46,25 +47,36 @@ export default function ClientProfilePage() {
     setTimeout(() => setToast(null), 4000);
   }
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
-
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/client/profile');
-      if (res.ok) {
-        const data = await res.json();
-        setProfile(data.user);
-        setFormData({ name: data.user.name, phone: data.user.phone || '', address: data.user.address || '' });
+      setLoadError(null);
+      const res = await fetch('/api/client/profile', { cache: 'no-store' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || 'Unable to load your profile. Please try again.');
       }
+      const data = await res.json();
+      if (!data?.user) throw new Error('Profile information was not returned. Please try again.');
+      setProfile(data.user);
+      setFormData({
+        name: data.user.name || '',
+        phone: data.user.phone || '',
+        address: data.user.address || '',
+      });
+      return true;
     } catch (error) {
       console.error('Error loading profile:', error);
+      setLoadError(error instanceof Error ? error.message : 'Unable to load your profile. Please try again.');
+      return false;
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadProfile();
+  }, [loadProfile]);
 
   const handlePasswordChange = async () => {
     if (pwForm.next !== pwForm.confirm) { showToast('error', 'New passwords do not match'); return; }
@@ -88,28 +100,40 @@ export default function ClientProfilePage() {
   };
 
   const handleSave = async () => {
+    const name = formData.name.trim();
+    if (!name) {
+      showToast('error', 'Full name is required.');
+      return;
+    }
+    if (name.length > 120 || formData.phone.trim().length > 30 || formData.address.trim().length > 500) {
+      showToast('error', 'Please check the length of your name, phone number, or pickup address.');
+      return;
+    }
     try {
       setSaving(true);
       const res = await fetch('/api/client/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: formData.name,
-          phone: formData.phone,
-          address: formData.address
+          name,
+          phone: formData.phone.trim(),
+          address: formData.address.trim()
         }),
       });
-
-      if (res.ok) {
-        await loadProfile();
-        setEditing(false);
-        showToast('success', 'Profile updated. Your information has been updated across all instructors.');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'Failed to update profile. Please try again.');
+      if (data?.user) {
+        setProfile(data.user);
+        setFormData({ name: data.user.name || '', phone: data.user.phone || '', address: data.user.address || '' });
       } else {
-        showToast('error', 'Failed to update profile. Please try again.');
+        const refreshed = await loadProfile();
+        if (!refreshed) throw new Error('Profile was saved, but could not be refreshed. Reload the page to confirm the latest values.');
       }
+      setEditing(false);
+      showToast('success', 'Profile updated successfully.');
     } catch (error) {
       console.error('Error saving profile:', error);
-      showToast('error', 'An error occurred while saving your profile.');
+      showToast('error', error instanceof Error ? error.message : 'An error occurred while saving your profile.');
     } finally {
       setSaving(false);
     }
@@ -131,7 +155,14 @@ export default function ClientProfilePage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-24">
-      <Toast toast={toast} onClose={() => setToast(null)} />      <div className="max-w-2xl mx-auto px-4 py-8">
+      <Toast toast={toast} onClose={() => setToast(null)} />
+      <div className="max-w-2xl mx-auto px-4 py-8">
+        {loadError && !profile && (
+          <div role="alert" className="mb-6 rounded-xl border border-destructive/40 bg-destructive/10 p-4 space-y-3">
+            <p className="text-sm text-foreground">{loadError}</p>
+            <button type="button" onClick={() => void loadProfile()} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Try again</button>
+          </div>
+        )}
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

@@ -28,6 +28,9 @@ export async function GET(req: NextRequest) {
         { status: 401 }
       );
     }
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Get current user
     const user = await prisma.user.findUnique({
@@ -43,8 +46,10 @@ export async function GET(req: NextRequest) {
 
     // Parse query parameters
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const rawPage = Number.parseInt(searchParams.get('page') || '1', 10);
+    const rawLimit = Number.parseInt(searchParams.get('limit') || '20', 10);
+    const page = Number.isFinite(rawPage) ? Math.max(1, rawPage) : 1;
+    const limit = Number.isFinite(rawLimit) ? Math.min(50, Math.max(1, rawLimit)) : 20;
     const type = searchParams.get('type');
     const isRead = searchParams.get('isRead');
 
@@ -111,5 +116,33 @@ export async function GET(req: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     );
+  }
+}
+
+
+export async function PATCH() {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      select: { id: true },
+    });
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+
+    const result = await prisma.notification.updateMany({
+      where: { userId: user.id, isRead: false },
+      data: { isRead: true },
+    });
+    return NextResponse.json({ success: true, updatedCount: result.count });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

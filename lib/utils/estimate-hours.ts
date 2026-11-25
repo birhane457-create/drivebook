@@ -20,7 +20,7 @@ export function estimateHours(
   balanceDollars: number,
   currentRateDollarsPerHour: number
 ): string {
-  if (!currentRateDollarsPerHour || currentRateDollarsPerHour <= 0) return '';
+  if (!Number.isFinite(balanceDollars) || balanceDollars <= 0 || !Number.isFinite(currentRateDollarsPerHour) || currentRateDollarsPerHour <= 0) return '';
   const hrs = balanceDollars / currentRateDollarsPerHour;
   return `Approx. ${hrs.toFixed(1)} hrs at $${currentRateDollarsPerHour.toFixed(0)}/hr`;
 }
@@ -32,6 +32,6 @@ export function estimateHoursValue(
   balanceDollars: number,
   currentRateDollarsPerHour: number
 ): number {
-  if (!currentRateDollarsPerHour || currentRateDollarsPerHour <= 0) return 0;
+  if (!Number.isFinite(balanceDollars) || balanceDollars <= 0 || !Number.isFinite(currentRateDollarsPerHour) || currentRateDollarsPerHour <= 0) return 0;
   return balanceDollars / currentRateDollarsPerHour;
 }
