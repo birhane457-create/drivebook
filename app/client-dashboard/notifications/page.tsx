@@ -81,7 +81,11 @@ export default function NotificationsPage() {
       if (!res.ok) throw new Error('Could not delete this notification.');
       const wasUnread = notifications.find((notification) => notification.id === id)?.isRead === false;
       if (wasUnread) setUnreadCount((count) => Math.max(0, count - 1));
-      setNotifications((items) => items.filter((notification) => notification.id !== id));
+      if (notifications.length === 1 && page > 1) {
+        setPage((currentPage) => currentPage - 1);
+      } else {
+        setNotifications((items) => items.filter((notification) => notification.id !== id));
+      }
     } catch (error) {
       console.error('Error deleting notification:', error);
       setActionError(error instanceof Error ? error.message : 'Could not delete this notification.');
@@ -91,19 +95,10 @@ export default function NotificationsPage() {
   const handleMarkAllAsRead = async () => {
     setActionError(null);
     try {
-      const unreadNotifications = notifications.filter((notification) => !notification.isRead);
-      const responses = await Promise.all(unreadNotifications.map((notification) =>
-        fetch(`/api/client/notifications/${notification.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ isRead: true }),
-        })
-      ));
-      if (responses.some((response) => !response.ok)) {
-        await loadNotifications();
-        throw new Error('Some notifications could not be marked as read. The list has been refreshed.');
-      }
-      setUnreadCount((count) => Math.max(0, count - unreadNotifications.length));
+      const res = await fetch('/api/client/notifications', { method: 'PATCH' });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || 'Could not mark all notifications as read.');
+      setUnreadCount(0);
       setNotifications((items) => items.map((notification) => ({ ...notification, isRead: true })));
     } catch (error) {
       console.error('Error marking all as read:', error);
@@ -160,10 +155,10 @@ export default function NotificationsPage() {
         {actionError && <p role="alert" className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-foreground">{actionError}</p>}
 
         {/* Filter */}
-        {types.length > 0 && (
+        {(types.length > 0 || typeFilter !== '') && (
           <div className="mb-6 flex gap-2 flex-wrap">
             <button
-              onClick={() => setTypeFilter('')}
+              onClick={() => { setPage(1); setTypeFilter(''); }}
               className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
                 typeFilter === ''
                   ? 'bg-primary text-foreground'
@@ -175,7 +170,7 @@ export default function NotificationsPage() {
             {types.map(type => (
               <button
                 key={type}
-                onClick={() => setTypeFilter(type)}
+                onClick={() => { setPage(1); setTypeFilter(type); }}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
                   typeFilter === type
                     ? 'bg-primary text-foreground'
