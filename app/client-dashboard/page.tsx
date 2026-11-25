@@ -133,7 +133,7 @@ export default function ClientDashboard() {
   const [averagePerformance, setAveragePerformance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
-  const [successBanner, setSuccessBanner] = useState<{ title: string; description: string } | null>(null);
+  const [successBanner, setSuccessBanner] = useState<{ title: string; description: string; tone: 'success' | 'pending' | 'info' } | null>(null);
   const [activeTab, setActiveTab] = useState('bookings');
   const [showAddCredits, setShowAddCredits] = useState(false);
   const [showTransactionHistory, setShowTransactionHistory] = useState(false);
@@ -167,11 +167,11 @@ export default function ClientDashboard() {
     const paymentParam = searchParams?.get('payment');
     const bookingSuccess = searchParams?.get('bookingSuccess');
     if (bookingSuccess || paymentParam === 'success') {
-      setSuccessBanner({ title: 'Booking confirmed!', description: 'Your booking has been confirmed. Check your email for the booking details.' });
+      setSuccessBanner({ title: 'Booking confirmed!', description: 'Your booking has been confirmed. Check your email for the booking details.', tone: 'success' });
     } else if (paymentParam === 'later') {
-      setSuccessBanner({ title: 'Booking request received', description: 'Your booking is awaiting payment. Open My Bookings to review its current status and payment options.' });
+      setSuccessBanner({ title: 'Booking request received', description: 'Your booking is awaiting payment. Open My Bookings to review its current status and payment options.', tone: 'pending' });
     } else if (paymentParam === 'processing') {
-      setSuccessBanner({ title: 'Payment processing', description: 'Your payment is still being processed. The booking status will update when confirmation is received.' });
+      setSuccessBanner({ title: 'Payment processing', description: 'Your payment is still being processed. The booking status will update when confirmation is received.', tone: 'info' });
     } else {
       return;
     }
@@ -315,11 +315,19 @@ export default function ClientDashboard() {
 
         {/* Success Banner */}
         {successBanner && (
-          <div className="mb-6 p-4 bg-green-900/20 border border-green-700/50 rounded-xl flex items-start gap-3">
-            <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+          <div className={`mb-6 p-4 rounded-xl border flex items-start gap-3 ${
+            successBanner.tone === 'success'
+              ? 'bg-green-900/20 border-green-700/50'
+              : successBanner.tone === 'pending'
+              ? 'bg-amber-900/20 border-amber-700/50'
+              : 'bg-blue-900/20 border-blue-700/50'
+          }`}>
+            {successBanner.tone === 'success'
+              ? <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+              : <AlertCircle className="w-5 h-5 text-current flex-shrink-0 mt-0.5" />}
             <div>
-              <p className="font-semibold text-emerald-600">{successBanner.title}</p>
-              <p className="text-sm text-green-400/80">{successBanner.description}</p>
+              <p className="font-semibold text-foreground">{successBanner.title}</p>
+              <p className="text-sm text-muted-foreground">{successBanner.description}</p>
             </div>
           </div>
         )}
