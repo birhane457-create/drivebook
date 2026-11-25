@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.97 (PB-SEC-01-05 registered; FIN-series retired; BLOCKER-001 scope clarified)
-**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-05 registered VERIFIED/OPEN HIGH: registration page guard fires before localStorage recovery, redirects to /book | PB-SEC-04 new-tab bug; PB-SEC-01-03 open)
+**Version:** 6.97 (PB-SEC-01-06 registered; FIN-series retired; BLOCKER-001 scope clarified)
+**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-06 registered VERIFIED/OPEN HIGH: BookingDetailsForm unmount releases slots on wizard step advance; PB-SEC-05 guard bug; PB-SEC-01-04 open)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -806,6 +806,29 @@ DELETE /api/availability/check-and-reserve ... <- slot released on unmount
 **Impact:** Customer who reaches the registration step loses their slot reservation. Booking flow broken at the final step before payment.
 **Immediate fix:** Add the same `setTimeout(..., 500)` pattern to the registration page guard, matching `booking-details` and `book-type`. Add a loading state while `instructor` is null so the page does not flash before the timer fires.
 **Underlying cause (tracked separately):** The 500ms workaround is a symptom of `BookingContext` reading localStorage asynchronously in a `useEffect` rather than synchronously in the initial state. The proper fix is to initialise state from localStorage synchronously (read in the `useState` initialiser, not in `useEffect`). That eliminates the race entirely without needing any timeout. Tracked as a follow-up improvement; the timeout patch fixes the immediate regression.
+
+---
+
+#### PB-SEC-06 — `BookingDetailsForm` unmount cleanup releases slot reservations on wizard step advance
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-06 | `BookingDetailsForm` unmount cleanup unconditionally fires `DELETE /api/availability/check-and-reserve` for all reserved slots — including when the wizard legitimately advances from `schedule` to `register` step | HIGH | CONFIRMED | VERIFIED — `components/BookingDetailsForm.tsx` lines 138–163: `useEffect` return cleanup calls `releaseSlot()` and `fetch(DELETE)` for every entry in `scheduledBookings`; fires on any unmount including wizard step change. `{step === 'schedule' && <BookingDetailsForm />}` in `SubdomainBookingWizard.tsx` unmounts the component on step advance. Server log confirms slot DELETE fires immediately after step transition, before registration page loads. | NOT-STARTED | N/A | OPEN | Server log trace 2026-11-25; branch `tracker-update-v6.97` | none |
+
+**Code location:** `components/BookingDetailsForm.tsx` lines 138–163 (unmount cleanup); `components/subdomain/SubdomainBookingWizard.tsx` line 451 (conditional render `{step === 'schedule' && <BookingDetailsForm />}`)
+**Condition:** When the wizard advances from `schedule` to `register`, the conditional render unmounts `BookingDetailsForm`. The unmount cleanup fires unconditionally and sends `DELETE` for every slot in `scheduledBookings`. The customer's reserved slot is released before they reach the registration step.
+**Server log evidence:**
+`${crlf}POST /api/availability/check-and-reserve 200   <- slot reserved
+GET  /api/availability/slots ...               <- slots refreshed
+GET  /api/public/pricing 200                   <- pricing (context alive)
+DELETE /api/availability/check-and-reserve ... <- BookingDetailsForm unmounts on step advance
+GET  /api/public/pricing 200                   <- new context mount = redirect to /book
+`${crlf}**Relationship to PB-SEC-05:** The DELETE fires on step advance (this finding). PB-SEC-05 then fires because the registration page has no localStorage recovery timeout. The two compound: slot released + registration redirects = complete booking failure. Fixing PB-SEC-05 alone will not stop the slot from being released.
+**Impact:** Customer's slot reservation is silently released every time they advance past the schedule step. By the time they complete registration, their slot is gone and the booking will fail or confirm a different slot.
+**Fix options:**
+- **Option A (recommended):** Move slot reservation ownership to `BookingContext`, not `BookingDetailsForm`. Context survives step changes. Cleanup in context only fires on explicit cancellation or page unload — not on component unmount within the same wizard session.
+- **Option B (minimal):** Add an `isStepAdvancing` ref in the wizard, set it to `true` before calling `setStep()`, and check it in the `BookingDetailsForm` cleanup — skip the DELETE if advancing. Reset to `false` after step changes. Fragile; not recommended for long term.
+- **Option C (interim):** Keep reservations in `BookingContext.slotReservations` (already tracked there) and have the cleanup only release slots that are no longer in context — i.e. slots that were explicitly removed, not all slots on unmount.
 
 ---
 
