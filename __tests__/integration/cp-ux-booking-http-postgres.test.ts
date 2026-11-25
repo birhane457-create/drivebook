@@ -264,7 +264,7 @@ describe.skipIf(!testDatabaseUrl)('Client wallet checkout HTTP flow - PostgreSQL
     mocks.failNextLedgerWrite = false
     fixture = await createFixture()
     mocks.getServerSession.mockResolvedValue({
-      user: { id: fixture.userId, email: fixture.email, name: 'Checkout HTTP test' },
+      user: { id: fixture.userId, email: fixture.email, name: 'Checkout HTTP test', role: 'CLIENT' },
     })
     mocks.getRateLimitIdentifier.mockReturnValue('checkout-http-test')
     mocks.checkRateLimit.mockResolvedValue({ success: true })
