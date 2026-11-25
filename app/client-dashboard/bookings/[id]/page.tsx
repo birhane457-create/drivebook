@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
@@ -10,7 +10,6 @@ import {
   Star, CreditCard, RefreshCw, TrendingUp, FileText
 } from 'lucide-react';
 import ReviewModal from '@/components/ReviewModal';
-import PackageCancellationModal from '@/components/client/PackageCancellationModal';
 
 interface BookingDetail {
   id: string;
@@ -92,7 +91,6 @@ export default function ClientBookingDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviewModal, setReviewModal] = useState(false);
-  const [showPackageCancelModal, setShowPackageCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -101,11 +99,7 @@ export default function ClientBookingDetailPage() {
     if (status === 'unauthenticated') router.push('/login');
   }, [status, router]);
 
-  useEffect(() => {
-    if (session?.user?.email && bookingId) loadBooking();
-  }, [session, bookingId]);
-
-  const loadBooking = async () => {
+  const loadBooking = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -121,7 +115,11 @@ export default function ClientBookingDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [bookingId]);
+
+  useEffect(() => {
+    if (session?.user?.email && bookingId) void loadBooking();
+  }, [session?.user?.email, bookingId, loadBooking]);
 
   const handleCancel = async () => {
     if (!booking) return;
@@ -157,6 +155,11 @@ export default function ClientBookingDetailPage() {
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
           <p className="text-gray-700 mb-4">{error || 'Booking not found.'}</p>
+          {error === 'Failed to load booking details.' && (
+            <button type="button" onClick={() => void loadBooking()} className="mb-4 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">
+              Try again
+            </button>
+          )}
           <Link href="/client-dashboard/bookings" className="text-blue-600 hover:underline text-sm">
             ← Back to bookings
           </Link>
@@ -395,16 +398,9 @@ export default function ClientBookingDetailPage() {
         <ReviewModal
           bookingId={booking.id}
           instructorName={booking.provider.name}
+          isOpen={reviewModal}
           onClose={() => setReviewModal(false)}
-          onSubmit={() => { setReviewModal(false); loadBooking(); }}
-        />
-      )}
-      {showPackageCancelModal && booking && (
-        <PackageCancellationModal
-          bookingId={booking.id}
-          bookingDate={booking.date ?? ''}
-          onClose={() => setShowPackageCancelModal(false)}
-          onSuccess={() => { setShowPackageCancelModal(false); loadBooking(); }}
+          onSuccess={() => { setReviewModal(false); void loadBooking(); }}
         />
       )}
     </div>
