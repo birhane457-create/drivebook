@@ -815,21 +815,17 @@ DELETE /api/availability/check-and-reserve ... <- slot released on unmount
 |---|---|---|---|---|---|---|---|---|---|
 | PB-SEC-06 | `BookingDetailsForm` unmount cleanup unconditionally fires `DELETE /api/availability/check-and-reserve` for all reserved slots — including when the wizard legitimately advances from `schedule` to `register` step | HIGH | CONFIRMED | VERIFIED — `components/BookingDetailsForm.tsx` lines 138–163: `useEffect` return cleanup calls `releaseSlot()` and `fetch(DELETE)` for every entry in `scheduledBookings`; fires on any unmount including wizard step change. `{step === 'schedule' && <BookingDetailsForm />}` in `SubdomainBookingWizard.tsx` unmounts the component on step advance. Server log confirms slot DELETE fires immediately after step transition, before registration page loads. | NOT-STARTED | N/A | OPEN | Server log trace 2026-11-25; branch `tracker-update-v6.97` | none |
 
-**Code location:** `components/BookingDetailsForm.tsx` lines 138–163 (unmount cleanup); `components/subdomain/SubdomainBookingWizard.tsx` line 451 (conditional render `{step === 'schedule' && <BookingDetailsForm />}`)
-**Condition:** When the wizard advances from `schedule` to `register`, the conditional render unmounts `BookingDetailsForm`. The unmount cleanup fires unconditionally and sends `DELETE` for every slot in `scheduledBookings`. The customer's reserved slot is released before they reach the registration step.
-**Server log evidence:**
-`${crlf}POST /api/availability/check-and-reserve 200   <- slot reserved
-GET  /api/availability/slots ...               <- slots refreshed
-GET  /api/public/pricing 200                   <- pricing (context alive)
-DELETE /api/availability/check-and-reserve ... <- BookingDetailsForm unmounts on step advance
-GET  /api/public/pricing 200                   <- new context mount = redirect to /book
-`${crlf}**Relationship to PB-SEC-05:** The DELETE fires on step advance (this finding). PB-SEC-05 then fires because the registration page has no localStorage recovery timeout. The two compound: slot released + registration redirects = complete booking failure. Fixing PB-SEC-05 alone will not stop the slot from being released.
-**Impact:** Customer's slot reservation is silently released every time they advance past the schedule step. By the time they complete registration, their slot is gone and the booking will fail or confirm a different slot.
-**Fix options:**
-- **Option A (recommended):** Move slot reservation ownership to `BookingContext`, not `BookingDetailsForm`. Context survives step changes. Cleanup in context only fires on explicit cancellation or page unload — not on component unmount within the same wizard session.
-- **Option B (minimal):** Add an `isStepAdvancing` ref in the wizard, set it to `true` before calling `setStep()`, and check it in the `BookingDetailsForm` cleanup — skip the DELETE if advancing. Reset to `false` after step changes. Fragile; not recommended for long term.
-- **Option C (interim):** Keep reservations in `BookingContext.slotReservations` (already tracked there) and have the cleanup only release slots that are no longer in context — i.e. slots that were explicitly removed, not all slots on unmount.
+**Book Now only — Book Later unaffected:** Book Later never mounts `BookingDetailsForm` — `getSteps()` only adds `'schedule'` when `bookingType === 'now'`. No slot is reserved on the Book Later path, so no cleanup fires. Defect is scoped to Book Now only.
 
+**Two-provider architecture:** `BookingProvider` exists in both the layout and nested inside `PublicBookingWizard`. The wizard and `BookingDetailsForm` use the nested instance. Slot reservations live in the nested context. Cleanup fires against the nested context — correct in principle, wrong on a step advance.
+
+**Code location:** `components/BookingDetailsForm.tsx` lines 138–163; `components/subdomain/SubdomainBookingWizard.tsx` line 451
+**Condition:** Advancing from schedule to register unmounts `BookingDetailsForm`. Unmount cleanup unconditionally sends DELETE for all scheduled slots. Slot released before customer reaches registration.
+**Impact:** Customer slot released silently on every Book Now advance past schedule. Booking fails or takes a different slot by the time registration completes.
+**Fix options:**
+- **Option A (recommended):** Move slot cleanup to `BookingContext`. Context survives step changes; only release on true exit or page unload.
+- **Option B (minimal):** `isStepAdvancing` ref in wizard; set before `setStep()`; cleanup skips DELETE if advancing. Fragile.
+- **Option C (interim):** Cleanup only releases slots no longer in `BookingContext.slotReservations` — skips slots still held in context.
 ---
 
 ---
