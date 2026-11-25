@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
@@ -147,7 +147,7 @@ export default function ClientBookingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">My Bookings</h1>
-              <p className="text-blue-200 mt-2">
+              <p className="text-primary/80 mt-2">
                 {profile.upcomingCount} upcoming • {profile.pastCount} completed
               </p>
             </div>
@@ -221,7 +221,7 @@ export default function ClientBookingsPage() {
                         <User className="w-6 h-6 text-primary" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="text-base font-bold text-slate-50 truncate">
+                        <h3 className="text-base font-bold text-foreground truncate">
                           {booking.provider?.name ?? 'Unknown'}
                         </h3>
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs font-medium rounded-full mt-0.5 ${s.badge}`}>
@@ -231,7 +231,7 @@ export default function ClientBookingsPage() {
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <p className="font-bold text-slate-50">${Number(booking.price || 0).toFixed(2)}</p>
+                      <p className="font-bold text-foreground">${Number(booking.price || 0).toFixed(2)}</p>
                       {booking.date && (
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {new Date(booking.date).toLocaleDateString('en-AU', {

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
@@ -101,11 +101,11 @@ export default function WalletPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Wallet & Credits</h1>
-              <p className="text-blue-200 mt-2">Manage your account balance and payment methods</p>
+              <p className="text-primary/80 mt-2">Manage your account balance and payment methods</p>
             </div>
             <Link
               href="/client-dashboard"
-              className="px-4 py-2 bg-secondary/70 text-foreground font-semibold rounded-xl hover:bg-slate-600 transition"
+              className="px-4 py-2 bg-secondary/70 text-foreground font-semibold rounded-xl hover:bg-secondary/70 transition"
             >
               ← Back to Dashboard
             </Link>
@@ -119,7 +119,7 @@ export default function WalletPage() {
           {/* Total Credits Added */}
           <div className="bg-card/60 rounded-2xl border border-border p-6 border-t-4 border-blue-500 shadow-lg shadow-slate-950/20 hover:bg-card/80 transition-all">
             <p className="text-muted-foreground text-sm font-semibold mb-2">Total Credits Added</p>
-            <p className="text-4xl font-bold text-slate-50 mb-1">
+            <p className="text-4xl font-bold text-foreground mb-1">
               ${wallet.totalPaid.toFixed(2)}
             </p>
             <p className="text-xs text-muted-foreground/60">Money you've added to wallet</p>
@@ -154,7 +154,7 @@ export default function WalletPage() {
 
         {/* Credit Usage Section */}
         <div className="bg-card/60 rounded-2xl border border-border p-8 mb-8 shadow-lg shadow-slate-950/20">
-          <h2 className="text-2xl font-bold text-slate-50 mb-6">Credit Usage Breakdown</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-6">Credit Usage Breakdown</h2>
           
           <div className="space-y-4">
             {/* Progress Bar */}
@@ -207,7 +207,7 @@ export default function WalletPage() {
 
         {/* Quick Actions */}
         <div className="bg-card/60 rounded-2xl border border-border p-8 mb-8 shadow-lg shadow-slate-950/20">
-          <h2 className="text-2xl font-bold text-slate-50 mb-4">Quick Actions</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-4">Quick Actions</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               onClick={() => { setInitialTopUp(undefined); setShowAddCredits(true); }}
@@ -218,7 +218,7 @@ export default function WalletPage() {
             </button>
             <Link
               href="/client-dashboard"
-              className="flex items-center justify-center gap-3 p-4 bg-secondary/70 text-foreground rounded-xl hover:bg-slate-600 transition-all font-semibold"
+              className="flex items-center justify-center gap-3 p-4 bg-secondary/70 text-foreground rounded-xl hover:bg-secondary/70 transition-all font-semibold"
             >
               <CreditCard className="w-5 h-5" />
               View All Bookings
@@ -228,7 +228,7 @@ export default function WalletPage() {
 
         {/* Detailed Transaction Breakdown (Optional) */}
         <div className="bg-card/60 rounded-2xl border border-border p-8 mb-8 shadow-lg shadow-slate-950/20">
-          <h2 className="text-2xl font-bold text-slate-50 mb-4">Detailed Accounting Breakdown</h2>
+          <h2 className="text-2xl font-bold text-foreground mb-4">Detailed Accounting Breakdown</h2>
           <p className="text-sm text-muted-foreground mb-6">
             This section shows all credits (money in) and debits (money out) for complete transparency.
           </p>

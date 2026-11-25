@@ -233,10 +233,10 @@ export default function ClientDashboard() {
 
   if (status === 'loading' || loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-slate-400">Loading your dashboard...</p>
+          <p className="text-muted-foreground">Loading your dashboard...</p>
         </div>
       </div>
     );
@@ -244,10 +244,10 @@ export default function ClientDashboard() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-slate-400">Failed to load dashboard</p>
+          <p className="text-muted-foreground">Failed to load dashboard</p>
         </div>
       </div>
     );
@@ -296,14 +296,14 @@ export default function ClientDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 pb-24">
+    <div className="min-h-screen bg-background text-foreground pb-24">
       {/* Header */}
-      <header className="bg-slate-900/60 border-b border-white/10">
+      <header className="bg-card/60 border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">Welcome back, {profile.user.name}!</h1>
-              <p className="text-blue-200 mt-2">Track your learning progress</p>
+              <p className="text-primary/80 mt-2">Track your learning progress</p>
             </div>
 
           </div>
@@ -316,7 +316,7 @@ export default function ClientDashboard() {
           <div className="mb-6 p-4 bg-green-900/20 border border-green-700/50 rounded-xl flex items-start gap-3">
             <Check className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-green-300">Booking confirmed!</p>
+              <p className="font-semibold text-emerald-600">Booking confirmed!</p>
               <p className="text-sm text-green-400/80">Your lesson(s) have been booked successfully. Check your email for confirmation.</p>
             </div>
           </div>
@@ -332,10 +332,10 @@ export default function ClientDashboard() {
 
         {/* Current Instructor Card */}
         {currentInstructor?.currentInstructor && (
-          <div className="mb-8 bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
+          <div className="mb-8 bg-card border border-border rounded-2xl overflow-hidden">
             {/* Card header */}
-            <div className="bg-blue-600/20 border-b border-white/10 px-5 py-3">
-              <p className="text-blue-300 text-sm font-semibold">👨‍🏫 Your Current Instructor</p>
+            <div className="bg-blue-600/20 border-b border-border px-5 py-3">
+              <p className="text-primary/80 text-sm font-semibold">👨‍🏫 Your Current Instructor</p>
             </div>
 
             <div className="p-5">
@@ -359,20 +359,20 @@ export default function ClientDashboard() {
 
                 {/* Name + rating + bio */}
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xl font-bold text-slate-100 leading-tight">
+                  <h3 className="text-xl font-bold text-foreground leading-tight">
                     {currentInstructor.currentInstructor.name}
                   </h3>
                   <div className="flex items-center gap-1 mt-1">
                     {[...Array(5)].map((_, i) => (
                       <Star key={i} className={`w-3.5 h-3.5 ${i < Math.round(currentInstructor.currentInstructor!.averageRating) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
                     ))}
-                    <span className="text-xs text-slate-400 ml-1">
+                    <span className="text-xs text-muted-foreground ml-1">
                       {currentInstructor.currentInstructor.averageRating.toFixed(1)}
                       {currentInstructor.currentInstructor.totalReviews > 0 && ` (${currentInstructor.currentInstructor.totalReviews})`}
                     </span>
                   </div>
                   {currentInstructor.currentInstructor.bio && (
-                    <p className="text-sm text-slate-400 mt-2 line-clamp-2">
+                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
                       {currentInstructor.currentInstructor.bio}
                     </p>
                   )}
@@ -384,10 +384,10 @@ export default function ClientDashboard() {
                     <img
                       src={currentInstructor.currentInstructor.carImage}
                       alt="Training vehicle"
-                      className="w-28 h-20 object-cover rounded-lg border border-slate-700"
+                      className="w-28 h-20 object-cover rounded-lg border border-border"
                     />
                     {(currentInstructor.currentInstructor.carMake || currentInstructor.currentInstructor.carModel) && (
-                      <p className="text-xs text-slate-500 text-center mt-1">
+                      <p className="text-xs text-muted-foreground text-center mt-1">
                         {[currentInstructor.currentInstructor.carMake, currentInstructor.currentInstructor.carModel, currentInstructor.currentInstructor.carYear].filter(Boolean).join(' ')}
                       </p>
                     )}
@@ -403,8 +403,8 @@ export default function ClientDashboard() {
                     return (
                       <div key={idx} className="flex items-center justify-between bg-blue-900/20 border border-blue-700/30 rounded-xl px-3 py-2">
                         <div>
-                          <p className="text-xs font-semibold text-slate-300">{service.name}</p>
-                          <p className="text-xs text-slate-400">per hour</p>
+                          <p className="text-xs font-semibold text-muted-foreground">{service.name}</p>
+                          <p className="text-xs text-muted-foreground">per hour</p>
                         </div>
                         <p className="text-base font-bold text-blue-400">${currentInstructor.currentInstructor!.hourlyRate.toFixed(2)}</p>
                       </div>
@@ -415,9 +415,9 @@ export default function ClientDashboard() {
                   return (
                     <div key={idx} className="flex items-center justify-between bg-indigo-900/20 border border-indigo-700/30 rounded-xl px-3 py-2">
                       <div>
-                        <p className="text-xs font-semibold text-slate-300">{service.name}</p>
+                        <p className="text-xs font-semibold text-muted-foreground">{service.name}</p>
                         {service.duration && (
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-muted-foreground">
                             {service.duration >= 60 
                               ? `${Math.floor(service.duration / 60)}h${service.duration % 60 > 0 ? ` ${service.duration % 60}m` : ''}` 
                               : `${service.duration}m`}
@@ -427,7 +427,7 @@ export default function ClientDashboard() {
                       {service.price ? (
                         <p className="text-base font-bold text-indigo-400">${service.price.toFixed(2)}</p>
                       ) : (
-                        <p className="text-xs text-slate-400">Contact</p>
+                        <p className="text-xs text-muted-foreground">Contact</p>
                       )}
                     </div>
                   );
@@ -440,10 +440,10 @@ export default function ClientDashboard() {
                   <img
                     src={currentInstructor.currentInstructor.carImage}
                     alt="Training vehicle"
-                    className="w-full h-32 object-cover rounded-lg border border-slate-700"
+                    className="w-full h-32 object-cover rounded-lg border border-border"
                   />
                   {(currentInstructor.currentInstructor.carMake || currentInstructor.currentInstructor.carModel) && (
-                    <p className="text-xs text-slate-500 text-center mt-1">
+                    <p className="text-xs text-muted-foreground text-center mt-1">
                       {[currentInstructor.currentInstructor.carMake, currentInstructor.currentInstructor.carModel, currentInstructor.currentInstructor.carYear].filter(Boolean).join(' ')}
                     </p>
                   )}
@@ -470,14 +470,14 @@ export default function ClientDashboard() {
                         router.push('/client-dashboard/book-lesson?newInstructor=true');
                       }
                     }}
-                    className="px-4 py-2.5 bg-white/10 text-slate-200 font-semibold rounded-lg hover:bg-white/20 transition text-sm"
+                    className="px-4 py-2.5 bg-secondary/50 text-foreground font-semibold rounded-lg hover:bg-secondary/70 transition text-sm"
                   >
                     Switch
                   </button>
                 ) : (
-                  <div className="flex-1 bg-slate-800 border border-slate-600 rounded-xl p-3 space-y-2">
-                    <p className="text-xs text-slate-300">
-                      You have <span className="font-bold text-white">${profile?.wallet.creditsRemaining.toFixed(2)}</span> in your wallet.
+                  <div className="flex-1 bg-secondary border border-border rounded-xl p-3 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      You have <span className="font-bold text-foreground">${profile?.wallet.creditsRemaining.toFixed(2)}</span> in your wallet.
                       Credits are not locked to this instructor — they work with any instructor.
                     </p>
                     <div className="flex gap-2">
@@ -489,7 +489,7 @@ export default function ClientDashboard() {
                       </button>
                       <button
                         onClick={() => setShowSwitchConfirm(false)}
-                        className="flex-1 px-3 py-2 bg-slate-700 text-slate-200 font-semibold rounded-lg text-xs hover:bg-slate-600 transition"
+                        className="flex-1 px-3 py-2 bg-secondary text-foreground font-semibold rounded-lg text-xs hover:bg-secondary/70 transition"
                       >
                         Keep instructor
                       </button>
@@ -503,34 +503,34 @@ export default function ClientDashboard() {
 
         {/* Standalone package + wallet credits card */}
         {currentInstructor?.packageInfo && (
-          <div className="mb-6 bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden">
-            <div className="bg-violet-900/30 border-b border-white/10 px-5 py-3 flex items-center justify-between">
-              <p className="text-blue-300 text-sm font-semibold">📦 Your Package & Credits</p>
-              <span className="text-violet-400 text-xs">Wallet balance: <span className="text-white font-bold">${profile?.wallet.creditsRemaining?.toFixed(2) ?? '0.00'}</span></span>
+          <div className="mb-6 bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="bg-violet-900/30 border-b border-border px-5 py-3 flex items-center justify-between">
+              <p className="text-primary/80 text-sm font-semibold">📦 Your Package & Credits</p>
+              <span className="text-muted-foreground text-xs">Wallet balance: <span className="text-foreground font-bold">${profile?.wallet.creditsRemaining?.toFixed(2) ?? '0.00'}</span></span>
             </div>
             <div className="p-5">
               <div className="grid grid-cols-3 gap-4 text-center mb-4">
-                <div className="bg-slate-800 rounded-lg p-3">
-                  <p className="text-xs text-slate-400 mb-1">Total</p>
-                  <p className="text-xl font-bold text-slate-100">{currentInstructor.packageInfo.totalHours}h</p>
+                <div className="bg-secondary rounded-lg p-3">
+                  <p className="text-xs text-muted-foreground mb-1">Total</p>
+                  <p className="text-xl font-bold text-foreground">{currentInstructor.packageInfo.totalHours}h</p>
                 </div>
                 <div className="bg-orange-900/20 rounded-lg p-3">
-                  <p className="text-xs text-slate-400 mb-1">Used</p>
+                  <p className="text-xs text-muted-foreground mb-1">Used</p>
                   <p className="text-xl font-bold text-orange-400">{currentInstructor.packageInfo.usedHours}h</p>
                 </div>
                 <div className="bg-green-900/20 rounded-lg p-3">
-                  <p className="text-xs text-slate-400 mb-1">Remaining</p>
+                  <p className="text-xs text-muted-foreground mb-1">Remaining</p>
                   <p className="text-xl font-bold text-green-400">{currentInstructor.packageInfo.remainingHours}h</p>
                 </div>
               </div>
               {/* Progress bar */}
-              <div className="w-full bg-slate-700 rounded-full h-2 mb-3">
+              <div className="w-full bg-secondary rounded-full h-2 mb-3">
                 <div
                   className="bg-blue-600 h-2 rounded-full transition-all"
                   style={{ width: `${currentInstructor.packageInfo.totalHours > 0 ? (currentInstructor.packageInfo.usedHours / currentInstructor.packageInfo.totalHours) * 100 : 0}%` }}
                 />
               </div>
-              <p className="text-xs text-slate-400 text-center">
+              <p className="text-xs text-muted-foreground text-center">
                 Credits are instructor-agnostic — your wallet balance can be used with any instructor.
                 {currentInstructor.packageInfo.expiryDate && ` Expires ${new Date(currentInstructor.packageInfo.expiryDate).toLocaleDateString('en-AU')}.`}
               </p>
@@ -540,15 +540,15 @@ export default function ClientDashboard() {
         {/* Learning Progress Stats - New Focus */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {/* Lessons Taken */}
-          <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 p-4 md:p-6 border-t-4 border-blue-500 shadow-lg shadow-slate-950/20 hover:bg-slate-900/80 transition-all">
+          <div className="bg-card/60 backdrop-blur rounded-3xl border border-border p-4 md:p-6 border-t-4 border-blue-500 shadow-lg shadow-black/20 hover:bg-card/80 transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm font-semibold">Lessons Taken</p>
-                <p className="text-2xl md:text-3xl font-bold text-slate-100 mt-2">
+                <p className="text-muted-foreground text-sm font-semibold">Lessons Taken</p>
+                <p className="text-2xl md:text-3xl font-bold text-foreground mt-2">
                   {pastBookings.length}
                 </p>
                 {(upcomingBookings.length > 0 || awaitingPaymentBookings.length > 0) && (
-                  <p className="text-xs text-blue-300 mt-1">
+                  <p className="text-xs text-primary/80 mt-1">
                     + {upcomingBookings.length + awaitingPaymentBookings.length} upcoming/pending
                   </p>
                 )}
@@ -558,15 +558,15 @@ export default function ClientDashboard() {
           </div>
 
           {/* Package Usage */}
-          <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 p-4 md:p-6 border-t-4 border-green-500 shadow-lg shadow-slate-950/20 hover:bg-slate-900/80 transition-all">
+          <div className="bg-card/60 backdrop-blur rounded-3xl border border-border p-4 md:p-6 border-t-4 border-green-500 shadow-lg shadow-black/20 hover:bg-card/80 transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm font-semibold">Package Hours</p>
-                <p className="text-2xl md:text-3xl font-bold text-slate-100 mt-2">
+                <p className="text-muted-foreground text-sm font-semibold">Package Hours</p>
+                <p className="text-2xl md:text-3xl font-bold text-foreground mt-2">
                   {currentInstructor?.packageInfo?.remainingHours || 0}/{currentInstructor?.packageInfo?.totalHours || 0}h
                 </p>
                 {currentInstructor?.packageInfo?.expiryDate && (
-                  <p className="text-xs text-green-300 mt-1">Expires: {new Date(currentInstructor.packageInfo.expiryDate).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })}</p>
+                  <p className="text-xs text-emerald-600 mt-1">Expires: {new Date(currentInstructor.packageInfo.expiryDate).toLocaleDateString('en-AU', { month: 'short', day: 'numeric' })}</p>
                 )}
               </div>
               <div className="text-4xl">📦</div>
@@ -574,11 +574,11 @@ export default function ClientDashboard() {
           </div>
 
           {/* Performance Score */}
-          <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 p-4 md:p-6 border-t-4 border-purple-500 shadow-lg shadow-slate-950/20 hover:bg-slate-900/80 transition-all">
+          <div className="bg-card/60 backdrop-blur rounded-3xl border border-border p-4 md:p-6 border-t-4 border-purple-500 shadow-lg shadow-black/20 hover:bg-card/80 transition-all">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm font-semibold">Performance</p>
-                <p className="text-2xl md:text-3xl font-bold text-slate-100 mt-2">
+                <p className="text-muted-foreground text-sm font-semibold">Performance</p>
+                <p className="text-2xl md:text-3xl font-bold text-foreground mt-2">
                   {averagePerformance ? `${averagePerformance}%` : '—'}
                 </p>
                 <Link href="/client-dashboard/progress" className="text-xs text-purple-300 mt-1 hover:text-purple-200 transition">
@@ -612,8 +612,8 @@ export default function ClientDashboard() {
         )}
 
         {/* Tab Navigation */}
-        <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 mb-6 overflow-hidden shadow-lg shadow-slate-950/20">
-          <div className="flex border-b border-white/10">
+        <div className="bg-card/60 backdrop-blur rounded-3xl border border-border mb-6 overflow-hidden shadow-lg shadow-black/20">
+          <div className="flex border-b border-border">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -624,7 +624,7 @@ export default function ClientDashboard() {
                   className={`flex-1 px-6 py-4 font-semibold flex items-center justify-center gap-2 transition ${
                     isActive
                       ? 'border-b-2 border-blue-500 text-blue-400 bg-blue-900/20'
-                      : 'text-slate-400 hover:text-slate-100 hover:bg-white/5'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
                   }`}
                 >
                   <Icon className="w-5 h-5" />
@@ -641,18 +641,18 @@ export default function ClientDashboard() {
               <div className="space-y-6">
                 {/* Upcoming Bookings */}
                 <div>
-                  <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                     <span className="inline-block w-3 h-3 bg-green-400 rounded-full"></span>
                     Upcoming Lessons
                   </h3>
                   {upcomingBookings.length > 0 ? (
                     <div className="space-y-3">
                       {upcomingBookings.map((booking) => (
-                        <div key={booking.id} className="border border-slate-700 rounded-lg overflow-hidden">
-                          <div className="flex items-center justify-between p-3 md:p-4 hover:bg-slate-800 transition">
+                        <div key={booking.id} className="border border-border rounded-lg overflow-hidden">
+                          <div className="flex items-center justify-between p-3 md:p-4 hover:bg-secondary transition">
                             <div className="flex-1">
-                              <h4 className="font-semibold text-slate-100">{booking.provider?.name || 'Unknown Instructor'}</h4>
-                              <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
+                              <h4 className="font-semibold text-foreground">{booking.provider?.name || 'Unknown Instructor'}</h4>
+                              <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                                 <span className="flex items-center gap-1">
                                   <Calendar className="w-4 h-4" />
                                   {new Date(booking.date).toLocaleDateString()}
@@ -665,14 +665,14 @@ export default function ClientDashboard() {
                                   <BookOpen className="w-4 h-4" />
                                   {formatDurationMinutes(booking.duration)}
                                 </span>
-                                <span className="font-semibold text-slate-100">${Number(booking.price || 0).toFixed(2)}</span>
+                                <span className="font-semibold text-foreground">${Number(booking.price || 0).toFixed(2)}</span>
                               </div>
                             </div>
                             <div className="flex gap-2 ml-4 items-center">
                               {/* Expand contact */}
                               <button
                                 onClick={() => setExpandedBookingId(expandedBookingId === booking.id ? null : booking.id)}
-                                className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                className="p-2 text-muted-foreground hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
                                 title="Contact instructor"
                               >
                                 {expandedBookingId === booking.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -710,12 +710,12 @@ export default function ClientDashboard() {
                           </div>
                           {/* Expandable contact panel */}
                           {expandedBookingId === booking.id && (
-                            <div className="border-t border-slate-700 bg-blue-900/20 px-4 py-3 flex flex-wrap gap-4 items-center">
-                              <p className="text-xs font-semibold text-blue-300 w-full">Contact {booking.provider?.name || 'Unknown Instructor'}</p>
+                            <div className="border-t border-border bg-blue-900/20 px-4 py-3 flex flex-wrap gap-4 items-center">
+                              <p className="text-xs font-semibold text-primary/80 w-full">Contact {booking.provider?.name || 'Unknown Instructor'}</p>
                               {booking.provider?.phone && (
                                 <a
                                   href={`tel:${booking.provider?.phone}`}
-                                  className="flex items-center gap-2 text-sm text-blue-300 hover:text-blue-200 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-blue-400 transition"
+                                  className="flex items-center gap-2 text-sm text-primary/80 hover:text-primary/80 bg-secondary px-3 py-1.5 rounded-lg border border-border hover:border-blue-400 transition"
                                 >
                                   <Phone className="w-4 h-4" />
                                   {booking.provider?.phone}
@@ -726,7 +726,7 @@ export default function ClientDashboard() {
                                   href={`https://wa.me/${booking.provider?.whatsapp.replace(/\D/g, '')}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="flex items-center gap-2 text-sm text-green-300 hover:text-green-200 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 hover:border-green-400 transition"
+                                  className="flex items-center gap-2 text-sm text-emerald-600 hover:text-emerald-700 bg-secondary px-3 py-1.5 rounded-lg border border-border hover:border-green-400 transition"
                                 >
                                   <MessageCircle className="w-4 h-4" />
                                   WhatsApp
@@ -741,14 +741,14 @@ export default function ClientDashboard() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-slate-500 text-center py-8">No upcoming lessons. Book one now!</p>
+                    <p className="text-muted-foreground text-center py-8">No upcoming lessons. Book one now!</p>
                   )}
                 </div>
 
                 {/* Awaiting Payment Bookings */}
                 {awaitingPaymentBookings.length > 0 && (
                   <div>
-                    <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+                    <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                       <span className="inline-block w-3 h-3 bg-amber-400 rounded-full"></span>
                       Awaiting Payment
                     </h3>
@@ -757,8 +757,8 @@ export default function ClientDashboard() {
                         <div key={booking.id} className="border-2 border-amber-600/50 bg-amber-900/20 rounded-lg overflow-hidden">
                           <div className="flex items-center justify-between p-3 md:p-4 hover:bg-amber-900/30 transition">
                             <div className="flex-1">
-                              <h4 className="font-semibold text-slate-100">{booking.provider?.name || 'Unknown Instructor'}</h4>
-                              <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
+                              <h4 className="font-semibold text-foreground">{booking.provider?.name || 'Unknown Instructor'}</h4>
+                              <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                                 <span className="flex items-center gap-1">
                                   <Calendar className="w-4 h-4" />
                                   {new Date(booking.date).toLocaleDateString()}
@@ -771,7 +771,7 @@ export default function ClientDashboard() {
                                   <BookOpen className="w-4 h-4" />
                                   {formatDurationMinutes(booking.duration)}
                                 </span>
-                                <span className="font-semibold text-slate-100">${Number(booking.price || 0).toFixed(2)}</span>
+                                <span className="font-semibold text-foreground">${Number(booking.price || 0).toFixed(2)}</span>
                               </div>
                               <p className="text-xs text-amber-400 mt-2 font-semibold">
                                 <Wallet className="w-3 h-3 inline mr-1" />
@@ -825,7 +825,7 @@ export default function ClientDashboard() {
 
                 {/* Past Bookings */}
                 <div>
-                  <h3 className="text-lg font-bold text-slate-100 mb-4 flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2">
                     <span className="inline-block w-3 h-3 bg-slate-500 rounded-full"></span>
                     Completed Lessons
                   </h3>
@@ -834,18 +834,18 @@ export default function ClientDashboard() {
                       {pastBookings.map((booking) => (
                         <div
                           key={booking.id}
-                          className="flex items-center justify-between p-3 md:p-4 border border-slate-700 bg-slate-800/50 rounded-lg hover:bg-slate-800 transition"
+                          className="flex items-center justify-between p-3 md:p-4 border border-border bg-secondary/50 rounded-lg hover:bg-secondary transition"
                         >
                           <div className="flex-1">
-                            <h4 className="font-semibold text-slate-100">
+                            <h4 className="font-semibold text-foreground">
                               {booking.provider?.name || 'Unknown Instructor'}
                             </h4>
-                            <div className="flex items-center gap-4 mt-2 text-sm text-slate-400">
+                            <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-4 h-4" />
                                 {new Date(booking.date).toLocaleDateString()}
                               </span>
-                              <span className="font-semibold text-slate-100">
+                              <span className="font-semibold text-foreground">
                                 ${Number(booking.price || 0).toFixed(2)}
                               </span>
                             </div>
@@ -865,7 +865,7 @@ export default function ClientDashboard() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-slate-500 text-center py-8">No completed lessons yet.</p>
+                    <p className="text-muted-foreground text-center py-8">No completed lessons yet.</p>
                   )}
                 </div>
               </div>
@@ -875,13 +875,13 @@ export default function ClientDashboard() {
             {activeTab === 'wallet' && (
               <div className="space-y-6">
                 {/* Usage Overview */}
-                <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-4 sm:p-6">
-                  <h3 className="text-lg font-bold text-slate-100 mb-4">Credit Usage</h3>
+                <div className="bg-card/60 backdrop-blur rounded-3xl border border-border shadow-lg shadow-black/20 p-4 sm:p-6">
+                  <h3 className="text-lg font-bold text-foreground mb-4">Credit Usage</h3>
                   
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-slate-400">Total Balance</span>
-                      <span className="text-2xl font-bold text-slate-100">
+                      <span className="text-muted-foreground">Total Balance</span>
+                      <span className="text-2xl font-bold text-foreground">
                         ${profile.wallet.totalPaid?.toFixed(2) || '0.00'}
                       </span>
                     </div>
@@ -889,12 +889,12 @@ export default function ClientDashboard() {
                     {/* Progress Bar */}
                     <div className="mt-4">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm text-slate-400">Used</span>
-                        <span className="text-sm font-semibold text-slate-100">
+                        <span className="text-sm text-muted-foreground">Used</span>
+                        <span className="text-sm font-semibold text-foreground">
                           ${profile.wallet.totalSpent?.toFixed(2) || '0.00'} ({usagePercent.toFixed(1)}%)
                         </span>
                       </div>
-                      <div className="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
+                      <div className="w-full bg-secondary rounded-full h-3 overflow-hidden">
                         <div
                           className={`h-full transition-all ${
                             usagePercent > 80
@@ -908,9 +908,9 @@ export default function ClientDashboard() {
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-white/10">
+                    <div className="pt-3 border-t border-border">
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-400">Available Balance</span>
+                        <span className="text-muted-foreground">Available Balance</span>
                         <span className={`text-2xl font-bold ${
                           profile.wallet.creditsRemaining > 0
                             ? 'text-green-400'
@@ -926,17 +926,17 @@ export default function ClientDashboard() {
                 {/* Instructor Breakdown */}
                 {profile.wallet.packages && Object.keys(profile.wallet.packages).length > 0 && (
                   <div>
-                    <h3 className="text-lg font-bold text-slate-100 mb-4">Spending by Instructor</h3>
+                    <h3 className="text-lg font-bold text-foreground mb-4">Spending by Instructor</h3>
                     <div className="space-y-2">
                       {Object.entries(profile.wallet.packages).map(([instructor, data]: any) => (
-                        <div key={instructor} className="flex items-center justify-between p-3 bg-slate-900/60 backdrop-blur border border-white/10 rounded-lg shadow-sm hover:bg-slate-900/80 transition">
+                        <div key={instructor} className="flex items-center justify-between p-3 bg-card/60 backdrop-blur border border-border rounded-lg shadow-sm hover:bg-card/80 transition">
                           <div>
-                            <p className="font-semibold text-slate-100">{instructor}</p>
-                            <p className="text-sm text-slate-400">{data.bookingCount} bookings</p>
+                            <p className="font-semibold text-foreground">{instructor}</p>
+                            <p className="text-sm text-muted-foreground">{data.bookingCount} bookings</p>
                           </div>
                           <div className="text-right">
-                            <p className="font-bold text-slate-100">${data.totalSpent.toFixed(2)}</p>
-                            <p className="text-sm text-slate-400">{data.totalHours}h</p>
+                            <p className="font-bold text-foreground">${data.totalSpent.toFixed(2)}</p>
+                            <p className="text-sm text-muted-foreground">{data.totalHours}h</p>
                           </div>
                         </div>
                       ))}
@@ -946,28 +946,28 @@ export default function ClientDashboard() {
 
                 {/* Transaction History - Collapsible */}
                 {profile.wallet.transactions && profile.wallet.transactions.length > 0 && (
-                  <div className="bg-slate-900/60 backdrop-blur rounded-3xl border border-white/10 shadow-lg shadow-slate-950/20 p-4">
+                  <div className="bg-card/60 backdrop-blur rounded-3xl border border-border shadow-lg shadow-black/20 p-4">
                     <button
                       onClick={() => setShowTransactionHistory(!showTransactionHistory)}
-                      className="w-full flex items-center justify-between text-lg font-bold text-slate-100 hover:text-slate-300 transition"
+                      className="w-full flex items-center justify-between text-lg font-bold text-foreground hover:text-muted-foreground transition"
                     >
                       <span>📋 Transaction History ({profile.wallet.transactions.length})</span>
                       <ChevronDown className={`w-5 h-5 transition-transform ${showTransactionHistory ? 'rotate-180' : ''}`} />
                     </button>
                     
                     {showTransactionHistory && (
-                      <div className="mt-4 space-y-3 border-t border-white/10 pt-4 max-h-96 overflow-y-auto">
+                      <div className="mt-4 space-y-3 border-t border-border pt-4 max-h-96 overflow-y-auto">
                         {profile.wallet.transactions.map((tx, idx) => (
-                          <div key={idx} className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg">
+                          <div key={idx} className="p-3 bg-secondary/50 border border-border rounded-lg">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-sm font-semibold text-slate-100">
+                                  <span className="text-sm font-semibold text-foreground">
                                     {formatTransactionType(tx.type)}
                                   </span>
                                 </div>
-                                <p className="text-sm text-slate-400 mt-1">{tx.description || 'N/A'}</p>
-                                <p className="text-xs text-slate-500 mt-1">
+                                <p className="text-sm text-muted-foreground mt-1">{tx.description || 'N/A'}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
                                   {formatDate(tx.createdAt || tx.date)}
                                 </p>
                               </div>
@@ -1000,17 +1000,17 @@ export default function ClientDashboard() {
             {/* History Tab */}
             {activeTab === 'history' && (
               <div>
-                <h3 className="text-lg font-bold text-slate-100 mb-4">Recent Transactions</h3>
+                <h3 className="text-lg font-bold text-foreground mb-4">Recent Transactions</h3>
                 {profile.wallet.transactions && profile.wallet.transactions.length > 0 ? (
                   <div className="space-y-2">
                     {profile.wallet.transactions.map((transaction) => (
                       <div
                         key={transaction.id}
-                        className="flex items-center justify-between p-4 border border-slate-700 rounded-lg hover:shadow-md transition"
+                        className="flex items-center justify-between p-4 border border-border rounded-lg hover:shadow-md transition"
                       >
                         <div className="flex-1">
-                          <p className="font-semibold text-slate-100">{transaction.description}</p>
-                          <p className="text-sm text-slate-400">
+                          <p className="font-semibold text-foreground">{transaction.description}</p>
+                          <p className="text-sm text-muted-foreground">
                             {formatDate(transaction.createdAt || transaction.date)}
                           </p>
                         </div>
@@ -1024,8 +1024,8 @@ export default function ClientDashboard() {
                           </p>
                           <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
                             transaction.status === 'completed'
-                              ? 'bg-green-900/40 text-green-300'
-                              : 'bg-blue-900/40 text-blue-300'
+                              ? 'bg-green-900/40 text-emerald-600'
+                              : 'bg-blue-900/40 text-primary/80'
                           }`}>
                             {transaction.status}
                           </span>
@@ -1034,7 +1034,7 @@ export default function ClientDashboard() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-slate-500 text-center py-8">No transactions yet.</p>
+                  <p className="text-muted-foreground text-center py-8">No transactions yet.</p>
                 )}
               </div>
             )}

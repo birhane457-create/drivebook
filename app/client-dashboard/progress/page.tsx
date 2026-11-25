@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { TrendingUp, Star, BookOpen, AlertCircle, ChevronDown, ChevronUp, Loader2, Target, Award } from 'lucide-react';
@@ -60,7 +60,7 @@ export default function ClientProgressPage() {
     return (
       <div className="min-h-screen bg-background text-foreground flex items-center justify-center pb-24">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
           <p className="text-muted-foreground">Loading your progress...</p>
         </div>
       </div>

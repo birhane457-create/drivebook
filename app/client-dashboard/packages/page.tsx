@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 // PB-UI-03 FIX: Display wallet dollar balance as the primary entitlement metric.
 // Approved policy (docs/audit/PACKAGE-ACCOUNTING-POLICY.md §5, 2026-10-18):
@@ -81,7 +81,7 @@ export default function ClientPackagesPage() {
     return (
       <div className="min-h-screen bg-background text-foreground pb-24 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
           <p className="text-muted-foreground">Loading your packages...</p>
         </div>
       </div>
@@ -154,8 +154,7 @@ export default function ClientPackagesPage() {
               ${walletBalance.toFixed(2)}
             </p>
             <p className="text-xs text-muted-foreground/60 mt-1">
-              Credit valid for 12 months from payment date
-            </p>
+              Credit valid for 12 months from payment date            </p>
           </div>
 
           {/* Active Packages */}
