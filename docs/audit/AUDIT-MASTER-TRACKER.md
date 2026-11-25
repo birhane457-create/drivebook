@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.97 (reconciliation: PB-SEC-01-04 registered/updated; FIN-series retired; BLOCKER-001 scope clarified)
-**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-04 registered VERIFIED/OPEN MEDIUM: payment link opens new tab, original tab never navigates forward | PB-SEC-01 MEDIUM OTP design; PB-SEC-02/03 HIGH OPEN; GPT review required before fixes)
+**Version:** 6.97 (PB-SEC-01-05 registered; FIN-series retired; BLOCKER-001 scope clarified)
+**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-05 registered VERIFIED/OPEN HIGH: registration page guard fires before localStorage recovery, redirects to /book | PB-SEC-04 new-tab bug; PB-SEC-01-03 open)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -786,6 +786,26 @@ When a guest enters an email that matches an existing `User` record, before `use
 - 'Start a new booking' button (line 320) resets the wizard to step 1 in-place — it does not navigate away. A customer who clicks it after paying loses the payment confirmation context.
 **Fix:** Remove `target="_blank"` from the payment link. Replace the `<a>` with `window.location.href = paymentUrl` or `router.push(paymentUrl)` so the original tab navigates forward to the payment page, matching the `BulkBookingForm` behaviour.
 **Note on PB-SEC-03 relationship:** PB-SEC-03 concerns whether `checkoutUrl` from the bulk booking response is used at all. PB-SEC-04 is a separate issue — the URL is constructed and stored in `paymentUrl` correctly (line 212), but the navigation mechanism opens a new tab instead of replacing the current page. Both must be fixed independently.
+
+---
+
+#### PB-SEC-05 — Registration page guard fires before localStorage recovery, redirects to /book and releases slot
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-05 | Registration page `useEffect` guard fires before `BookingContext` localStorage recovery completes — `instructor` is null on first render, guard pushes to `/book`, slot reservation is released | HIGH | CONFIRMED | VERIFIED — `app/book/[instructorId]/registration/page.tsx` lines 17–19: `useEffect` fires immediately with no timeout; `instructor` is null before async localStorage `useEffect` runs; `router.push('/book')` executes; slot DELETE follows on unmount. `booking-details/page.tsx` and `book-type/page.tsx` both have `setTimeout(..., 500)` guard for the same reason. Source-verified against server log this session. | NOT-STARTED | N/A | OPEN | Server log trace 2026-11-25; branch `tracker-update-v6.97` | PB-ARCH-01 |
+
+**Code location:** `app/book/[instructorId]/registration/page.tsx` lines 17–19
+**Condition:** On navigation to the `/registration` route, React mounts the page with `instructor = null` (initial context state). The `useEffect` guard has no delay and pushes to `/book` before the context's own `useEffect` can read `localStorage` and restore the booking state.
+**Server log evidence:**
+`${crlf}POST /api/availability/check-and-reserve 200   <- slot reserved
+GET  /book/[instructorId]/registration         <- page loaded
+GET  /book                                     <- guard fired, redirect
+DELETE /api/availability/check-and-reserve ... <- slot released on unmount
+`${crlf}**Reference pattern (correct):** `app/book/[instructorId]/booking-details/page.tsx` lines 14–21 and `book-type/page.tsx` lines 15–22 both use `setTimeout(..., 500)` before firing the guard, allowing localStorage recovery to complete first.
+**Impact:** Customer who reaches the registration step loses their slot reservation. Booking flow broken at the final step before payment.
+**Immediate fix:** Add the same `setTimeout(..., 500)` pattern to the registration page guard, matching `booking-details` and `book-type`. Add a loading state while `instructor` is null so the page does not flash before the timer fires.
+**Underlying cause (tracked separately):** The 500ms workaround is a symptom of `BookingContext` reading localStorage asynchronously in a `useEffect` rather than synchronously in the initial state. The proper fix is to initialise state from localStorage synchronously (read in the `useState` initialiser, not in `useEffect`). That eliminates the race entirely without needing any timeout. Tracked as a follow-up improvement; the timeout patch fixes the immediate regression.
 
 ---
 
