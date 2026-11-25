@@ -62,6 +62,7 @@ export default function ClientBookingsPage() {
   const router = useRouter();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'upcoming' | 'past'>('all');
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
@@ -77,38 +78,37 @@ export default function ClientBookingsPage() {
     }
   }, [status, router]);
 
+  // One effect owns initial loading and filter changes. Separate session and
+  // filter effects caused duplicate requests on the first authenticated render.
   useEffect(() => {
     if (session?.user?.email) {
-      loadData(1, filter);
+      void loadData(1, filter);
     }
-  }, [session]);
+  }, [session?.user?.email, filter]);
 
-  // Reload when filter changes so server filters appropriately
-  useEffect(() => {
-    if (session?.user?.email) {
-      loadData(1, filter);
-    }
-  }, [filter]);
-
-  const loadData = async (page: number, currentFilter?: string) => {
+  const loadData = async (page: number, currentFilter: 'all' | 'upcoming' | 'past' = filter) => {
     try {
       setLoading(true);
-      const f = currentFilter ?? filter;
-      const statusParam = f === 'upcoming'
+      setLoadError(null);
+      const statusParam = currentFilter === 'upcoming'
         ? '&status=upcoming,awaiting_payment,awaiting_confirmation'
-        : f === 'past'
+        : currentFilter === 'past'
         ? '&status=completed,cancelled,expired'
         : '';
-      const res = await fetch(`/api/client/profile?page=${page}&limit=10${statusParam}`);
-      if (res.ok) {
-        const data = await res.json();
-        setProfile(data);
-        if (data.pagination) {
-          setPagination(data.pagination);
-        }
+      const res = await fetch(`/api/client/profile?page=${page}&limit=10${statusParam}`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        throw new Error(`Booking request failed (${res.status})`);
+      }
+      const data = await res.json();
+      setProfile(data);
+      if (data.pagination) {
+        setPagination(data.pagination);
       }
     } catch (error) {
       console.error('Error loading bookings:', error);
+      setLoadError('We could not load your bookings. Check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -127,10 +127,18 @@ export default function ClientBookingsPage() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-muted-foreground">Failed to load bookings</p>
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <p className="text-foreground font-semibold">Bookings unavailable</p>
+          <p className="text-muted-foreground mt-2">{loadError ?? 'We could not load your bookings.'}</p>
+          <button
+            type="button"
+            onClick={() => void loadData(1, filter)}
+            className="mt-5 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            Try again
+          </button>
         </div>
       </div>
     );
