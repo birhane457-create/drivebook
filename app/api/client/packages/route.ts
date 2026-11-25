@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getWalletBalance } from '@/lib/services/wallet-helpers';
+import { toBookingDurationMinutes } from '@/lib/utils/booking-duration';
 
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,9 @@ export async function GET(req: NextRequest) {
         { error: 'Unauthorized' },
         { status: 401 }
       );
+    }
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const user = await prisma.user.findUnique({
@@ -83,13 +87,17 @@ export async function GET(req: NextRequest) {
       // Calculate hours used from completed/confirmed bookings
       const hoursUsed = childBookings
         .filter((b: any) => b.status === 'COMPLETED' || b.status === 'CONFIRMED')
-        .reduce((sum: any, b: any) => {
-          const duration = (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / (1000 * 60 * 60);
-          return sum + duration;
+        .reduce((sum: number, b: any) => {
+          const start = b.startTime ? new Date(b.startTime).getTime() : NaN;
+          const end = b.endTime ? new Date(b.endTime).getTime() : NaN;
+          const durationHours = Number.isFinite(start) && Number.isFinite(end) && end > start
+            ? (end - start) / (1000 * 60 * 60)
+            : toBookingDurationMinutes(b.duration, b.createdBy, b.bookingType) / 60;
+          return sum + (Number.isFinite(durationHours) && durationHours > 0 ? durationHours : 0);
         }, 0);
 
-      // Calculate remaining hours
-      const packageHours = packageBooking.packageHours || 0;
+      // Decimal fields are converted before arithmetic and JSON serialization.
+      const packageHours = Number(packageBooking.packageHours ?? 0);
       const remaining = Math.max(0, packageHours - hoursUsed);
 
       // Determine status
@@ -124,7 +132,14 @@ export async function GET(req: NextRequest) {
           id: b.id,
           date: b.startTime,
           instructor: packageBooking.provider.name,
-          duration: (new Date(b.endTime).getTime() - new Date(b.startTime).getTime()) / (1000 * 60 * 60),
+          duration: (() => {
+            const start = b.startTime ? new Date(b.startTime).getTime() : NaN;
+            const end = b.endTime ? new Date(b.endTime).getTime() : NaN;
+            if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+              return (end - start) / (1000 * 60 * 60);
+            }
+            return toBookingDurationMinutes(b.duration, b.createdBy, b.bookingType) / 60;
+          })(),
           status: b.status,
           price: b.price
         }))
