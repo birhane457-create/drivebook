@@ -28,6 +28,9 @@ export async function GET(req: NextRequest) {
         { status: 401 }
       );
     }
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Get current user
     const user = await prisma.user.findUnique({
@@ -43,8 +46,10 @@ export async function GET(req: NextRequest) {
 
     // Parse query parameters
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const rawPage = Number.parseInt(searchParams.get('page') || '1', 10);
+    const rawLimit = Number.parseInt(searchParams.get('limit') || '20', 10);
+    const page = Number.isFinite(rawPage) ? Math.max(1, rawPage) : 1;
+    const limit = Number.isFinite(rawLimit) ? Math.min(50, Math.max(1, rawLimit)) : 20;
     const type = searchParams.get('type');
     const isRead = searchParams.get('isRead');
 
