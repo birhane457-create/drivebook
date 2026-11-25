@@ -97,7 +97,7 @@ function makeRequest(url: string, body?: unknown, method = body ? 'POST' : 'GET'
 
 function mockSession(email: string, extra?: Record<string, unknown>) {
   vi.mocked(getServerSession).mockResolvedValue({
-    user: { email, id: 'test-session-id', ...extra },
+    user: { email, id: 'test-session-id', role: 'CLIENT', ...extra },
   } as any)
 }
 
