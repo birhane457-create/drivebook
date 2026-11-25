@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.97 (PB-SEC-01-06 registered; FIN-series retired; BLOCKER-001 scope clarified)
-**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-06 registered VERIFIED/OPEN HIGH: BookingDetailsForm unmount releases slots on wizard step advance; PB-SEC-05 guard bug; PB-SEC-01-04 open)
+**Version:** 6.97 (PB-SEC-01-08 registered; FIN-series retired; BLOCKER-001 scope clarified)
+**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-07/08 root cause: params.providerId undefined in layout + booking-details Continue; PB-SEC-05/06 compound; PB-SEC-01-04 open)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -826,6 +826,33 @@ DELETE /api/availability/check-and-reserve ... <- slot released on unmount
 - **Option A (recommended):** Move slot cleanup to `BookingContext`. Context survives step changes; only release on true exit or page unload.
 - **Option B (minimal):** `isStepAdvancing` ref in wizard; set before `setStep()`; cleanup skips DELETE if advancing. Fragile.
 - **Option C (interim):** Cleanup only releases slots no longer in `BookingContext.slotReservations` — skips slots still held in context.
+---
+
+#### PB-SEC-07 — Layout reads `params.providerId` but route segment is `[instructorId]`
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-07 | Layout `InstructorLoaderContent` reads `params.providerId` — route segment is `[instructorId]`; `providerId` is always `undefined`; instructor fetch never runs; all sub-route pages receive `bookingState.provider = null` from layout context | HIGH | CONFIRMED | VERIFIED — `app/book/[instructorId]/layout.tsx` line 22: `params.providerId`; route folder is `app/book/[instructorId]` so Next.js supplies `params.instructorId`. Source-verified this session. | NOT-STARTED | N/A | OPEN | Source trace 2026-11-25; branch `tracker-update-v6.97` | none |
+
+**Code location:** `app/book/[instructorId]/layout.tsx` line 22
+**Condition:** `const providerId = params.providerId as string` — `providerId` is `undefined`. Guard `if (!providerId) return` (line 29) silently exits. `fetchInstructor()` never called. Layout `BookingContext` never has an instructor.
+**Impact:** Sub-route pages (`booking-details`, `book-type`, `registration`) all check `bookingState.provider` or `bookingState.instructor` from the layout context. All get `null`. The 500ms guards fire and push to `/book`. This is the root cause of the Book Now redirect loop observed in server logs.
+**Why paths sometimes appear to work:** Sub-route pages also read `localStorage` via `BookingContext`. If the wizard previously saved instructor data to `localStorage` and the 500ms wait allows recovery before the guard fires, the page survives. The fix must not rely on this race.
+**Fix:** Change line 22 to `params.instructorId`. One character change. Also update line 31 (`bookingState.provider?.id === providerId`) and line 42 (`fetch(`/api/instructors/${providerId}`)`) to use `instructorId` consistently.
+
+---
+
+#### PB-SEC-08 — booking-details Continue handler navigates to `/book/undefined/registration`
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-08 | `booking-details/page.tsx` Continue handler uses `params.providerId` in `router.push`; `params.providerId` is `undefined`; navigates to `/book/undefined/registration` which 404s | HIGH | CONFIRMED | VERIFIED — `app/book/[instructorId]/booking-details/page.tsx` line 47: `router.push(`/book/${params.providerId}/registration`)`. Route segment is `[instructorId]`. Source-verified this session. | NOT-STARTED | N/A | OPEN | Source trace 2026-11-25; branch `tracker-update-v6.97` | none |
+
+**Code location:** `app/book/[instructorId]/booking-details/page.tsx` line 47
+**Condition:** `router.push(`/book/${params.providerId}/registration`)` — `params.providerId` is `undefined` (route segment is `instructorId`). Navigation target is `/book/undefined/registration`. Next.js treats `undefined` as a literal path segment. No matching route exists; page 404s.
+**Reference (correct):** `app/book/[instructorId]/book-type/page.tsx` lines 48–51 uses `params.instructorId` correctly for both Book Now and Book Later branches.
+**Fix:** Change `params.providerId` to `params.instructorId` on line 47. One word.
+
 ---
 
 ---
