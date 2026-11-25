@@ -1299,8 +1299,8 @@ export default function BookLessonPage() {
                                 <span className="text-foreground font-medium capitalize">
                                   {tx.type === 'CREDIT' ? 'Credit' : tx.type === 'DEBIT' ? 'Debit' : tx.type}
                                 </span>
-                                <span className={tx.amount > 0 ? 'text-emerald-400 font-semibold' : 'text-destructive font-semibold'}>
-                                  {tx.amount > 0 ? '+' : ''} ${(tx.amount / 100).toFixed(2)}
+                                <span className={tx.type === 'CREDIT' ? 'text-emerald-400 font-semibold' : 'text-destructive font-semibold'}>
+                                  {tx.type === 'CREDIT' ? '+' : tx.type === 'DEBIT' ? '−' : ''} ${Number(tx.amount).toFixed(2)}
                                 </span>
                               </div>
                               <p className="text-muted-foreground mt-1">
