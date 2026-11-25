@@ -1092,7 +1092,7 @@ export default function BookLessonPage() {
 
                       console.log('Submitting cart with items:', cart.length);
                       const checkoutBody = {
-                        cart,
+                        cart: cart.map(item => ({ ...item, expectedPrice: item.price })),
                         pdaBookings: pdaCart.map(item => {
                           const parentBookingIndex = item.parentLessonId
                             ? cart.findIndex(lesson => lesson.id === item.parentLessonId)
