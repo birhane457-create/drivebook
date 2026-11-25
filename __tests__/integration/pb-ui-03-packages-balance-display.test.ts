@@ -397,4 +397,11 @@ describe('PB-UI-03 — /api/client/packages wallet dollar balance', () => {
     expect(formattedLabel).not.toContain('$70');
   });
 
+  it('P11 | non-positive wallet balance never produces a negative hours estimate', () => {
+    expect(estimateHours(-50, 80)).toBe('');
+    expect(estimateHoursValue(-50, 80)).toBe(0);
+    expect(estimateHours(0, 80)).toBe('');
+    expect(estimateHoursValue(0, 80)).toBe(0);
+  });
+
 });
