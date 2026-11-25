@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.97 (reconciliation: PB-SEC-01/02/03 registered; FIN-series retired; BLOCKER-001 scope clarified)
-**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-01 VERIFIED/OPEN, PB-SEC-02 VERIFIED/OPEN, PB-SEC-03 PARTIAL/OPEN; GPT independent review required before any fix proceeds | v6.96 2026-11-23: PH5-SCH-21/22 closed; 85/85 PASS)
+**Version:** 6.97 (reconciliation: PB-SEC-01 reclassified MEDIUM + design decision recorded; PB-SEC-02/03 registered; FIN-series retired; BLOCKER-001 scope clarified)
+**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-01 reclassified MEDIUM + OTP/magic-link design recorded; PB-SEC-02 VERIFIED/OPEN HIGH; PB-SEC-03 PARTIAL/OPEN HIGH; GPT independent review required before any fix proceeds | v6.96 2026-11-23: PH5-SCH-21/22 closed; 85/85 PASS)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -712,17 +712,33 @@ These items were raised during the audit and verified source-safe. Recorded here
 
 ---
 
-#### PB-SEC-01 — Guest booking links to existing account without credential verification
+#### PB-SEC-01 — Account association without email ownership verification
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PB-SEC-01 | Guest booking links to existing account without credential verification | HIGH | CONFIRMED | VERIFIED — `app/api/public/bookings/bulk/route.ts` line 602: `userId = existingUser.id` with no password, OTP, or session auth. Comment line 601: "Existing user — just link booking to their account, no password change." | NOT-STARTED | N/A | OPEN | Reconciliation 2026-11-25; branch `7c4efbef` | none |
+| PB-SEC-01 | Account association without email ownership verification — booking or package credit linked to existing account before email ownership is proven | MEDIUM | CONFIRMED | VERIFIED — `app/api/public/bookings/bulk/route.ts` line 602: `userId = existingUser.id` with no OTP, magic-link, or session auth. Comment line 601: "Existing user — just link booking to their account, no password change." Risk reclassified from HIGH to MEDIUM: intended product behaviour (email as stable account identifier) is valid; missing control is proof of email ownership, not account credential. Account takeover has not been demonstrated. | NOT-STARTED | N/A | OPEN | Reconciliation 2026-11-25; design decision 2026-11-25; branch `7c4efbef` | none |
 
 **Code location:** `app/api/public/bookings/bulk/route.ts` lines 369–602
-**Condition:** Guest email matching an existing `User` record causes `userId = existingUser.id` with no credential check.
-**Attack vector:** Any party knowing a registered user's email can link a booking to that account without authentication.
-**Impact (source-established):** A booking the victim did not make is associated with their account and appears in their booking history. No prior-action signal reaches the victim before linkage occurs. **What the linked account can subsequently view, change, or control has not yet been tested** — the full scope of access granted by the association is not established by this source trace alone and must not be described as account takeover until that review is complete.
-**Fix requires:** Policy decision — (a) reject guest flow if email matches existing account and require login, (b) OTP verification before linking, or (c) post-booking claim flow.
+**Intended behaviour (valid):** DriveBook uses email as the stable, uneditable account identifier. Recognising an existing email and linking the new booking to that account avoids duplicate accounts and fragmented booking history. This design intent is correct.
+**Missing control:** The route links the booking to the existing account without proving the person submitting the request controls that email address. An email address is a stable identifier but not proof of ownership at the time of a guest request.
+**Risk distinction:** This is unauthorised account association, not account takeover. The full scope of what a linked booking exposes on the existing account has not yet been tested. Risk is MEDIUM until that scope is established.
+**Two-flow impact:**
+- *Book Now (single lesson):* Booking linked to victim's account without consent. Victim sees a booking they did not make.
+- *Package purchase / Book Later:* More significant — package payment or wallet credit could be associated with the existing account before ownership is verified. Someone could direct purchase credit into another person's wallet.
+
+**Approved fix design — email OTP / magic-link verification:**
+When a guest enters an email that matches an existing `User` record, before `userId` is assigned:
+1. Present in-flow message: *"This email is already registered with DriveBook. To connect this booking to your account, verify you own this email."*
+2. Send a short-lived (≤10 min), single-use OTP or magic-link to that email address.
+3. Bind the code to the exact email + booking/checkout session ID. Reject if reused or expired.
+4. Limit resend frequency (e.g. 1 per 60 s) and failed attempts (e.g. lock after 5).
+5. Only assign `userId = existingUser.id` after successful verification.
+6. If the customer cannot access the email, offer: change email (creates new account), contact support, or log in via the client portal.
+7. Do not force a password login — that adds friction and loses bookings. Verification proves email access without requiring password recall.
+8. Preserve the existing user's password, account details, and wallet balance throughout.
+9. Keep booking retries idempotent — a verified session that retries must not trigger a second OTP send or create a duplicate booking.
+
+**What this does not change:** The existing new-user path (no matching account found) is unaffected. Auto-generated password + setup-link flow for genuinely new users remains correct.
 
 ---
 
