@@ -726,17 +726,20 @@ These items were raised during the audit and verified source-safe. Recorded here
 - *Book Now (single lesson):* Booking linked to victim's account without consent. Victim sees a booking they did not make.
 - *Package purchase / Book Later:* More significant — package payment or wallet credit could be associated with the existing account before ownership is verified. Someone could direct purchase credit into another person's wallet.
 
-**Approved fix design — email OTP / magic-link verification:**
+**Approved fix design — email OTP verification (entered at checkout):**
 When a guest enters an email that matches an existing `User` record, before `userId` is assigned:
-1. Present in-flow message: *"This email is already registered with DriveBook. To connect this booking to your account, verify you own this email."*
-2. Send a short-lived (≤10 min), single-use OTP or magic-link to that email address.
-3. Bind the code to the exact email + booking/checkout session ID. Reject if reused or expired.
-4. Limit resend frequency (e.g. 1 per 60 s) and failed attempts (e.g. lock after 5).
-5. Only assign `userId = existingUser.id` after successful verification.
-6. If the customer cannot access the email, offer: change email (creates new account), contact support, or log in via the client portal.
-7. Do not force a password login — that adds friction and loses bookings. Verification proves email access without requiring password recall.
-8. Preserve the existing user's password, account details, and wallet balance throughout.
-9. Keep booking retries idempotent — a verified session that retries must not trigger a second OTP send or create a duplicate booking.
+1. Present in-flow message inline at the checkout step: *"This email is already registered with DriveBook. To connect this booking to your account, verify you own this email."* Name the specific action — "connect this booking" — not just "verify your email", so the email owner can recognise if they did not initiate it.
+2. Send a short-lived (≤10 min), single-use OTP to that email address.
+3. The OTP must be **entered by the person at the checkout session**. It is not a background confirmation — the booking stays unlinked until the code is submitted in the same session. If the code is never entered, `userId` is never assigned and the booking remains a guest booking or expires. The email owner's inaction is sufficient protection — they do not need to actively reject anything.
+4. Bind the code to the exact email + booking/checkout session ID. Reject if reused, expired, or submitted in a different session.
+5. Limit resend frequency (e.g. 1 per 60 s) and failed attempts (e.g. lock after 5).
+6. Only assign `userId = existingUser.id` after the correct code is entered in the active session.
+7. If the customer cannot access the email, offer: change email (creates new account), contact support, or log in via the client portal.
+8. Do not force a password login — verification proves email access without requiring password recall.
+9. Preserve the existing user's password, account details, and wallet balance throughout.
+10. Keep booking retries idempotent — a verified session that retries must not trigger a second OTP send or create a duplicate booking.
+
+**Inaction defence:** If someone enters another person's email, the real owner receives the OTP but does not enter it at the attacker's checkout. The session expires. No association occurs. No active rejection is required from the email owner.
 
 **What this does not change:** The existing new-user path (no matching account found) is unaffected. Auto-generated password + setup-link flow for genuinely new users remains correct.
 
