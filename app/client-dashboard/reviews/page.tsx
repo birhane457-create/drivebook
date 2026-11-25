@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Star, Calendar, User, Loader2 } from 'lucide-react';
 import ReviewModal from '@/components/ReviewModal';
 
@@ -24,36 +24,41 @@ export default function ClientReviewsPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [pendingReviews, setPendingReviews] = useState<PendingReview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'completed' | 'pending'>('pending');
   const [reviewModal, setReviewModal] = useState<{ isOpen: boolean; bookingId: string; instructorName: string } | null>(null);
 
-  useEffect(() => {
-    loadReviews();
-  }, []);
-
-  const loadReviews = async () => {
+  const loadReviews = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // Fetch completed reviews
-      const completedRes = await fetch('/api/reviews');
-      if (completedRes.ok) {
-        const completedData = await completedRes.json();
-        setReviews(completedData || []);
+      setLoadError(null);
+      const [completedRes, pendingRes] = await Promise.all([
+        fetch('/api/reviews', { cache: 'no-store' }),
+        fetch('/api/client/pending-reviews', { cache: 'no-store' }),
+      ]);
+      const [completedData, pendingData] = await Promise.all([
+        completedRes.json().catch(() => null),
+        pendingRes.json().catch(() => null),
+      ]);
+      if (!completedRes.ok || !pendingRes.ok) {
+        throw new Error(completedData?.error || pendingData?.error || 'Unable to load your reviews.');
       }
-
-      // Fetch pending reviews (completed bookings without reviews)
-      const pendingRes = await fetch('/api/client/pending-reviews');
-      if (pendingRes.ok) {
-        const pendingData = await pendingRes.json();
-        setPendingReviews(pendingData || []);
+      if (!Array.isArray(completedData) || !Array.isArray(pendingData)) {
+        throw new Error('Review information was incomplete. Please try again.');
       }
+      setReviews(completedData);
+      setPendingReviews(pendingData);
     } catch (error) {
       console.error('Error loading reviews:', error);
+      setLoadError(error instanceof Error ? error.message : 'Unable to load your reviews.');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadReviews();
+  }, [loadReviews]);
 
   if (loading) {
     return (
@@ -73,6 +78,12 @@ export default function ClientReviewsPage() {
     <div className="min-h-screen bg-background text-foreground pb-24">
       <div className="max-w-4xl mx-auto px-4 py-8 text-foreground">
         <h1 className="text-3xl font-bold text-foreground mb-6">My Reviews</h1>
+        {loadError && (
+          <div role="alert" className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
+            <p className="text-sm text-foreground">{loadError}</p>
+            <button type="button" onClick={() => void loadReviews()} className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground">Try again</button>
+          </div>
+        )}
 
       {/* Tabs */}
       <div className="bg-card rounded-xl border border-border mb-6">
@@ -187,7 +198,7 @@ export default function ClientReviewsPage() {
           onClose={() => setReviewModal(null)}
           bookingId={reviewModal.bookingId}
           instructorName={reviewModal.instructorName}
-          onSuccess={loadReviews}
+          onSuccess={() => { void loadReviews(); }}
         />
       )}
     </div>
