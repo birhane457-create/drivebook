@@ -10,7 +10,6 @@ import {
   Star, CreditCard, RefreshCw, TrendingUp, FileText
 } from 'lucide-react';
 import ReviewModal from '@/components/ReviewModal';
-import PackageCancellationModal from '@/components/client/PackageCancellationModal';
 
 interface BookingDetail {
   id: string;
@@ -92,7 +91,6 @@ export default function ClientBookingDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reviewModal, setReviewModal] = useState(false);
-  const [showPackageCancelModal, setShowPackageCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
@@ -128,7 +126,14 @@ export default function ClientBookingDetailPage() {
     setCancelError(null);
     try {
       setCancelling(true);
-      const res = await fetch(`/api/bookings/${booking.id}/cancel`, { method: 'POST' });
+      const endpoint = booking.isPackageBooking
+        ? `/api/bookings/${booking.id}/request-cancellation`
+        : `/api/bookings/${booking.id}/cancel`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: booking.isPackageBooking ? JSON.stringify({}) : undefined,
+      });
       if (!res.ok) {
         const data = await res.json();
         setCancelError(data.error || 'Failed to cancel booking.');
@@ -205,7 +210,7 @@ export default function ClientBookingDetailPage() {
         )}
         {booking.cancellationStatus === 'APPROVED' && (
           <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-green-200 bg-green-50 text-sm font-semibold text-green-800">
-            <CheckCircle className="w-4 h-4" />Cancellation Approved — Refund Issued to Card
+            <CheckCircle className="w-4 h-4" />Cancellation Approved — Check your wallet and cancellation record for refund details
           </div>
         )}
         {booking.cancellationStatus === 'REJECTED' && (
@@ -251,6 +256,20 @@ export default function ClientBookingDetailPage() {
           <h2 className="font-semibold text-foreground flex items-center gap-2">
             <FileText className="w-4 h-4 text-muted-foreground" />Lesson Details
           </h2>
+          {booking.isPackageBooking && (
+            <div className="rounded-lg border border-purple-700/40 bg-purple-900/20 p-3 text-sm text-foreground sm:col-span-2">
+              <p className="font-semibold">Package booking</p>
+              <p className="mt-1 text-muted-foreground">
+                {booking.packageHours ?? '—'} package hours
+                {booking.packageHoursRemaining !== null && booking.packageHoursRemaining !== undefined
+                  ? ` · ${booking.packageHoursRemaining} hours remaining`
+                  : ''}
+              </p>
+              {booking.packageTotalPaid !== null && booking.packageTotalPaid !== undefined && (
+                <p className="mt-1 text-muted-foreground">Package amount paid: ${Number(booking.packageTotalPaid).toFixed(2)}</p>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             {booking.date && (
               <div className="flex items-center gap-2 text-muted-foreground">
@@ -373,7 +392,7 @@ export default function ClientBookingDetailPage() {
           )}
           {canCancel && cancelConfirm && (
             <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4 space-y-3">
-              <p className="text-sm text-destructive font-medium">Are you sure you want to cancel this booking?</p>
+              <p className="text-sm text-destructive font-medium">{booking.isPackageBooking ? 'Submit this package cancellation request for admin review?' : 'Are you sure you want to cancel this booking?'}</p>
               {cancelError && <p className="text-xs text-destructive">{cancelError}</p>}
               <div className="flex gap-2">
                 <button onClick={() => { setCancelConfirm(false); setCancelError(null); }}
@@ -382,7 +401,7 @@ export default function ClientBookingDetailPage() {
                 </button>
                 <button onClick={handleCancel} disabled={cancelling}
                   className="flex-1 py-2 bg-destructive rounded-lg text-sm font-medium text-white hover:bg-destructive/90 disabled:opacity-50 transition">
-                  {cancelling ? 'Cancelling…' : 'Yes, cancel'}
+                  {cancelling ? 'Submitting…' : booking.isPackageBooking ? 'Submit request' : 'Yes, cancel'}
                 </button>
               </div>
             </div>
@@ -397,14 +416,6 @@ export default function ClientBookingDetailPage() {
           instructorName={booking.provider.name}
           onClose={() => setReviewModal(false)}
           onSubmit={() => { setReviewModal(false); loadBooking(); }}
-        />
-      )}
-      {showPackageCancelModal && booking && (
-        <PackageCancellationModal
-          bookingId={booking.id}
-          bookingDate={booking.date ?? ''}
-          onClose={() => setShowPackageCancelModal(false)}
-          onSuccess={() => { setShowPackageCancelModal(false); loadBooking(); }}
         />
       )}
     </div>
