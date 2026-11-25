@@ -19,6 +19,9 @@ export async function GET(req: NextRequest) {
         { status: 401 }
       );
     }
+    if (session.user.role !== 'CLIENT') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     // Get current user
     const user = await prisma.user.findUnique({
