@@ -88,6 +88,8 @@ export default function ClientProfilePage() {
   };
 
   const handleSave = async () => {
+    try {
+      setSaving(true);
       const res = await fetch('/api/client/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -180,7 +182,7 @@ export default function ClientProfilePage() {
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-slate-500"
+                className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:ring-2 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
               />
             ) : (
               <p className="text-foreground">{profile?.name}</p>
@@ -194,7 +196,7 @@ export default function ClientProfilePage() {
               Email Address
             </label>
             <p className="text-foreground">{profile?.email}</p>
-            <p className="text-xs text-muted-foreground/60 mt-1">Email cannot be changed</p>
+            <p className="text-xs text-muted-foreground mt-1">Email cannot be changed</p>
           </div>
 
           {/* Phone */}
@@ -208,11 +210,11 @@ export default function ClientProfilePage() {
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-slate-500"
+                className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:ring-2 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
                 placeholder="Enter phone number"
               />
             ) : (
-              <p className="text-foreground">{profile?.phone || <span className="text-muted-foreground/60 italic">Not provided</span>}</p>
+              <p className="text-foreground">{profile?.phone || <span className="text-muted-foreground italic">Not provided</span>}</p>
             )}
           </div>
 
@@ -227,11 +229,11 @@ export default function ClientProfilePage() {
                 type="text"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none placeholder-slate-500"
+                className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:ring-2 focus:ring-primary focus:outline-none placeholder:text-muted-foreground"
                 placeholder="Enter your default pickup address"
               />
             ) : (
-              <p className="text-foreground">{profile?.address || <span className="text-muted-foreground/60 italic">Not provided</span>}</p>
+              <p className="text-foreground">{profile?.address || <span className="text-muted-foreground italic">Not provided</span>}</p>
             )}
           </div>
         </div>
@@ -287,9 +289,9 @@ export default function ClientProfilePage() {
         </div>
 
         {/* Important Notice */}
-        <div className="mt-4 bg-amber-900/20 border border-amber-700/50 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold text-amber-300 mb-2">📝 Important Notice</h2>
-          <p className="text-sm text-amber-300/80">
+        <div className="mt-4 bg-amber-50 border border-amber-300 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-amber-900 mb-2">📝 Important Notice</h2>
+          <p className="text-sm text-amber-900">
             Updating your profile will change your name and phone number across all instructors you&apos;ve booked with.
             This ensures consistency in your account information.
           </p>
