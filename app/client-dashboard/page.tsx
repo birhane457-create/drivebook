@@ -166,8 +166,10 @@ export default function ClientDashboard() {
   useEffect(() => {
     const paymentParam = searchParams?.get('payment');
     const bookingSuccess = searchParams?.get('bookingSuccess');
-    if (bookingSuccess || paymentParam === 'success') {
+    if (bookingSuccess) {
       setSuccessBanner({ title: 'Booking confirmed!', description: 'Your booking has been confirmed. Check your email for the booking details.', tone: 'success' });
+    } else if (paymentParam === 'success') {
+      setSuccessBanner({ title: 'Payment successful', description: 'Your payment completed. Check My Bookings for the latest booking status.', tone: 'success' });
     } else if (paymentParam === 'later') {
       setSuccessBanner({ title: 'Booking request received', description: 'Your booking is awaiting payment. Open My Bookings to review its current status and payment options.', tone: 'pending' });
     } else if (paymentParam === 'processing') {
