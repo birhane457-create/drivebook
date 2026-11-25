@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
 **Version:** 6.97 (reconciliation: PB-SEC-01/02/03 registered; FIN-series retired; BLOCKER-001 scope clarified)
-**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-01/02/03 registered at FINDING stage | v6.96 2026-11-23: PH5-SCH-21/22 closed; 85/85 PASS)
+**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-01 VERIFIED/OPEN, PB-SEC-02 VERIFIED/OPEN, PB-SEC-03 PARTIAL/OPEN; GPT independent review required before any fix proceeds | v6.96 2026-11-23: PH5-SCH-21/22 closed; 85/85 PASS)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -708,6 +708,8 @@ These items were raised during the audit and verified source-safe. Recorded here
 
 **H-01 and H-02 status confirmed closed:** Source reading in this session confirmed fixes present in current main (`lib/services/booking-service.ts` line 852 sums child `Booking.price`; `app/api/client/confirm-package-booking/route.ts` line 309 sets `price: lessonPrice`). Tracker rows unchanged.
 
+**Fix gate — applies to all three findings below:** PB-SEC-01 and PB-SEC-02 carry Verification: VERIFIED based on Kiro source trace this session. PB-SEC-03 is PARTIAL. Per AUDIT-PROCESS.md, Kiro source verification satisfies the VERIFIED column. However, **GPT independent review is required before any fix begins.** The VERIFIED label here is not authorisation to implement — it records that the described condition was found in source. No fix should proceed for any of these three findings until GPT has independently confirmed the described condition.
+
 ---
 
 #### PB-SEC-01 — Guest booking links to existing account without credential verification
@@ -719,7 +721,7 @@ These items were raised during the audit and verified source-safe. Recorded here
 **Code location:** `app/api/public/bookings/bulk/route.ts` lines 369–602
 **Condition:** Guest email matching an existing `User` record causes `userId = existingUser.id` with no credential check.
 **Attack vector:** Any party knowing a registered user's email can link a booking to that account without authentication.
-**Impact:** Booking appears in victim's account. If wallet-funded path is involved, financial loss also occurs. No prior-action signal to victim.
+**Impact (source-established):** A booking the victim did not make is associated with their account and appears in their booking history. No prior-action signal reaches the victim before linkage occurs. **What the linked account can subsequently view, change, or control has not yet been tested** — the full scope of access granted by the association is not established by this source trace alone and must not be described as account takeover until that review is complete.
 **Fix requires:** Policy decision — (a) reject guest flow if email matches existing account and require login, (b) OTP verification before linking, or (c) post-booking claim flow.
 
 ---
