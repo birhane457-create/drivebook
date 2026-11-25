@@ -117,7 +117,7 @@ afterEach(() => {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
-  mocks.getServerSession.mockResolvedValue({ user: { id: 'user-1', email: 'client@example.com' } })
+  mocks.getServerSession.mockResolvedValue({ user: { id: 'user-1', email: 'client@example.com', role: 'CLIENT' } })
   mocks.getWalletBalance.mockResolvedValue({ balance: 500 })
   mocks.checkDoubleBooking.mockResolvedValue(false)
   mocks.checkProviderEligible.mockResolvedValue({
