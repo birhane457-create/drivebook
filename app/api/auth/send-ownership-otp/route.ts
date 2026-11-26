@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { randomBytes } from 'crypto';
 import { z } from 'zod';
 
 const schema = z.object({
   email: z.string().email(),
 });
 
-// Rate limit: 1 OTP per 60 seconds per email (checked server-side)
-const OTP_COOLDOWN_MS = 60_000;
-const OTP_EXPIRY_MS   = 10 * 60_000; // 10 minutes
+const OTP_COOLDOWN_MS = 60_000;      // 1 minute between sends
+const OTP_EXPIRY_MS   = 10 * 60_000; // 10-minute code window
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,18 +17,18 @@ export async function POST(req: NextRequest) {
 
     const user = await (prisma.user.findUnique({
       where: { email },
-      select: { id: true, resetToken: true, resetTokenExpiry: true },
+      select: { id: true, ownershipOtpToken: true, ownershipOtpExpiry: true },
     }) as any);
 
-    // If no account exists just return 200 — no information leak
+    // No account — return 200 silently (no information leak)
     if (!user) return NextResponse.json({ success: true });
 
-    // Enforce cooldown — if a valid unexpired OTP was sent within the last 60 s, refuse
+    // Server-enforced cooldown: reject if a code was sent within the last 60 s
     if (
-      user.resetToken &&
-      user.resetTokenExpiry &&
-      new Date(user.resetTokenExpiry) > new Date() &&
-      new Date(user.resetTokenExpiry).getTime() - OTP_EXPIRY_MS + OTP_COOLDOWN_MS > Date.now()
+      user.ownershipOtpToken &&
+      user.ownershipOtpExpiry &&
+      new Date(user.ownershipOtpExpiry) > new Date() &&
+      new Date(user.ownershipOtpExpiry).getTime() - OTP_EXPIRY_MS + OTP_COOLDOWN_MS > Date.now()
     ) {
       return NextResponse.json(
         { error: 'Please wait before requesting another code.', code: 'OTP_COOLDOWN' },
@@ -36,16 +36,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate 6-digit OTP
-    const otp    = String(Math.floor(100000 + Math.random() * 900000));
+    // Cryptographically secure 6-digit OTP
+    // randomBytes(3) gives 3 bytes = 0..16777215; modulo 900000 + 100000 gives 100000..999999
+    const otpNum = (randomBytes(3).readUIntBE(0, 3) % 900000) + 100000;
+    const otp    = String(otpNum);
     const expiry = new Date(Date.now() + OTP_EXPIRY_MS);
 
-    await prisma.user.update({
+    // Store in dedicated ownershipOtp fields — does not touch resetToken or verificationToken
+    await (prisma.user.update({
       where: { id: user.id },
-      data: { resetToken: otp, resetTokenExpiry: expiry },
-    });
+      data: {
+        ownershipOtpToken:    otp,
+        ownershipOtpExpiry:   expiry,
+        ownershipOtpAttempts: 0, // reset attempt counter on new code
+      },
+    }) as any);
 
-    // Send email
     try {
       const { emailService } = await import('@/lib/services/email');
       await emailService.sendGenericEmail({
@@ -71,7 +77,7 @@ export async function POST(req: NextRequest) {
         `,
       });
     } catch {
-      // Non-fatal — still return success so the client shows the input
+      // Non-fatal — still return 200 so the client shows the OTP input
     }
 
     return NextResponse.json({ success: true });

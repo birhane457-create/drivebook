@@ -594,7 +594,18 @@ export async function POST(req: NextRequest) {
               // Should not happen, but safety net
               throw new Error('User not found after unique constraint error');
             }
-            userId = existingUser.id;
+            // PB-SEC-01: race-condition path — concurrent request created this account.
+            // Email ownership verification still required. If a valid token was
+            // supplied it already passed the check above; link it. Otherwise return
+            // the OTP challenge so the client can verify before retrying.
+            if (data.emailOwnershipToken?.trim()) {
+              userId = existingUser.id;
+            } else {
+              return NextResponse.json(
+                { error: 'This email is already registered. Please verify ownership to continue.', code: 'EMAIL_OWNERSHIP_REQUIRED', email: data.accountHolderEmail },
+                { status: 409 }
+              )
+            }
           } else {
             throw createErr;
           }
@@ -608,13 +619,13 @@ export async function POST(req: NextRequest) {
           // Client supplied a token — verify it.
           const freshUser = await (prisma.user.findUnique({
             where: { email: data.accountHolderEmail },
-            select: { id: true, resetToken: true, resetTokenExpiry: true }
+            select: { id: true, ownershipOtpToken: true, ownershipOtpExpiry: true }
           }) as any)
 
           const tokenValid =
-            freshUser?.resetToken === suppliedToken &&
-            freshUser?.resetTokenExpiry &&
-            new Date(freshUser.resetTokenExpiry) > new Date()
+            freshUser?.ownershipOtpToken === suppliedToken &&
+            freshUser?.ownershipOtpExpiry &&
+            new Date(freshUser.ownershipOtpExpiry) > new Date()
 
           if (!tokenValid) {
             return NextResponse.json(
@@ -626,19 +637,19 @@ export async function POST(req: NextRequest) {
           // Token valid — consume it (single-use) and link the account.
           await prisma.user.update({
             where: { id: freshUser.id },
-            data: { resetToken: null, resetTokenExpiry: null }
+            data: { ownershipOtpToken: null, ownershipOtpExpiry: null, ownershipOtpAttempts: 0 } as any
           })
           userId = freshUser.id
 
         } else {
           // No token supplied — generate OTP and ask the client to verify.
           // 6-digit numeric code, 10-minute expiry.
-          const otp = String(Math.floor(100000 + Math.random() * 900000))
+          const { randomBytes } = await import('crypto')\n          const otp = String((randomBytes(3).readUIntBE(0, 3) % 900000) + 100000)
           const otpExpiry = new Date(Date.now() + 10 * 60 * 1000)
 
           await prisma.user.update({
             where: { id: existingUser.id },
-            data: { resetToken: otp, resetTokenExpiry: otpExpiry }
+            data: { ownershipOtpToken: otp, ownershipOtpExpiry: otpExpiry, ownershipOtpAttempts: 0 } as any
           })
 
           // Send OTP email — wording makes the action explicit so the real owner
