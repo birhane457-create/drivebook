@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     try {
       const { emailService } = await import('@/lib/services/email');
       await emailService.sendGenericEmail({
-        from: 'DriveBook <hello@drivebook.com.au>',
+        from: process.env.EMAIL_FROM || process.env.SMTP_FROM || 'DriveBook <hello@drivebook.com.au>',
         to: email,
         subject: 'Your DriveBook verification code',
         html: `
@@ -76,7 +76,10 @@ export async function POST(req: NextRequest) {
           </p>
         `,
       });
-    } catch {
+      console.log('[send-ownership-otp] OTP email sent to:', email);
+    } catch (emailErr) {
+      // Log the actual error so it surfaces in dev server output
+      console.error('[send-ownership-otp] Email send failed:', emailErr instanceof Error ? emailErr.message : emailErr);
       // Non-fatal — still return 200 so the client shows the OTP input
     }
 
