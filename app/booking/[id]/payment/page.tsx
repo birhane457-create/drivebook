@@ -292,12 +292,12 @@ export default function PaymentPage() {
 
   // ── Pricing breakdown ─────────────────────────────────────────────────────
   const isPackage = summary.isPackageBooking && (summary.packageHours ?? 0) > 1
-  const hourlyRate = summary.hourlyRate ?? 0
-  const discountPct = summary.discountPct ?? 0
-  const subtotal = isPackage ? hourlyRate * (summary.packageHours ?? 0) : summary.total
-  const discount = isPackage ? (subtotal * discountPct) / 100 : 0
+  const hourlyRate   = Number(summary.hourlyRate  ?? 0)
+  const discountPct  = Number(summary.discountPct ?? 0)
+  const subtotal     = isPackage ? hourlyRate * Number(summary.packageHours ?? 0) : Number(summary.total ?? 0)
+  const discount     = isPackage ? (subtotal * discountPct) / 100 : 0
   const afterDiscount = subtotal - discount
-  const platformFee = isPackage ? Math.max(0, summary.total - afterDiscount) : 0
+  const platformFee  = isPackage ? Math.max(0, Number(summary.total ?? 0) - afterDiscount) : 0
 
   return (
     <div className="min-h-screen bg-gray-50 py-6 px-4">
@@ -345,7 +345,7 @@ export default function PaymentPage() {
                 <p className="text-xs text-muted-foreground/60">Driving Instructor</p>
                 {summary.provider.rating && (
                   <p className="text-xs text-amber-500 mt-0.5" aria-label={`Rating: ${summary.provider.rating}`}>
-                    ★ {summary.provider.rating.toFixed(1)}
+                    ★ {Number(summary.provider.rating).toFixed(1)}
                     {summary.provider.reviews > 0 && (
                       <span className="text-muted-foreground"> ({summary.provider.reviews} reviews)</span>
                     )}
@@ -430,12 +430,12 @@ export default function PaymentPage() {
               ) : (
                 <div className="flex justify-between text-gray-600">
                   <span>1-hour lesson</span>
-                  <span>${summary.total.toFixed(2)}</span>
+                  <span>${Number(summary.total ?? 0).toFixed(2)}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-gray-900 text-base pt-2 border-t border-gray-200">
                 <span>Total</span>
-                <span>${summary.total.toFixed(2)} AUD</span>
+                <span>${Number(summary.total ?? 0).toFixed(2)} AUD</span>
               </div>
             </div>
           </div>
