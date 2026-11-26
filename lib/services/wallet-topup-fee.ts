@@ -1,4 +1,4 @@
-﻿/**
+/**
  * lib/services/wallet-topup-fee.ts
  *
  * Single authority for wallet top-up fee metadata interpretation and

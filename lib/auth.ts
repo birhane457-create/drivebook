@@ -112,11 +112,21 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user, trigger }) {
       if (user) {
-        token.role = user.role
+        // Normalise legacy role values — some users in the DB have 'INSTRUCTOR'
+        // from before the role was standardised to 'provider'. Normalise here so
+        // every downstream check only needs to handle 'provider'.
+        const rawRole = user.role
+        token.role = rawRole === 'INSTRUCTOR' ? 'provider' : rawRole
         token.providerId = user.providerId
         token.customerId = user.customerId
         token.businessType = user.businessType
         token.paymentModel = user.paymentModel
+      }
+
+      // Normalise legacy 'INSTRUCTOR' role on existing tokens (sessions created before
+      // this fix was deployed). Removes the need to handle both values everywhere.
+      if (token.role === 'INSTRUCTOR') {
+        token.role = 'provider'
       }
 
       // Backward-compatibility: migrate old tokens that have `providerId` but not `providerId`

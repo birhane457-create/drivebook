@@ -134,38 +134,57 @@ export default function BookingDetailsForm() {
   React.useEffect(() => { providerIdRef.current = instructor?.id; }, [instructor?.id]);
   React.useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
 
-  // Cleanup: Release all reserved slots when component unmounts.
-  // Calls both context (in-memory) AND server DELETE so SlotReservation rows are
-  // freed immediately instead of waiting up to 10 min for the cron cleanup.
+  // Cleanup: Release reserved slots from context (in-memory) when component unmounts.
+  // PB-SEC-06 fix: server DELETE removed from unmount — it was firing on wizard step
+  // advances (schedule → register), releasing the customer's slot before they reached
+  // registration. Server-side rows are cleaned up by cron within 10 min for abandoned
+  // sessions. For confirmed bookings the server marks the slot consumed at booking creation.
+  // Server DELETE on true page exit is handled by the beforeunload listener below.
   useEffect(() => {
     return () => {
-      const currentBookings  = bookingsRef.current;
+      const currentBookings = bookingsRef.current;
       const currentInstructorId = providerIdRef.current;
       if (!currentInstructorId) return;
 
+      // Release from context only (no server DELETE — see comment above)
       currentBookings.forEach((booking: any) => {
-        // Release from context (synchronous)
         const slotKey = `${currentInstructorId}:${booking.date}:${booking.time}:${booking.duration}`;
         releaseSlot(slotKey);
-
-        // Release from server (fire-and-forget — component is unmounting)
-        const params = new URLSearchParams({
-          providerId: currentInstructorId,
-          date:         booking.date,
-          time:         booking.time,
-          duration:     String(booking.duration),
-          sessionId:    sessionIdRef.current, // C-12 fix: use actual session ID, not hardcoded 'bulk-api'
-        });
-        fetch(`/api/availability/check-and-reserve?${params.toString()}`, {
-          method: 'DELETE',
-          keepalive: true, // ensures the request completes even if the page is unloading
-        }).catch(() => {
-          // Non-critical — cron will clean up any lingering reservations within 10 min
-        });
       });
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // empty deps — intentionally runs cleanup only on unmount
+
+  // Server DELETE on true page exit (tab close / navigation away from /book entirely).
+  // beforeunload only fires when the user genuinely leaves — not on wizard step advances.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const currentBookings = bookingsRef.current;
+      const currentInstructorId = providerIdRef.current;
+      if (!currentInstructorId) return;
+
+      currentBookings.forEach((booking: any) => {
+        const params = new URLSearchParams({
+          providerId: currentInstructorId,
+          date:       booking.date,
+          time:       booking.time,
+          duration:   String(booking.duration),
+          sessionId:  sessionIdRef.current,
+        });
+        // keepalive ensures the request completes even as the page unloads.
+        // fetch with keepalive is correct here — sendBeacon only supports POST
+        // and would hit the wrong handler on this endpoint.
+        fetch(`/api/availability/check-and-reserve?${params.toString()}`, {
+          method: 'DELETE',
+          keepalive: true,
+        }).catch(() => {});
+      });
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchAvailableSlots = async () => {
     if (!selectedDate || !instructor) return;

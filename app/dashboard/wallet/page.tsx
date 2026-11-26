@@ -88,14 +88,14 @@ export default function InstructorWalletPage() {
     },
     {
       label:   'This Month',
-      value:   `$${(data?.thisMonthEarnings ?? 0).toFixed(2)}`,
+      value:   `$${Number(data?.thisMonthEarnings ?? 0).toFixed(2)}`,
       icon:    <DollarSign className="w-4 h-4" />,
       color:   'text-primary',
       sub:     'net earnings',
     },
     {
       label:   'All Time',
-      value:   `$${(data?.totalEarnings ?? 0).toFixed(2)}`,
+      value:   `$${Number(data?.totalEarnings ?? 0).toFixed(2)}`,
       icon:    <CheckCircle className="w-4 h-4" />,
       sub:     'total paid out',
     },
@@ -178,7 +178,7 @@ export default function InstructorWalletPage() {
                             })}
                           </td>
                           <td className="px-5 py-4 text-right font-bold text-emerald-400">
-                            +${((tx as any).providerPayout ?? tx.amount).toFixed(2)}
+                            +${Number((tx as any).providerPayout ?? tx.amount).toFixed(2)}
                           </td>
                           <td className="px-5 py-4 text-right">
                             <TransactionStatusBadge status={tx.status} />
@@ -206,7 +206,7 @@ export default function InstructorWalletPage() {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-sm font-bold text-emerald-400">
-                      +${((tx as any).providerPayout ?? tx.amount).toFixed(2)}
+                      +${Number((tx as any).providerPayout ?? tx.amount).toFixed(2)}
                     </p>
                     <TransactionStatusBadge status={tx.status} className="mt-0.5 text-xs" />
                   </div>

@@ -49,6 +49,8 @@ const bulkBookingSchema = z.object({
   accountHolderPhone: z.string(),
   // Password is optional Ã¢â‚¬â€ backend auto-generates if not provided (AI voice flow)
   accountHolderPassword: z.string().optional().default(''),
+  // PB-SEC-01: OTP submitted by client after email ownership verification
+  emailOwnershipToken: z.string().optional(),
   // Learner (only if someone-else)
   learnerName: z.string().optional(),
   learnerPhone: z.string().optional(),
@@ -598,8 +600,73 @@ export async function POST(req: NextRequest) {
           }
         }
       } else {
-        // Existing user Ã¢â‚¬â€ just link booking to their account, no password change
-        userId = existingUser.id;
+        // PB-SEC-01 FIX: Existing account found — verify email ownership before linking.
+        // The request may include emailOwnershipToken if the user already completed OTP.
+        const suppliedToken = data.emailOwnershipToken?.trim()
+
+        if (suppliedToken) {
+          // Client supplied a token — verify it.
+          const freshUser = await (prisma.user.findUnique({
+            where: { email: data.accountHolderEmail },
+            select: { id: true, resetToken: true, resetTokenExpiry: true }
+          }) as any)
+
+          const tokenValid =
+            freshUser?.resetToken === suppliedToken &&
+            freshUser?.resetTokenExpiry &&
+            new Date(freshUser.resetTokenExpiry) > new Date()
+
+          if (!tokenValid) {
+            return NextResponse.json(
+              { error: 'Verification code is invalid or has expired. Please request a new code.', code: 'OTP_INVALID' },
+              { status: 400 }
+            )
+          }
+
+          // Token valid — consume it (single-use) and link the account.
+          await prisma.user.update({
+            where: { id: freshUser.id },
+            data: { resetToken: null, resetTokenExpiry: null }
+          })
+          userId = freshUser.id
+
+        } else {
+          // No token supplied — generate OTP and ask the client to verify.
+          // 6-digit numeric code, 10-minute expiry.
+          const otp = String(Math.floor(100000 + Math.random() * 900000))
+          const otpExpiry = new Date(Date.now() + 10 * 60 * 1000)
+
+          await prisma.user.update({
+            where: { id: existingUser.id },
+            data: { resetToken: otp, resetTokenExpiry: otpExpiry }
+          })
+
+          // Send OTP email — wording makes the action explicit so the real owner
+          // recognises an unsolicited code and simply ignores it.
+          try {
+            const { emailService } = await import('@/lib/services/email')
+            await emailService.sendGenericEmail({
+              from: 'DriveBook <hello@drivebook.com.au>',
+              to: data.accountHolderEmail,
+              subject: 'Your DriveBook verification code',
+              html: `<p>Someone is trying to connect a booking to your DriveBook account.</p>
+                     <p>Your verification code is: <strong style='font-size:24px'>${otp}</strong></p>
+                     <p>This code expires in 10 minutes. If you did not initiate this booking, ignore this email — your account will not be affected.</p>`
+            })
+          } catch (emailErr) {
+            logger.warn('Failed to send ownership OTP email', { email: data.accountHolderEmail })
+            // Non-fatal — still return 409 so client shows the OTP input
+          }
+
+          return NextResponse.json(
+            {
+              error: 'This email is already registered with DriveBook. To connect this booking to your account, enter the verification code we just sent to your email.',
+              code: 'EMAIL_OWNERSHIP_REQUIRED',
+              email: data.accountHolderEmail
+            },
+            { status: 409 }
+          )
+        }
       }
     } catch (error: any) {
       logger.error('Account creation error', {

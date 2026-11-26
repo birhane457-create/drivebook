@@ -101,6 +101,11 @@ interface BookingState {
   learnerName: string;
   learnerPhone: string;
   learnerRelationship: string;
+
+  // PB-SEC-01: verified email ownership token (set after OTP confirmed in RegistrationForm)
+  emailOwnershipToken: string | null;
+  // True when check-email found an existing account and OTP has not yet been verified
+  emailVerificationRequired: boolean;
   
   // Slot Reservations (for preventing double booking)
   slotReservations: SlotReservation[];
@@ -177,6 +182,8 @@ const initialState: BookingState = {
   learnerName: '',
   learnerPhone: '',
   learnerRelationship: '',
+  emailOwnershipToken: null,
+  emailVerificationRequired: false,
   slotReservations: [],
   sessionId: typeof window !== 'undefined' ? localStorage.getItem('bookingSessionId') || generateSessionId() : generateSessionId(),
   savedAt: 0,

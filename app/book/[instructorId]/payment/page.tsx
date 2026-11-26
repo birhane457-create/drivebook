@@ -78,7 +78,9 @@ function PaymentForm({ setIsRedirecting, slotSecondsLeft }: { setIsRedirecting: 
         learnerName: bookingState.learnerName,
         learnerPhone: bookingState.learnerPhone,
         learnerRelationship: bookingState.learnerRelationship,
-        pricing: bookingState.pricing
+        pricing: bookingState.pricing,
+        // PB-SEC-01: forward pre-verified ownership token so bulk route skips the 409 OTP challenge
+        ...(bookingState.emailOwnershipToken ? { emailOwnershipToken: bookingState.emailOwnershipToken } : {}),
       };
 
       const bookingResponse = await fetch('/api/public/bookings/bulk', {
@@ -109,8 +111,18 @@ function PaymentForm({ setIsRedirecting, slotSecondsLeft }: { setIsRedirecting: 
         throw new Error(bookingResult.error || 'Could not create payment session for Book Later. Please try again.');
       }
 
-      // ── Book Now: create a PaymentIntent for the primary booking ─────────────
-      // Step 2: Create payment intent
+      // ── Book Now: bulk API returns checkoutUrl with embedded paymentToken ────
+      // The tokenized page at /booking/[id]/payment handles create-intent auth.
+      // Redirect there directly instead of calling create-intent from here (which
+      // would 401 for unauthenticated guest bookings).
+      if (bookingState.bookingType === 'now') {
+        if (bookingResult.checkoutUrl) {
+          setIsRedirecting(true);
+          window.location.href = bookingResult.checkoutUrl;
+          return;
+        }
+        throw new Error('Could not create payment session. Please try again.');
+      }
       const paymentPayload: {
         bookingId?: string;
         amount: number;

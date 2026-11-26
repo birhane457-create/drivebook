@@ -65,7 +65,7 @@ export default function AnalyticsPage() {
   const kpis = [
     {
       label: 'Net Earnings',
-      value: `$${(analytics?.netEarnings ?? 0).toFixed(2)}`,
+      value: `$${Number(analytics?.netEarnings ?? 0).toFixed(2)}`,
       icon: <DollarSign className="w-4 h-4" />,
       color: 'text-emerald-400',
       sub: 'after platform fees',
@@ -203,25 +203,25 @@ export default function AnalyticsPage() {
               {[
                 {
                   label: 'Gross Revenue',
-                  value: `$${(analytics?.grossRevenue ?? 0).toFixed(2)}`,
+                  value: `$${Number(analytics?.grossRevenue ?? 0).toFixed(2)}`,
                   sub: 'before platform fees',
                 },
                 {
                   label: 'Platform Commission',
-                  value: `-$${(analytics?.commission ?? 0).toFixed(2)}`,
+                  value: `-$${Number(analytics?.commission ?? 0).toFixed(2)}`,
                   sub: `${analytics?.commissionRate ?? 0}% per booking`,
                   valueClass: 'text-muted-foreground',
                 },
                 {
                   label: 'Net Earnings',
-                  value: `$${(analytics?.netEarnings ?? 0).toFixed(2)}`,
+                  value: `$${Number(analytics?.netEarnings ?? 0).toFixed(2)}`,
                   sub: 'after commission',
                   valueClass: 'text-emerald-400',
                 },
                 {
                   label: 'Avg Earnings per Booking',
                   value: analytics && analytics.completedBookings > 0
-                    ? `$${(analytics.netEarnings / analytics.completedBookings).toFixed(2)}`
+                    ? `$${Number(analytics.netEarnings / analytics.completedBookings).toFixed(2)}`
                     : '—',
                 },
                 {

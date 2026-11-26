@@ -142,7 +142,7 @@ export default function PlatformEarningsSection({
             value: data.thisMonth?.totalNet || 0, 
             sub: `${data.thisMonth?.bookings || 0} lessons`, 
             icon: <Calendar className="h-4 w-4 text-purple-600" />,
-            details: `Gross: $${(data.thisMonth?.totalGross || 0).toFixed(2)}`
+            details: `Gross: $${Number(data.thisMonth?.totalGross || 0).toFixed(2)}`
           },
           { 
             label: 'Scheduled', 
@@ -157,7 +157,9 @@ export default function PlatformEarningsSection({
               <p className="text-xs text-muted-foreground">{label}</p>
               {icon}
             </div>
-            <p className={`text-xl font-bold ${blue ? 'text-primary' : 'text-foreground'}`}>${value.toFixed(2)}</p>
+<p className={`text-xl font-bold ${blue ? 'text-primary' : 'text-foreground'}`}>
+  ${Number(value || 0).toFixed(2)}
+</p>
             <p className="text-xs text-muted-foreground/60 mt-0.5">{sub}</p>
             {change !== undefined && change !== 0 && (
               <p className={`text-xs mt-1 ${change >= 0 ? 'text-green-500' : 'text-red-500'}`}>
@@ -253,10 +255,10 @@ export default function PlatformEarningsSection({
                                       {t.booking.customer?.name ?? 'Guest'} · {new Date(t.booking.startTime).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', ...tzOpts })}
                                     </p>
                                   )}
-                                  <p className="text-xs text-muted-foreground">Gross ${t.amount.toFixed(2)} · Commission -${t.platformFee.toFixed(2)}</p>
+                                  <p className="text-xs text-muted-foreground">Gross ${Number(t.amount  || 0).toFixed(2)} · Commission -${Number(t.platformFee  || 0).toFixed(2)}</p>
                                 </div>
                                 <div className="text-right ml-4 shrink-0">
-                                  <p className="text-sm font-semibold text-green-600">${t.providerPayout.toFixed(2)}</p>
+                                  <p className="text-sm font-semibold text-green-600">${Number(t.providerPayout || 0).toFixed(2)}</p>
                                   <p className="text-xs text-muted-foreground">net</p>
                                 </div>
                               </div>

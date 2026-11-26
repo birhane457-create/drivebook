@@ -128,7 +128,7 @@ export default function UpcomingScheduledSection({ data, timezone }: { data: Upc
           <span className="text-xs text-muted-foreground">{streamLabel}</span>
         </div>
         <div className="text-right">
-          <span className="font-bold text-primary text-sm">${totalAmount.toFixed(2)}</span>
+          <span className="font-bold text-primary text-sm">${Number(totalAmount  || 0).toFixed(2)}</span>
           <span className="text-xs text-muted-foreground/60 ml-2">
             {totalCount} lesson{totalCount !== 1 ? 's' : ''}
           </span>
@@ -151,7 +151,7 @@ export default function UpcomingScheduledSection({ data, timezone }: { data: Upc
                   <div className="flex items-center justify-between px-4 py-2 bg-card">
                     <span className="text-xs font-semibold text-foreground uppercase tracking-wide">{day.label}</span>
                     <span className="text-xs text-muted-foreground/60">
-                      ${day.items.reduce((s: any, b: any) => s + b.providerPayout, 0).toFixed(2)} net
+                      ${day.items.reduce((s: number, b: any) => s + Number(b.providerPayout || 0), 0).toFixed(2)} net
                     </span>
                   </div>
                   {day.items.map((b: any) => (
@@ -168,7 +168,7 @@ export default function UpcomingScheduledSection({ data, timezone }: { data: Upc
                           {b.isFromPackage && <span className="ml-1 text-purple-400 font-semibold">pkg</span>}
                         </p>
                       </div>
-                      <p className="text-sm font-semibold text-primary">${b.providerPayout.toFixed(2)}</p>
+                      <p className="text-sm font-semibold text-primary">${Number(b.providerPayout || 0).toFixed(2)}</p>
                     </div>
                   ))}
                 </div>

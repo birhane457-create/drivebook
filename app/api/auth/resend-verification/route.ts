@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     })
 
     // Only resend for unverified instructors — silently succeed for anything else
-    if (!user || user.role !== 'provider' || user.emailVerified) {
+    if (!user || (user.role !== 'provider' && user.role !== 'INSTRUCTOR') || user.emailVerified) {
       return NextResponse.json({ success: true })
     }
 

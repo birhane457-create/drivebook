@@ -83,9 +83,9 @@ export default function PackagesPage() {
     if (!pkgSearch.trim()) return data.packages
     const q = pkgSearch.toLowerCase()
     return data.packages.filter(p =>
-      p.customer.name.toLowerCase().includes(q) ||
-      p.customer.email.toLowerCase().includes(q) ||
-      p.customer.phone.toLowerCase().includes(q)
+      (p.customer?.name ?? '').toLowerCase().includes(q) ||
+      (p.customer?.email ?? '').toLowerCase().includes(q) ||
+      (p.customer?.phone ?? '').toLowerCase().includes(q)
     )
   }, [data?.packages, pkgSearch])
 
@@ -99,14 +99,14 @@ export default function PackagesPage() {
     },
     {
       label: 'Hours Available',
-      value: data ? `${data.summary.totalHoursRemaining.toFixed(1)}h` : '—',
+      value: data ? `${Number(data.summary.totalHoursRemaining || 0).toFixed(1)}h` : '—',
       icon: <Clock className="w-4 h-4" />,
       color: 'text-primary',
       sub: 'ready to schedule',
     },
     {
       label: 'Potential Earnings',
-      value: data ? `$${data.summary.totalPotentialNet.toFixed(0)}` : '—',
+      value: data ? `$${Number(data.summary.totalPotentialNet ?? 0).toFixed(0)}` : '—',
       icon: <TrendingUp className="w-4 h-4" />,
       color: 'text-emerald-400',
       sub: `when ${termBookings.toLowerCase()} taught`,
@@ -124,7 +124,7 @@ export default function PackagesPage() {
     <DashboardPageLayout
       title="Client Packages"
       description={`Hours your clients have purchased but not yet scheduled · ${
-        data ? `${data.summary.totalHoursRemaining.toFixed(1)} hours available` : ''
+        data ? `${Number(data.summary.totalHoursRemaining || 0).toFixed(1)} hours available` : ''
       }`}
       breadcrumbs={[{ label: 'Dashboard', href: '/dashboard' }, { label: 'Packages' }]}
       secondaryActions={[{
@@ -194,7 +194,7 @@ export default function PackagesPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3 flex-wrap min-w-0">
                     <User className="h-5 w-5 text-violet-400 shrink-0" />
-                    <h3 className="text-base font-bold text-foreground">{pkg.customer.name}</h3>
+                    <h3 className="text-base font-bold text-foreground">{pkg.customer?.name || 'Unknown Customer'}</h3>
 
                     {/* Payment / status badge */}
                     {!pkg.isPaid ? (
@@ -219,12 +219,12 @@ export default function PackagesPage() {
                   <div className="text-right shrink-0">
                     <p className="text-xs text-muted-foreground">Potential Earnings</p>
                     <p className={cn('text-2xl font-bold', pkg.isPaid ? 'text-emerald-400' : 'text-muted-foreground/40')}>
-                      ${pkg.potentialNet.toFixed(0)}
+                      ${Number(pkg.potentialNet ?? 0).toFixed(0)}
                     </p>
                     <p className="text-xs text-muted-foreground">{pkg.isPaid ? 'when taught' : 'payment pending'}</p>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">{pkg.customer.email} · {pkg.customer.phone}</p>
+                <p className="text-xs text-muted-foreground mt-1">{pkg.customer?.email ?? '—'} · {pkg.customer?.phone ?? '—'}</p>
               </div>
 
               {/* Package body */}
@@ -233,7 +233,7 @@ export default function PackagesPage() {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium text-foreground">
-                      {pkg.packageHoursRemaining.toFixed(1)}h remaining of {pkg.packageHours}h
+                      {Number(pkg.packageHoursRemaining ?? 0).toFixed(1)}h remaining of {pkg.packageHours}h
                     </span>
                     <span className="text-xs text-muted-foreground">{pkg.usagePercentage}% used</span>
                   </div>
@@ -248,10 +248,10 @@ export default function PackagesPage() {
                 {/* Stats row */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: 'Total Hours',      value: `${pkg.packageHours}h`,                  color: '' },
-                    { label: 'Hours Used',       value: `${pkg.packageHoursUsed.toFixed(1)}h`,   color: 'text-primary' },
-                    { label: 'Hours Remaining',  value: `${pkg.packageHoursRemaining.toFixed(1)}h`, color: 'text-emerald-400' },
-                    { label: 'Hourly Rate',      value: `$${pkg.hourlyRate.toFixed(0)}/h`,       color: '' },
+                    { label: 'Total Hours',      value: `${Number(pkg.packageHours ?? 0)}h`,                           color: '' },
+                    { label: 'Hours Used',       value: `${Number(pkg.packageHoursUsed ?? 0).toFixed(1)}h`,            color: 'text-primary' },
+                    { label: 'Hours Remaining',  value: `${Number(pkg.packageHoursRemaining ?? 0).toFixed(1)}h`,       color: 'text-emerald-400' },
+                    { label: 'Hourly Rate',      value: `$${Number(pkg.hourlyRate ?? 0).toFixed(0)}/h`,                color: '' },
                   ].map(({ label, value, color }) => (
                     <div key={label} className="bg-background rounded-lg p-3 border border-border">
                       <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
@@ -282,7 +282,7 @@ export default function PackagesPage() {
                             <p className="text-xs text-muted-foreground">{booking.duration}h {termBooking.toLowerCase()}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm font-semibold text-primary">${booking.providerPayout.toFixed(2)}</p>
+                            <p className="text-sm font-semibold text-primary">${Number(booking.providerPayout ?? 0).toFixed(2)}</p>
                             <p className="text-xs text-muted-foreground/50">will earn</p>
                           </div>
                         </div>
@@ -291,7 +291,7 @@ export default function PackagesPage() {
                     <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
                       <p className="text-sm text-emerald-400">
                         <span className="font-semibold">Total scheduled:</span>{' '}
-                        ${pkg.upcomingBookingsValue.toFixed(2)} from {pkg.upcomingBookingsCount}{' '}
+                        ${Number(pkg.upcomingBookingsValue ?? 0).toFixed(2)} from {pkg.upcomingBookingsCount}{' '}
                         {pkg.upcomingBookingsCount > 1 ? termBookings.toLowerCase() : termBooking.toLowerCase()}
                       </p>
                     </div>
@@ -321,7 +321,7 @@ export default function PackagesPage() {
                   <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                     <p className="text-sm text-amber-400">
                       ⏳ <span className="font-semibold">Payment pending:</span>{' '}
-                      {pkg.customer.name.split(' ')[0]} hasn&apos;t completed payment. Hours available once confirmed.
+                      {(pkg.customer?.name ?? 'Customer').split(' ')[0]} hasn&apos;t completed payment. Hours available once confirmed.
                     </p>
                   </div>
                 )}
@@ -329,8 +329,8 @@ export default function PackagesPage() {
                   <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg">
                     <p className="text-sm text-primary">
                       💡 <span className="font-semibold">Tip:</span>{' '}
-                      Reach out to {pkg.customer.name.split(' ')[0]} to schedule their remaining{' '}
-                      {pkg.packageHoursRemaining.toFixed(1)} hours.
+                      Reach out to {(pkg.customer?.name ?? 'your student').split(' ')[0]} to schedule their remaining{' '}
+                      {Number(pkg.packageHoursRemaining ?? 0).toFixed(1)} hours.
                     </p>
                   </div>
                 )}

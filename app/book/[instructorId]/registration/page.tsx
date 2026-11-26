@@ -14,13 +14,27 @@ export default function RegistrationPage() {
   const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!instructor) {
-      router.push('/book');
-    }
+    // PB-SEC-05 fix: BookingContext restores from localStorage asynchronously.
+    // Without a delay the guard fires before recovery completes, redirecting to
+    // /book and releasing the reserved slot. 500ms matches booking-details and
+    // book-type pages.
+    const timer = setTimeout(() => {
+      if (!instructor) {
+        router.push('/book');
+      }
+    }, 500);
+    return () => clearTimeout(timer);
   }, [instructor, router]);
 
   if (!instructor) {
-    return null;
+    return (
+      <div className="light min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
+          <p className="text-foreground/85">Loading booking details...</p>
+        </div>
+      </div>
+    );
   }
 
   const validateForm = (): boolean => {

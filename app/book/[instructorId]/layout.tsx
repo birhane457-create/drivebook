@@ -21,16 +21,18 @@ interface InstructorData {
 
 function InstructorLoaderContent({ children }: { children: React.ReactNode }) {
   const params = useParams();
-  const providerId = params.providerId as string;
+  // PB-SEC-07 fix: route segment is [instructorId], not [providerId].
+  // params.providerId was always undefined, silently skipping instructor fetch.
+  const instructorId = params.instructorId as string;
   const { bookingState, setInstructor } = useBooking();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!providerId) return;
+    if (!instructorId) return;
 
     // If instructor is already loaded in context and matches this ID, we're good
-    if (bookingState.provider?.id === providerId) {
+    if (bookingState.provider?.id === instructorId) {
       setLoading(false);
       return;
     }
@@ -39,7 +41,7 @@ function InstructorLoaderContent({ children }: { children: React.ReactNode }) {
     const fetchInstructor = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/instructors/${providerId}`);
+        const res = await fetch(`/api/instructors/${instructorId}`);
         if (!res.ok) throw new Error('Failed to fetch instructor');
 
         const data: InstructorData = await res.json();
@@ -66,7 +68,7 @@ function InstructorLoaderContent({ children }: { children: React.ReactNode }) {
     };
 
     fetchInstructor();
-  }, [providerId, bookingState.provider?.id, setInstructor]);
+  }, [instructorId, bookingState.provider?.id, setInstructor]);
 
   if (error) {
     return (

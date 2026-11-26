@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Instructor-only email verification enforcement
-    if (user.role === 'provider' && !user.emailVerified) {
+    if ((user.role === 'provider' || user.role === 'INSTRUCTOR') && !user.emailVerified) {
       return NextResponse.json({ error: 'Please verify your email before logging in.' }, { status: 403 })
     }
 

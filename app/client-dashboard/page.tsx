@@ -608,8 +608,8 @@ export default function ClientDashboard() {
             <div className="flex items-start gap-3">
               <AlertCircle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <h3 className="font-semibold text-amber-300">Credits Exhausted</h3>
-                <p className="text-amber-400 text-sm mt-1">
+                <h3 className="font-semibold text-amber-800">Credits Exhausted</h3>
+                <p className="text-amber-900 text-sm mt-1">
                   You've used all your credits. Add more to continue booking lessons.
                 </p>
                 <button

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useBooking } from '@/lib/contexts/BookingContext';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function RegistrationForm() {
   const { data: session } = useSession();
@@ -13,6 +13,15 @@ export default function RegistrationForm() {
   const [emailCheckStatus, setEmailCheckStatus] = useState<'idle' | 'checking' | 'exists' | 'available'>('idle');
   const [showEmailWarning, setShowEmailWarning] = useState(false);
   const [checkingEmail, setCheckingEmail] = useState(false);
+
+  // PB-SEC-01: OTP inline verification state
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpValue, setOtpValue] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpLastSent, setOtpLastSent] = useState(0); // unix ms
 
   // Auto-fill for logged-in clients
   useEffect(() => {
@@ -56,9 +65,11 @@ export default function RegistrationForm() {
         if (data.exists) {
           setEmailCheckStatus('exists');
           setShowEmailWarning(true);
+          updateBooking({ emailVerificationRequired: true } as any);
         } else {
           setEmailCheckStatus('available');
           setShowEmailWarning(false);
+          updateBooking({ emailVerificationRequired: false } as any);
         }
       } catch (err) {
         console.error('Error checking email:', err);
@@ -89,6 +100,12 @@ export default function RegistrationForm() {
     if (field === 'accountHolderEmail') {
       setShowEmailWarning(false);
       setEmailCheckStatus('idle');
+      // Reset OTP state when email changes
+      setOtpSent(false);
+      setOtpVerified(false);
+      setOtpValue('');
+      setOtpError(null);
+      updateBooking({ emailOwnershipToken: null, emailVerificationRequired: false } as any);
     }
   };
 
@@ -139,6 +156,67 @@ export default function RegistrationForm() {
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
+  };
+
+  // PB-SEC-01: Send OTP to the existing account's email
+  const handleSendOtp = async () => {
+    if (Date.now() - otpLastSent < 60_000) {
+      setOtpError('Please wait 60 seconds before requesting another code.');
+      return;
+    }
+    setOtpSending(true);
+    setOtpError(null);
+    try {
+      const res = await fetch('/api/auth/send-ownership-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: bookingState.accountHolderEmail }),
+      });
+      const data = await res.json();
+      if (res.status === 429) {
+        setOtpError(data.error || 'Please wait before requesting another code.');
+        return;
+      }
+      setOtpSent(true);
+      setOtpLastSent(Date.now());
+      setOtpValue('');
+    } catch {
+      setOtpError('Failed to send code. Please try again.');
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  // PB-SEC-01: Verify the entered OTP and store the session token in context
+  const handleVerifyOtp = async () => {
+    if (otpValue.length !== 6) {
+      setOtpError('Please enter the 6-digit code.');
+      return;
+    }
+    setOtpVerifying(true);
+    setOtpError(null);
+    try {
+      const res = await fetch('/api/auth/verify-ownership-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: bookingState.accountHolderEmail, otp: otpValue }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setOtpError(data.error || 'Incorrect code. Please try again.');
+        return;
+      }
+      // Store verified token in booking context — bulk route will use it
+      updateBooking({ emailOwnershipToken: data.token });
+      setOtpVerified(true);
+      setOtpError(null);
+      setShowEmailWarning(false);
+      updateBooking({ emailVerificationRequired: false } as any);
+    } catch {
+      setOtpError('Verification failed. Please try again.');
+    } finally {
+      setOtpVerifying(false);
+    }
   };
 
   return (
@@ -274,36 +352,101 @@ export default function RegistrationForm() {
           )}
         </div>
 
-        {/* Email Already Exists Warning */}
+        {/* Email Already Exists — OTP verification notice (PB-SEC-01) */}
         {showEmailWarning && emailCheckStatus === 'exists' && !isLoggedIn && (
-          <div className="bg-yellow-900/10 border-2 border-yellow-400/20 rounded-lg p-4">
+          <div className="bg-slate-800 border border-slate-600 rounded-xl p-4 space-y-4">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-6 w-6 text-yellow-300 flex-shrink-0 mt-0.5" />
+              {otpVerified
+                ? <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0 mt-0.5" />
+                : <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              }
               <div className="flex-1">
-                <h4 className="font-semibold text-yellow-100 mb-2">
-                  This email already has an account
-                </h4>
-                <p className="text-sm text-yellow-200 mb-3">
-                  An account with <strong>{bookingState.accountHolderEmail}</strong> already exists in our system.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <a
-                    href="/login"
-                    className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-foreground px-4 py-2 rounded-lg font-semibold text-center transition-colors"
-                  >
-                    Login to Existing Account
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setShowEmailWarning(false)}
-                    className="flex-1 bg-secondary hover:bg-white/20 text-yellow-100 px-4 py-2 rounded-lg font-semibold border-2 border-yellow-400/40 transition-colors"
-                  >
-                    Continue Anyway
-                  </button>
-                </div>
-                <p className="text-xs text-yellow-200 mt-2">
-                  ?? If you continue, you won't be able to create a new account with this email. Please use a different email or login to your existing account.
-                </p>
+                {otpVerified ? (
+                  <>
+                    <h4 className="font-semibold text-green-300 mb-1">Email verified</h4>
+                    <p className="text-sm text-slate-300">
+                      Your email ownership is confirmed. You can continue with the booking.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h4 className="font-semibold text-white mb-1">This email is already registered</h4>
+                    <p className="text-sm text-slate-300 mb-3">
+                      An existing DriveBook account is associated with{' '}
+                      <strong className="text-white">{bookingState.accountHolderEmail}</strong>.
+                      Verify you own this email to connect this booking to your account.
+                    </p>
+
+                    {!otpSent ? (
+                      /* Step 1 — send the code */
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <button
+                          type="button"
+                          onClick={handleSendOtp}
+                          disabled={otpSending}
+                          className="flex-1 bg-white text-slate-900 hover:bg-slate-100 px-4 py-2 rounded-lg font-semibold text-sm transition-colors disabled:opacity-50"
+                        >
+                          {otpSending ? 'Sending…' : 'Send verification code'}
+                        </button>
+                        <a
+                          href="/login"
+                          className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-semibold text-sm border border-slate-500 transition-colors text-center"
+                        >
+                          Sign in instead
+                        </a>
+                      </div>
+                    ) : (
+                      /* Step 2 — enter the code */
+                      <div className="space-y-3">
+                        <p className="text-sm text-slate-300">
+                          We sent a 6-digit code to{' '}
+                          <strong className="text-white">{bookingState.accountHolderEmail}</strong>.
+                          Enter it below.
+                        </p>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={6}
+                            value={otpValue}
+                            onChange={e => setOtpValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            placeholder="6-digit code"
+                            className="flex-1 text-center text-xl font-mono tracking-widest py-3 rounded-lg border border-slate-500 bg-slate-700 text-white placeholder-slate-400 focus:outline-none focus:border-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleVerifyOtp}
+                            disabled={otpVerifying || otpValue.length !== 6}
+                            className="px-5 py-3 rounded-lg bg-white text-slate-900 font-semibold text-sm hover:bg-slate-100 disabled:opacity-50 transition-colors"
+                          >
+                            {otpVerifying ? 'Checking…' : 'Verify'}
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-400">
+                          <button
+                            type="button"
+                            onClick={handleSendOtp}
+                            disabled={otpSending || Date.now() - otpLastSent < 60_000}
+                            className="underline hover:text-slate-200 disabled:opacity-40"
+                          >
+                            {otpSending ? 'Sending…' : 'Send a new code'}
+                          </button>
+                          <a href="/login" className="underline hover:text-slate-200">
+                            Sign in instead
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    {otpError && (
+                      <p className="text-sm text-red-400 mt-2">{otpError}</p>
+                    )}
+
+                    <p className="text-xs text-slate-500 mt-3">
+                      Can't access this email? Use a different address or contact DriveBook support.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </div>

@@ -44,7 +44,9 @@ export default function BookingDetailsPage() {
       return;
     }
     setContinueError(null);
-    router.push(`/book/${params.providerId}/registration`);
+    // PB-SEC-08 fix: route segment is [instructorId], not [providerId].
+    // params.providerId was undefined — navigated to /book/undefined/registration.
+    router.push(`/book/${params.instructorId}/registration`);
   };
 
   return (

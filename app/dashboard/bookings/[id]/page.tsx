@@ -182,7 +182,7 @@ export default function BookingDetailPage() {
           <DollarSign className="h-5 w-5 text-blue-500 shrink-0" />
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Price</p>
-            <p className="font-semibold text-foreground">${(booking.price ?? 0).toFixed(2)}</p>
+            <p className="font-semibold text-foreground">${Number(booking.price ?? 0).toFixed(2)}</p>
           </div>
         </div>
 

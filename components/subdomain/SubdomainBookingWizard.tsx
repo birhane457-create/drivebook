@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useBooking } from '@/lib/contexts/BookingContext';
@@ -49,8 +49,6 @@ export default function SubdomainBookingWizard({ provider: instructor, primary, 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [priceUpdated, setPriceUpdated] = useState(false);
-  const [paymentOpened, setPaymentOpened] = useState(false);
-  const [paymentUrl, setPaymentUrl] = useState<string | null>(null);
 
   // Pre-populate instructor in context on mount.
   // If a package was pre-selected from a pricing row, apply it immediately
@@ -180,6 +178,8 @@ export default function SubdomainBookingWizard({ provider: instructor, primary, 
           learnerRelationship: bookingState.learnerRelationship,
           pricing: bookingState.pricing,
           scheduledBookings: bookingState.bookingType === 'now' ? bookingState.scheduledBookings : undefined,
+          // PB-SEC-01: include pre-verified ownership token when email belongs to existing account
+          ...(bookingState.emailOwnershipToken ? { emailOwnershipToken: bookingState.emailOwnershipToken } : {}),
         }),
       });
 
@@ -207,12 +207,17 @@ export default function SubdomainBookingWizard({ provider: instructor, primary, 
         const baseUrl = `${window.location.protocol}//${mainHost}`;
         const fromParam = `?from=${encodeURIComponent(host)}`;
 
+        // Use checkoutUrl from bulk response — it already contains the paymentToken.
+        // Fall back to building the URL only for wallet/transaction flows.
         const url = data.transactionId
           ? `${baseUrl}/payment/wallet/${data.transactionId}${fromParam}&hrs=${bookingState.hours}&rate=${bookingState.provider?.hourlyRate ?? 0}&disc=${bookingState.pricing.discountPercentage}&total=${bookingState.pricing.total}`
-          : `${baseUrl}/booking/${data.bookingId}/payment${fromParam}`;
+          : data.checkoutUrl
+            ? `${window.location.protocol}//${mainHost}${new URL(data.checkoutUrl).pathname}${new URL(data.checkoutUrl).search}`
+            : `${baseUrl}/booking/${data.bookingId}/payment${fromParam}`;
 
-        setPaymentOpened(true);
-        setPaymentUrl(url);
+        // Navigate in the same tab — PB-SEC-04 fix.
+        // Do not use target="_blank"; the user must stay in the same window.
+        window.location.href = url;
       } else {
         setError(data.error || 'Booking failed. Please try again.');
       }
@@ -222,110 +227,6 @@ export default function SubdomainBookingWizard({ provider: instructor, primary, 
       setLoading(false);
     }
   };
-
-  // ── Progress bar ─────────────────────────────────────────────────────────
-  const ProgressBar = () => (
-    <div className="flex items-center gap-1 mb-6">
-      {steps.map((s, i) => (
-        <div key={s} className="flex items-center flex-1">
-          <div className="flex flex-col items-center flex-1">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all"
-              style={
-                i <= currentIndex
-                  ? { backgroundColor: primary, borderColor: primary, color: '#fff' }
-                  : { borderColor: 'rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.65)', backgroundColor: 'rgba(255,255,255,0.08)' }
-              }
-            >
-              {i < currentIndex ? '✓' : i + 1}
-            </div>
-            <span
-              className="text-xs mt-1 hidden sm:block"
-              style={{ color: i === currentIndex ? '#fff' : 'rgba(255,255,255,0.65)', fontWeight: i === currentIndex ? 600 : 400 }}
-            >
-              {STEP_LABELS[s]}
-            </span>
-          </div>
-          {i < steps.length - 1 && (
-            <div
-              className="h-0.5 flex-1 mx-1 rounded"
-              style={{ backgroundColor: i < currentIndex ? primary : 'rgba(255,255,255,0.1)' }}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-
-  // ── Payment confirmation screen ───────────────────────────────────────────
-  if (paymentOpened && paymentUrl) {
-    const isBookLater = bookingState.bookingType === 'later';
-    const p = bookingState.pricing;
-    const hrs = bookingState.hours;
-    const rate = bookingState.provider?.hourlyRate ?? 0;
-
-    return (
-      <div className="space-y-5 py-4">
-        <div className="text-center space-y-2">
-          <div className="text-4xl">{isBookLater ? '💳' : '✅'}</div>
-          <h3 className="text-xl font-bold text-foreground">
-            {isBookLater ? 'Almost there!' : 'Slot reserved!'}
-          </h3>
-          <p className="text-foreground/60 text-sm">
-            {isBookLater
-              ? 'Complete payment to load your wallet. Book lessons from your dashboard anytime.'
-              : 'Your slot is held for 10 minutes. Complete payment to confirm.'}
-          </p>
-        </div>
-
-        <div className="bg-secondary/50 border border-border rounded-xl p-4 space-y-2 text-sm">
-          <p className="font-semibold text-foreground/80 mb-3">Order Summary</p>
-          <div className="flex justify-between text-foreground/70">
-            <span>{hrs} hrs × ${rate}/hr</span>
-            <span>${(hrs * rate).toFixed(2)}</span>
-          </div>
-          {p.testPackage > 0 && (
-            <div className="flex justify-between text-foreground/70">
-              <span>PDA test pack</span>
-              <span>${p.testPackage.toFixed(2)}</span>
-            </div>
-          )}
-          {p.discount > 0 && (
-            <div className="flex justify-between text-emerald-400">
-              <span>Discount ({p.discountPercentage}%)</span>
-              <span>-${p.discount.toFixed(2)}</span>
-            </div>
-          )}
-          <div className="flex justify-between text-foreground/40">
-            <span>Platform fee</span>
-            <span>${p.platformFee.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between font-bold text-foreground border-t border-border pt-2 text-base">
-            <span>Total</span>
-            <span>${p.total.toFixed(2)}</span>
-          </div>
-        </div>
-
-        <a
-          href={paymentUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block w-full py-4 rounded-xl text-foreground font-bold text-lg text-center transition-all hover:opacity-90"
-          style={{ backgroundColor: primary }}
-        >
-          Complete Payment →
-        </a>
-        <button
-          type="button"
-          onClick={() => { setPaymentOpened(false); setPaymentUrl(null); setStep(initialPackage ? (instructor.offersTestPackage ? 'test-package' : 'book-type') : 'package'); }}
-          className="w-full text-sm text-foreground/60 underline hover:text-foreground/90"
-        >
-          Start a new booking
-        </button>
-      </div>
-    );
-  }
-
   // ── Wizard steps ──────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
@@ -487,7 +388,8 @@ export default function SubdomainBookingWizard({ provider: instructor, primary, 
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || bookingState.emailVerificationRequired}
+              title={bookingState.emailVerificationRequired ? 'Please verify your email ownership to continue' : undefined}
               className="flex-1 py-3 rounded-xl text-foreground font-bold disabled:opacity-40"
               style={{ backgroundColor: primary }}
             >
