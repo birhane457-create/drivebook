@@ -595,11 +595,32 @@ export async function POST(req: NextRequest) {
               throw new Error('User not found after unique constraint error');
             }
             // PB-SEC-01: race-condition path — concurrent request created this account.
-            // Email ownership verification still required. If a valid token was
-            // supplied it already passed the check above; link it. Otherwise return
-            // the OTP challenge so the client can verify before retrying.
-            if (data.emailOwnershipToken?.trim()) {
-              userId = existingUser.id;
+            // The same token+expiry validation as the normal existing-user path
+            // must apply here. Checking token presence alone is not sufficient —
+            // an arbitrary non-empty token would otherwise bypass the OTP gate.
+            const raceToken = data.emailOwnershipToken?.trim()
+            if (raceToken) {
+              // Verify token matches stored value and has not expired
+              const raceUser = await (prisma.user.findUnique({
+                where: { email: data.accountHolderEmail },
+                select: { id: true, ownershipOtpToken: true, ownershipOtpExpiry: true }
+              }) as any)
+              const raceTokenValid =
+                raceUser?.ownershipOtpToken === raceToken &&
+                raceUser?.ownershipOtpExpiry &&
+                new Date(raceUser.ownershipOtpExpiry) > new Date()
+              if (!raceTokenValid) {
+                return NextResponse.json(
+                  { error: 'Verification code is invalid or has expired. Please request a new code.', code: 'OTP_INVALID' },
+                  { status: 400 }
+                )
+              }
+              // Token valid — consume it and link
+              await (prisma.user.update({
+                where: { id: raceUser.id },
+                data: { ownershipOtpToken: null, ownershipOtpExpiry: null, ownershipOtpAttempts: 0 } as any
+              }))
+              userId = raceUser.id
             } else {
               return NextResponse.json(
                 { error: 'This email is already registered. Please verify ownership to continue.', code: 'EMAIL_OWNERSHIP_REQUIRED', email: data.accountHolderEmail },
