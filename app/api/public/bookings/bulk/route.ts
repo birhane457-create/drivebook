@@ -665,7 +665,8 @@ export async function POST(req: NextRequest) {
         } else {
           // No token supplied — generate OTP and ask the client to verify.
           // 6-digit numeric code, 10-minute expiry.
-          const { randomBytes } = await import('crypto')\n          const otp = String((randomBytes(3).readUIntBE(0, 3) % 900000) + 100000)
+          const { randomBytes } = await import('crypto')
+          const otp = String((randomBytes(3).readUIntBE(0, 3) % 900000) + 100000)
           const otpExpiry = new Date(Date.now() + 10 * 60 * 1000)
 
           await prisma.user.update({
