@@ -991,30 +991,53 @@ export async function POST(req: NextRequest) {
           });
           if (reservationConflict) throw new Error('SLOT_TAKEN');
 
-          // Also delete any expired self-reservation so the GiST constraint
-          // doesn't fire when we create the fresh hold below.
-          if (callerSessionId) {
-            await tx.slotReservation.deleteMany({
-              where: {
+          // Hold the slot for the caller's session:
+          //   1. Own hold ACTIVE for this exact slot -> extend expiry (no new row, no GiST conflict)
+          //   2. Own hold EXPIRED for this exact slot -> delete then insert fresh hold
+          //   3. No existing own hold -> insert fresh hold
+          // The GiST exclusion constraint remains the final race guard.
+          const effectiveSessionId = callerSessionId ?? idempotencyKey ?? `bulk-${Date.now()}`;
+
+          const ownActiveHold = callerSessionId
+            ? await tx.slotReservation.findFirst({
+                where: {
+                  providerId: resolvedInstructorId,
+                  sessionId:  callerSessionId,
+                  expiresAt:  { gt: now },
+                  startTime:  startTime,
+                  endTime:    endTime,
+                },
+              })
+            : null;
+
+          if (ownActiveHold) {
+            // Case 1: extend the existing hold — no new row, no GiST conflict.
+            await tx.slotReservation.update({
+              where: { id: ownActiveHold.id },
+              data:  { expiresAt: slotExpiresAt },
+            });
+          } else {
+            // Case 2 or 3: delete any expired self-row for this exact slot then insert.
+            if (callerSessionId) {
+              await tx.slotReservation.deleteMany({
+                where: {
+                  providerId: resolvedInstructorId,
+                  sessionId:  callerSessionId,
+                  startTime:  startTime,
+                  endTime:    endTime,
+                },
+              });
+            }
+            await tx.slotReservation.create({
+              data: {
                 providerId: resolvedInstructorId,
-                sessionId: callerSessionId,
-                expiresAt: { lt: now },
+                sessionId:  effectiveSessionId,
+                startTime,
+                endTime,
+                expiresAt:  slotExpiresAt,
               },
             });
           }
-
-          // Create slot reservation to hold during payment
-          await tx.slotReservation.create({
-            data: {
-              providerId: resolvedInstructorId,
-              // Use callerSessionId so the client can identify and release this hold.
-              // Falls back to idempotency key then a fresh timestamp-based key.
-              sessionId: callerSessionId ?? idempotencyKey ?? `bulk-${Date.now()}`,
-              startTime,
-              endTime,
-              expiresAt: slotExpiresAt,
-            },
-          });
         }
 
         // PH5-SCH-30 FIX: Claim idempotency key BEFORE booking.create.
