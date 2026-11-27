@@ -128,6 +128,23 @@ export async function POST(req: NextRequest) {
     }
     const instructor = eligible.provider
 
+    // Enforce instructor's minimum advance notice for student-facing bookings
+    if (data.lesson) {
+      const lessonStart = new Date(data.lesson.startTime)
+      const instructorMinAdvance = Number((instructor as any).minAdvanceHours ?? 2)
+      if (lessonStart.getTime() - Date.now() < instructorMinAdvance * 60 * 60 * 1000) {
+        const name = (instructor as any).businessName || (instructor as any).name
+        return NextResponse.json(
+          {
+            error: `This slot is too soon to book online. ${name} requires at least ${instructorMinAdvance} hour${instructorMinAdvance === 1 ? '' : 's'} notice.`,
+            code: 'SHORT_NOTICE',
+            minAdvanceHours: instructorMinAdvance,
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     const bookings: any = {}
     let subtotal = 0
     let totalDiscount = 0

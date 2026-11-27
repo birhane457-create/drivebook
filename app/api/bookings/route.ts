@@ -246,14 +246,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Booking duration cannot exceed 8 hours' }, { status: 400 })
     }
 
-    // Admin-configured booking window
+    // Advance-notice check: use the stricter of the platform-wide setting and the
+    // instructor's own configured minimum. Neither can be bypassed by the other.
     const bookingSettings = getBookingSettings()
-    // Package bypass is determined server-side only — never trust client-supplied flags
-    // (body.packageId / body.isPackage would allow privilege escalation)
-    const minAdvanceMs = bookingSettings.minAdvanceHours * 60 * 60 * 1000
+    const providerRecord = await prisma.provider.findUnique({
+      where: { id: providerId },
+      select: { minAdvanceHours: true, timezone: true, state: true },
+    })
+    const providerMinAdvance = Number((providerRecord as any)?.minAdvanceHours ?? 2)
+    const effectiveMinAdvanceHours = Math.max(bookingSettings.minAdvanceHours, providerMinAdvance)
+    const minAdvanceMs = effectiveMinAdvanceHours * 60 * 60 * 1000
     if (newStart.getTime() - now.getTime() < minAdvanceMs) {
       return NextResponse.json({
-        error: `Bookings must be made at least ${bookingSettings.minAdvanceHours} hour${bookingSettings.minAdvanceHours !== 1 ? 's' : ''} in advance`
+        error: `Bookings must be made at least ${effectiveMinAdvanceHours} hour${effectiveMinAdvanceHours !== 1 ? 's' : ''} in advance`
       }, { status: 400 })
     }
     const maxAdvanceMs = bookingSettings.maxAdvanceDays * 24 * 60 * 60 * 1000

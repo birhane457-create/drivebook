@@ -12,7 +12,7 @@ import { getDisplayName } from '@/lib/utils/account';
 import { calculatePackagePriceDynamic } from '@/lib/config/packages';
 import crypto from 'crypto';
 import { invalidateAvailabilityCache } from '@/lib/services/availability';
-import { resolveTimezone, timezoneFromState } from '@/lib/utils/timezone';
+import { resolveTimezone, timezoneFromState, localDateTimeToUTC } from '@/lib/utils/timezone';
 
 // P0-2 FIX: Define constant here (was missing Ã¢â‚¬â€ caused key.length > undefined to always be false)
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
@@ -924,9 +924,11 @@ export async function POST(req: NextRequest) {
 
     if (hasScheduledSlot) {
       const slot = data.scheduledBookings![0];
-      const [h, m] = slot.time.split(':').map(Number);
-      startTime = new Date(slot.date);
-      startTime.setHours(h, m, 0, 0);
+      // PB-SEC-02 timezone fix: construct startTime in the instructor's local timezone,
+      // not the server's timezone. Matches the pattern in app/api/bookings/offline/route.ts.
+      const instructorTz = resolveTimezone((instructor as any).timezone) ||
+        timezoneFromState((instructor as any).state ?? '');
+      startTime = localDateTimeToUTC(slot.date, slot.time, instructorTz);
       endTime = new Date(startTime.getTime() + firstLessonDurationMinutes * 60 * 1000);
     }
 

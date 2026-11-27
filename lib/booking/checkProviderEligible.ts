@@ -102,6 +102,7 @@ export async function checkProviderEligible(
       userId:             true,
       timezone:           true,
       state:              true,
+      minAdvanceHours:    true,
     },
   })
 
