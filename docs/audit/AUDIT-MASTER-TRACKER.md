@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.98 (PB-SEC-01-09: fixes implemented; PB-SEC-01 source+GPT reviewed; PB-SEC-04-08 FIX; PB-SEC-09 registered)
-**Last Updated:** 2026-11-26 (v6.98 — PB-SEC-04/05/06/07/08 FIX commits 1f12834a3; PB-SEC-01 FIX commits 1f12834a3+830345825+dc9680b65 GPT-reviewed; PB-SEC-09 registered)
+**Version:** 6.99 (PB-SEC-02 FIX: 3 gaps from independent review closed — timezone, all booking entry points, per-instructor setting)
+**Last Updated:** 2026-11-26 (v6.99 — PB-SEC-02 FIX: 8f369b890 initial + 983aedd27 gap fixes; GPT source review completed; regression tests pending)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -749,7 +749,7 @@ When a guest enters an email that matches an existing `User` record, before `use
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PB-SEC-02 | Short-notice booking (`PENDING`) accepted by create-intent but rejected by webhook — customer charged, booking never confirmed | HIGH | CONFIRMED | VERIFIED — `create-intent` line 237 accepts `PENDING` and `PENDING_PAYMENT`; webhook line 1161 rejects non-`PENDING_PAYMENT` without confirming; bulk route creates short-notice as `status: 'PENDING'`. All three files source-verified this session. | NOT-STARTED | N/A | OPEN | Reconciliation 2026-11-25; branch `7c4efbef` | none |
+| PB-SEC-02 | Short-notice booking (`PENDING`) accepted by create-intent but rejected by webhook — customer charged, booking never confirmed | HIGH | CONFIRMED | VERIFIED — `create-intent` line 237 accepts `PENDING` and `PENDING_PAYMENT`; webhook line 1161 rejects non-`PENDING_PAYMENT` without confirming; bulk route creates short-notice as `status: 'PENDING'`. All three files source-verified this session. | ``8f369b890`` (minAdvanceHours field + bulk route reject + settings UI) + ``983aedd27`` (timezone fix; combined route check; bookings/route.ts per-instructor) | GPT source review 2026-11-26: FIX-PARTIAL — 3 gaps identified and all 3 closed in 983aedd27; regression tests pending | FIX | Reconciliation 2026-11-25; GPT source review 2026-11-26 | none |
 
 **Code location:** `app/api/public/bookings/bulk/route.ts` (creates `PENDING`); `app/api/payments/create-intent/route.ts` line 237 (accepts both statuses); `app/api/stripe/webhook/route.ts` line 1161 (rejects non-`PENDING_PAYMENT`)
 **Condition:** Short-notice bookings bypass the webhook's strict state gate. Customer can pay; webhook rejects; booking never confirmed.
