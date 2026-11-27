@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.99 (PB-SEC-02 FIX-VERIFIED: 11/11 tests pass 01bbfb49c; DST bug found and fixed in localDateTimeToUTC)
-**Last Updated:** 2026-11-26 (v6.99 — PB-SEC-02 FIX-VERIFIED 01bbfb49c: 11 tests pass; DST fix in localDateTimeToUTC; route-level HTTP tests tracked as improvement)
+**Version:** 6.99 (PB-SEC-02 FIX-VERIFIED; PB-SEC-03 description corrected per GPT audit; PB-SEC-10 registered: apex-hostname rewrite in wizard)
+**Last Updated:** 2026-11-26 (v6.99 — PB-SEC-03 description corrected: original defect was tokenless create-intent, not discarded checkoutUrl; hostname defect registered as PB-SEC-10)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -764,10 +764,11 @@ When a guest enters an email that matches an existing `User` record, before `use
 |---|---|---|---|---|---|---|---|---|---|
 | PB-SEC-03 | Guest payment page discards `checkoutUrl` from bulk booking response — payment proceeds without booking token | HIGH | CONFIRMED (partial) | VERIFIED 2026-11-26 — `app/book/[instructorId]/payment/page.tsx` read in full: both Book Now and Book Later paths redirect to `bookingResult.checkoutUrl` before any create-intent call; old direct create-intent path unreachable. Wizard also uses `data.checkoutUrl` (PB-SEC-04 fix, same commit). | ``1f12834a3`` (wizard checkoutUrl + payment page redirect) + ``47a4205df`` (Decimal display fixes) | Awaiting regression test | FIX | Source verification 2026-11-26; branch `tracker-update-v6.97` | none | | Reconciliation 2026-11-25; branch `7c4efbef` | none |
 
-**Code location:** `app/book/[instructorId]/payment/page.tsx` (file not yet read); `app/api/public/bookings/bulk/route.ts` lines ~590–610
-**Condition:** Bulk route returns `{ checkoutUrl }` on success. The tokenized page at `app/booking/[id]/payment/page.tsx` correctly uses the `token` param. If the guest page ignores `checkoutUrl`, payment proceeds without the booking token.
-**Impact:** Payment may succeed in Stripe but not be associated with the booking. Booking remains `PENDING_PAYMENT`, slot expires, customer has no confirmation.
-**Source-verified 2026-11-26:** Both Book Now and Book Later branches in `app/book/[instructorId]/payment/page.tsx` redirect to `bookingResult.checkoutUrl` before any other action. The old path that called `create-intent` directly (which would 401 for unauthenticated guests) is unreachable dead code. Fix was applied in PB-SEC-04 commit `1f12834a3`. Regression test pending.
+**Code location:** `app/book/[instructorId]/payment/page.tsx` (guest payment page); `app/api/public/bookings/bulk/route.ts` (backend response contract)
+**Original defect:** The guest payment page at `app/book/[instructorId]/payment/page.tsx` called `/api/payments/create-intent` directly without a `paymentToken`. Unauthenticated guests received a 401 and their booking was never confirmed. The bulk API was already returning a tokenized `checkoutUrl` (`/booking/{id}/payment?token={paymentToken}`) that was not being used.
+**Fix verified by GPT source review 2026-11-26:** Both Book Now and Book Later branches now execute `setIsRedirecting(true); window.location.href = bookingResult.checkoutUrl; return;` before any other action. The tokenized destination page reads `token` from the query string and passes it to `create-intent`, supporting unauthenticated guest payment.
+**Dead code note:** The original create-intent call remains in the file below the redirect branches. It is unreachable for the supported `'now'` and `'later'` booking types (both return early via redirect or throw). Should be removed in a future cleanup commit.
+**Regression test pending:** Browser-level confirmation that both guest flows (Book Now + Book Later) land at the correct tokenized destination with a valid token.
 
 ---
 
@@ -881,6 +882,28 @@ DELETE /api/availability/check-and-reserve ... <- slot released on unmount
 3. Another session's active hold is rejected
 4. Two concurrent checkout attempts cannot both acquire the same slot
 5. A failed checkout does not leave an unintended permanent reservation
+
+---
+
+#### PB-SEC-10 — Checkout redirect hostname incorrectly strips apex domain in SubdomainBookingWizard
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-10 | `SubdomainBookingWizard.tsx` strips the first hostname segment when constructing the redirect URL. On the apex domain `drivebook.com.au` this produces `com.au`, sending the customer to the wrong host. | MEDIUM | CONFIRMED | VERIFIED — `components/subdomain/SubdomainBookingWizard.tsx`: `const parts = host.split('.'); const mainHost = parts.length > 1 ? parts.slice(1).join('.') : host;`. On host `drivebook.com.au` (2 segments) `mainHost = 'com.au'`. On host `school.drivebook.com.au` (3 segments) result is correct. GPT source review 2026-11-26. | NOT-STARTED | N/A | OPEN | GPT source review of SubdomainBookingWizard.tsx 2026-11-26 | PB-SEC-03 (related) |
+
+**Code location:** `components/subdomain/SubdomainBookingWizard.tsx` — redirect URL construction after successful bulk booking submission
+**Condition:** The wizard splits the current `window.location.host` on `'.'` and drops the first segment to derive the `mainHost` for the redirect. For instructor subdomains (`school.drivebook.com.au`) this correctly produces `drivebook.com.au`. For the apex domain (`drivebook.com.au`) it produces `com.au`, a redirect to the wrong host.
+**Hostname table:**
+| Current host | Computed mainHost | Result |
+|---|---|---|
+| `school.drivebook.com.au` | `drivebook.com.au` | Correct |
+| `www.drivebook.com.au` | `drivebook.com.au` | Correct |
+| `drivebook.com.au` | `com.au` | **Incorrect** |
+| `localhost:3000` | `localhost:3000` | Correct (1 segment fallback) |
+
+**Impact:** Customers booking directly on the apex domain are redirected to `com.au` after checkout submission, losing the booking token and failing to reach the payment page.
+**Production exposure:** Depends on whether customers use the apex domain. If all public booking traffic arrives via instructor subdomains or the standard `/book/[instructorId]` path on the apex domain, the apex redirect may not be exercised. Needs production URL analysis before risk classification is finalized.
+**Recommended fix:** Do not reconstruct the host from the client-side hostname. Instead, use the absolute `checkoutUrl` returned by the backend directly — the backend already knows the correct base URL (`NEXTAUTH_URL`). The host-stripping code becomes unnecessary when the backend-provided absolute URL is used as-is.
 
 ---
 
