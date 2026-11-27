@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.97 (PB-SEC-01-08 registered; FIN-series retired; BLOCKER-001 scope clarified)
-**Last Updated:** 2026-11-25 (v6.97 — PB-SEC-07/08 root cause: params.providerId undefined in layout + booking-details Continue; PB-SEC-05/06 compound; PB-SEC-01-04 open)
+**Version:** 6.98 (PB-SEC-01-09: fixes implemented; PB-SEC-01 source+GPT reviewed; PB-SEC-04-08 FIX; PB-SEC-09 registered)
+**Last Updated:** 2026-11-26 (v6.98 — PB-SEC-04/05/06/07/08 FIX commits 1f12834a3; PB-SEC-01 FIX commits 1f12834a3+830345825+dc9680b65 GPT-reviewed; PB-SEC-09 registered)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -716,7 +716,7 @@ These items were raised during the audit and verified source-safe. Recorded here
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PB-SEC-01 | Account association without email ownership verification — booking or package credit linked to existing account before email ownership is proven | MEDIUM | CONFIRMED | VERIFIED — `app/api/public/bookings/bulk/route.ts` line 602: `userId = existingUser.id` with no OTP, magic-link, or session auth. Comment line 601: "Existing user — just link booking to their account, no password change." Risk reclassified from HIGH to MEDIUM: intended product behaviour (email as stable account identifier) is valid; missing control is proof of email ownership, not account credential. Account takeover has not been demonstrated. | NOT-STARTED | N/A | OPEN | Reconciliation 2026-11-25; design decision 2026-11-25; branch `7c4efbef` | none |
+| PB-SEC-01 | Account association without email ownership verification — booking or package credit linked to existing account before email ownership is proven | MEDIUM | CONFIRMED | VERIFIED — `app/api/public/bookings/bulk/route.ts` line 602: `userId = existingUser.id` with no OTP, magic-link, or session auth. Comment line 601: "Existing user — just link booking to their account, no password change." Risk reclassified from HIGH to MEDIUM: intended product behaviour (email as stable account identifier) is valid; missing control is proof of email ownership, not account credential. Account takeover has not been demonstrated. | ``1f12834a3`` (OTP inline flow) + ``830345825`` (dedicated ownershipOtp fields; attempt limit; crypto.randomBytes) + ``dc9680b65`` (P2002 race validates token+expiry) | GPT source-reviewed on 830345825 and dc9680b65; regression tests required | FIX | Reconciliation 2026-11-25; design decision 2026-11-25; GPT reviews 2026-11-26 | none |
 
 **Code location:** `app/api/public/bookings/bulk/route.ts` lines 369–602
 **Intended behaviour (valid):** DriveBook uses email as the stable, uneditable account identifier. Recognising an existing email and linking the new booking to that account avoids duplicate accounts and fragmented booking history. This design intent is correct.
@@ -775,7 +775,7 @@ When a guest enters an email that matches an existing `User` record, before `use
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PB-SEC-04 | Payment link opens new tab after booking submission — original tab stays on `/book/[instructorId]` and never advances to payment or confirmation | MEDIUM | CONFIRMED | VERIFIED — `components/subdomain/SubdomainBookingWizard.tsx` line 311: `target="_blank"` on the payment link; original tab renders in-place confirmation screen but does not navigate. `BulkBookingForm.tsx` line 240/242 uses `window.location.href` (correct) but is not the component rendered on `/book/[instructorId]`. Source-verified this session. | NOT-STARTED | N/A | OPEN | Source trace 2026-11-25; branch `tracker-update-v6.97` | PB-ARCH-01 (related) |
+| PB-SEC-04 | Payment link opens new tab after booking submission — original tab stays on `/book/[instructorId]` and never advances to payment or confirmation | MEDIUM | CONFIRMED | VERIFIED — `components/subdomain/SubdomainBookingWizard.tsx` line 311: `target="_blank"` on the payment link; original tab renders in-place confirmation screen but does not navigate. `BulkBookingForm.tsx` line 240/242 uses `window.location.href` (correct) but is not the component rendered on `/book/[instructorId]`. Source-verified this session. | `1f12834a3` — wizard uses `checkoutUrl` from bulk response; `window.location.href` replaces `target="_blank"; payment confirmation screen removed | Awaiting regression test | FIX | Source trace 2026-11-25; branch `tracker-update-v6.97` | PB-ARCH-01 (related) |
 
 **Code location:** `components/subdomain/SubdomainBookingWizard.tsx` lines 308–315
 **Condition:** After `handleSubmit` succeeds, the wizard sets `paymentOpened = true` and renders a confirmation screen with `<a href={paymentUrl} target="_blank">Complete Payment →</a>`. The original tab stays on `/book/[instructorId]` at the confirmation screen. It never navigates to the payment page.
@@ -793,7 +793,7 @@ When a guest enters an email that matches an existing `User` record, before `use
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PB-SEC-05 | Registration page `useEffect` guard fires before `BookingContext` localStorage recovery completes — `instructor` is null on first render, guard pushes to `/book`, slot reservation is released | HIGH | CONFIRMED | VERIFIED — `app/book/[instructorId]/registration/page.tsx` lines 17–19: `useEffect` fires immediately with no timeout; `instructor` is null before async localStorage `useEffect` runs; `router.push('/book')` executes; slot DELETE follows on unmount. `booking-details/page.tsx` and `book-type/page.tsx` both have `setTimeout(..., 500)` guard for the same reason. Source-verified against server log this session. | NOT-STARTED | N/A | OPEN | Server log trace 2026-11-25; branch `tracker-update-v6.97` | PB-ARCH-01 |
+| PB-SEC-05 | Registration page `useEffect` guard fires before `BookingContext` localStorage recovery completes — `instructor` is null on first render, guard pushes to `/book`, slot reservation is released | HIGH | CONFIRMED | VERIFIED — `app/book/[instructorId]/registration/page.tsx` lines 17–19: `useEffect` fires immediately with no timeout; `instructor` is null before async localStorage `useEffect` runs; `router.push('/book')` executes; slot DELETE follows on unmount. `booking-details/page.tsx` and `book-type/page.tsx` both have `setTimeout(..., 500)` guard for the same reason. Source-verified against server log this session. | `1f12834a3` — 500ms `setTimeout` guard added matching sibling pages; loading spinner shown while recovering | Awaiting regression test | FIX | Server log trace 2026-11-25; branch `tracker-update-v6.97` | PB-ARCH-01 |
 
 **Code location:** `app/book/[instructorId]/registration/page.tsx` lines 17–19
 **Condition:** On navigation to the `/registration` route, React mounts the page with `instructor = null` (initial context state). The `useEffect` guard has no delay and pushes to `/book` before the context's own `useEffect` can read `localStorage` and restore the booking state.
@@ -813,7 +813,7 @@ DELETE /api/availability/check-and-reserve ... <- slot released on unmount
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PB-SEC-06 | `BookingDetailsForm` unmount cleanup unconditionally fires `DELETE /api/availability/check-and-reserve` for all reserved slots — including when the wizard legitimately advances from `schedule` to `register` step | HIGH | CONFIRMED | VERIFIED — `components/BookingDetailsForm.tsx` lines 138–163: `useEffect` return cleanup calls `releaseSlot()` and `fetch(DELETE)` for every entry in `scheduledBookings`; fires on any unmount including wizard step change. `{step === 'schedule' && <BookingDetailsForm />}` in `SubdomainBookingWizard.tsx` unmounts the component on step advance. Server log confirms slot DELETE fires immediately after step transition, before registration page loads. | NOT-STARTED | N/A | OPEN | Server log trace 2026-11-25; branch `tracker-update-v6.97` | none |
+| PB-SEC-06 | `BookingDetailsForm` unmount cleanup unconditionally fires `DELETE /api/availability/check-and-reserve` for all reserved slots — including when the wizard legitimately advances from `schedule` to `register` step | HIGH | CONFIRMED | VERIFIED — `components/BookingDetailsForm.tsx` lines 138–163: `useEffect` return cleanup calls `releaseSlot()` and `fetch(DELETE)` for every entry in `scheduledBookings`; fires on any unmount including wizard step change. `{step === 'schedule' && <BookingDetailsForm />}` in `SubdomainBookingWizard.tsx` unmounts the component on step advance. Server log confirms slot DELETE fires immediately after step transition, before registration page loads. | `1f12834a3` — server DELETE removed from unmount cleanup; moved to `beforeunload` listener; slot released only on true page exit not step advance | Awaiting regression test | FIX | Server log trace 2026-11-25; branch `tracker-update-v6.97` | none |
 
 **Book Now only — Book Later unaffected:** Book Later never mounts `BookingDetailsForm` — `getSteps()` only adds `'schedule'` when `bookingType === 'now'`. No slot is reserved on the Book Later path, so no cleanup fires. Defect is scoped to Book Now only.
 
@@ -832,7 +832,7 @@ DELETE /api/availability/check-and-reserve ... <- slot released on unmount
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PB-SEC-07 | Layout `InstructorLoaderContent` reads `params.providerId` — route segment is `[instructorId]`; `providerId` is always `undefined`; instructor fetch never runs; all sub-route pages receive `bookingState.provider = null` from layout context | HIGH | CONFIRMED | VERIFIED — `app/book/[instructorId]/layout.tsx` line 22: `params.providerId`; route folder is `app/book/[instructorId]` so Next.js supplies `params.instructorId`. Source-verified this session. | NOT-STARTED | N/A | OPEN | Source trace 2026-11-25; branch `tracker-update-v6.97` | none |
+| PB-SEC-07 | Layout `InstructorLoaderContent` reads `params.providerId` — route segment is `[instructorId]`; `providerId` is always `undefined`; instructor fetch never runs; all sub-route pages receive `bookingState.provider = null` from layout context | HIGH | CONFIRMED | VERIFIED — `app/book/[instructorId]/layout.tsx` line 22: `params.providerId`; route folder is `app/book/[instructorId]` so Next.js supplies `params.instructorId`. Source-verified this session. | ``1f12834a3`` — `params.providerId` renamed to `params.instructorId` throughout layout (line 22, guard, fetch URL, dep array) | Awaiting regression test | FIX | Source trace 2026-11-25; branch `tracker-update-v6.97` | none |
 
 **Code location:** `app/book/[instructorId]/layout.tsx` line 22
 **Condition:** `const providerId = params.providerId as string` — `providerId` is `undefined`. Guard `if (!providerId) return` (line 29) silently exits. `fetchInstructor()` never called. Layout `BookingContext` never has an instructor.
@@ -846,12 +846,41 @@ DELETE /api/availability/check-and-reserve ... <- slot released on unmount
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PB-SEC-08 | `booking-details/page.tsx` Continue handler uses `params.providerId` in `router.push`; `params.providerId` is `undefined`; navigates to `/book/undefined/registration` which 404s | HIGH | CONFIRMED | VERIFIED — `app/book/[instructorId]/booking-details/page.tsx` line 47: `router.push(`/book/${params.providerId}/registration`)`. Route segment is `[instructorId]`. Source-verified this session. | NOT-STARTED | N/A | OPEN | Source trace 2026-11-25; branch `tracker-update-v6.97` | none |
+| PB-SEC-08 | `booking-details/page.tsx` Continue handler uses `params.providerId` in `router.push`; `params.providerId` is `undefined`; navigates to `/book/undefined/registration` which 404s | HIGH | CONFIRMED | VERIFIED — `app/book/[instructorId]/booking-details/page.tsx` line 47: `router.push(`/book/${params.providerId}/registration`)`. Route segment is `[instructorId]`. Source-verified this session. | ``1f12834a3`` — `params.providerId` corrected to `params.instructorId` in Continue handler (line 47) | Awaiting regression test | FIX | Source trace 2026-11-25; branch `tracker-update-v6.97` | none |
 
 **Code location:** `app/book/[instructorId]/booking-details/page.tsx` line 47
 **Condition:** `router.push(`/book/${params.providerId}/registration`)` — `params.providerId` is `undefined` (route segment is `instructorId`). Navigation target is `/book/undefined/registration`. Next.js treats `undefined` as a literal path segment. No matching route exists; page 404s.
 **Reference (correct):** `app/book/[instructorId]/book-type/page.tsx` lines 48–51 uses `params.instructorId` correctly for both Book Now and Book Later branches.
 **Fix:** Change `params.providerId` to `params.instructorId` on line 47. One word.
+
+---
+
+### 8.8 — Slot Reservation Self-Conflict and Expiry Fixes (v6.98, 2026-11-26)
+
+**Source:** Identified during Book Now flow testing and confirmed by GPT independent review of commit db92d37f1.
+
+**Two related defects found and fixed in commits db92d37f1 and 5a78c653b:**
+
+---
+
+#### PB-SEC-09 — Slot reservation conflict check blocked caller's own active hold
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| PB-SEC-09 | Bulk booking transaction: slot reservation conflict check did not exclude the caller's own session; active own hold triggered SLOT_TAKEN; expired own hold blocked submission even when slot was free | HIGH | CONFIRMED | VERIFIED — `app/api/public/bookings/bulk/route.ts`: `reservationConflict` query at time of finding had no `sessionId` exclusion; GiST constraint prevented creating a second overlapping row for same session. GPT source review of db92d37f1 identified active-own-hold case as still vulnerable to 23P01. | `db92d37f1` (sessionId exclusion + expired-self-delete) + `5a78c653b` (extend active hold instead of insert duplicate) | GPT source-reviewed on 5a78c653b; concurrency regression tests required before FIX-VERIFIED | FIX | Book Now flow testing 2026-11-26; GPT review of db92d37f1 | none |
+
+**Code location:** `app/api/public/bookings/bulk/route.ts` — slot reservation block inside `prisma.`
+**Three-case logic implemented (5a78c653b):**
+- Own hold ACTIVE for exact slot: `update expiresAt` only — no new row, no GiST conflict
+- Own hold EXPIRED for exact slot: `deleteMany` expired self-row, then `create` fresh hold
+- Another session's active hold: reject SLOT_TAKEN
+- GiST exclusion constraint remains final race guard for concurrent other-session inserts
+**Regression tests required (5 cases per GPT review):**
+1. Active own hold proceeds without creating a duplicate row
+2. Expired own hold proceeds when slot is otherwise free
+3. Another session's active hold is rejected
+4. Two concurrent checkout attempts cannot both acquire the same slot
+5. A failed checkout does not leave an unintended permanent reservation
 
 ---
 
