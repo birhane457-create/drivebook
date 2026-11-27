@@ -6,6 +6,7 @@ import { checkProviderEligible } from '@/lib/booking/checkProviderEligible'
 import { bookingRateLimit, checkRateLimit, getRateLimitIdentifier } from '@/lib/ratelimit'
 import { z } from 'zod'
 import { localDateTimeToUTC, resolveTimezone } from '@/lib/utils/timezone'
+import { getBookingSettings } from '@/lib/config/platform-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -128,17 +129,21 @@ export async function POST(req: NextRequest) {
     }
     const instructor = eligible.provider
 
-    // Enforce instructor's minimum advance notice for student-facing bookings
+    // Enforce instructor's minimum advance notice for student-facing bookings.
+    // Apply the stricter of the platform minimum and the instructor's configured minimum,
+    // matching the policy in the bulk booking route and app/api/bookings/route.ts.
     if (data.lesson) {
       const lessonStart = new Date(data.lesson.startTime)
+      const platformMinAdvance = getBookingSettings().minAdvanceHours
       const instructorMinAdvance = Number((instructor as any).minAdvanceHours ?? 2)
-      if (lessonStart.getTime() - Date.now() < instructorMinAdvance * 60 * 60 * 1000) {
+      const effectiveMinAdvance = Math.max(platformMinAdvance, instructorMinAdvance)
+      if (lessonStart.getTime() - Date.now() < effectiveMinAdvance * 60 * 60 * 1000) {
         const name = (instructor as any).businessName || (instructor as any).name
         return NextResponse.json(
           {
-            error: `This slot is too soon to book online. ${name} requires at least ${instructorMinAdvance} hour${instructorMinAdvance === 1 ? '' : 's'} notice.`,
+            error: `This slot is too soon to book online. ${name} requires at least ${effectiveMinAdvance} hour${effectiveMinAdvance === 1 ? '' : 's'} notice.`,
             code: 'SHORT_NOTICE',
-            minAdvanceHours: instructorMinAdvance,
+            minAdvanceHours: effectiveMinAdvance,
           },
           { status: 400 }
         )

@@ -13,6 +13,7 @@ import { calculatePackagePriceDynamic } from '@/lib/config/packages';
 import crypto from 'crypto';
 import { invalidateAvailabilityCache } from '@/lib/services/availability';
 import { resolveTimezone, timezoneFromState, localDateTimeToUTC } from '@/lib/utils/timezone';
+import { getBookingSettings } from '@/lib/config/platform-settings';
 
 // P0-2 FIX: Define constant here (was missing Ã¢â‚¬â€ caused key.length > undefined to always be false)
 const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
@@ -934,8 +935,11 @@ export async function POST(req: NextRequest) {
 
     // PB-SEC-02 FIX: replace approval-queue with instructor-configurable minimum advance notice.
     // A PENDING booking that accepts payment but webhook rejects is worse than a clean upfront rejection.
-    // Instructor sets minAdvanceHours in dashboard (default 2). Slots within that window are blocked.
-    const minAdvanceHours = Number((instructor as any).minAdvanceHours ?? 2);
+    // Apply the stricter of the platform minimum and the instructor's configured minimum so neither
+    // can be bypassed by the other — matching the policy in app/api/bookings/route.ts.
+    const platformMinAdvance = getBookingSettings().minAdvanceHours;
+    const instructorMinAdvance = Number((instructor as any).minAdvanceHours ?? 2);
+    const minAdvanceHours = Math.max(platformMinAdvance, instructorMinAdvance);
     const isShortNotice = startTime
       ? (startTime.getTime() - Date.now()) < minAdvanceHours * 60 * 60 * 1000
       : false;
