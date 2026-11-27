@@ -762,12 +762,12 @@ When a guest enters an email that matches an existing `User` record, before `use
 
 | ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
 |---|---|---|---|---|---|---|---|---|---|
-| PB-SEC-03 | Guest payment page discards `checkoutUrl` from bulk booking response — payment proceeds without booking token | HIGH | CONFIRMED (partial) | PARTIAL — `app/api/public/bookings/bulk/route.ts` lines ~590–610 confirmed to return `checkoutUrl`; `app/book/[instructorId]/payment/page.tsx` not yet read; full verification requires confirming the returned URL is not followed | NOT-STARTED | N/A | OPEN (verification incomplete) | Reconciliation 2026-11-25; branch `7c4efbef` | none |
+| PB-SEC-03 | Guest payment page discards `checkoutUrl` from bulk booking response — payment proceeds without booking token | HIGH | CONFIRMED (partial) | VERIFIED 2026-11-26 — `app/book/[instructorId]/payment/page.tsx` read in full: both Book Now and Book Later paths redirect to `bookingResult.checkoutUrl` before any create-intent call; old direct create-intent path unreachable. Wizard also uses `data.checkoutUrl` (PB-SEC-04 fix, same commit). | ``1f12834a3`` (wizard checkoutUrl + payment page redirect) + ``47a4205df`` (Decimal display fixes) | Awaiting regression test | FIX | Source verification 2026-11-26; branch `tracker-update-v6.97` | none | | Reconciliation 2026-11-25; branch `7c4efbef` | none |
 
 **Code location:** `app/book/[instructorId]/payment/page.tsx` (file not yet read); `app/api/public/bookings/bulk/route.ts` lines ~590–610
 **Condition:** Bulk route returns `{ checkoutUrl }` on success. The tokenized page at `app/booking/[id]/payment/page.tsx` correctly uses the `token` param. If the guest page ignores `checkoutUrl`, payment proceeds without the booking token.
 **Impact:** Payment may succeed in Stripe but not be associated with the booking. Booking remains `PENDING_PAYMENT`, slot expires, customer has no confirmation.
-**Next required action:** Read `app/book/[instructorId]/payment/page.tsx` and confirm whether `checkoutUrl` is used or discarded before this finding advances past PARTIAL verification.
+**Source-verified 2026-11-26:** Both Book Now and Book Later branches in `app/book/[instructorId]/payment/page.tsx` redirect to `bookingResult.checkoutUrl` before any other action. The old path that called `create-intent` directly (which would 401 for unauthenticated guests) is unreachable dead code. Fix was applied in PB-SEC-04 commit `1f12834a3`. Regression test pending.
 
 ---
 
