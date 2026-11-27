@@ -42,6 +42,8 @@ const settingsSchema = z.object({
   pdaConfigs: z.array(z.any()).optional(),
   // FIX #14: Self-service booking pause toggle
   acceptingBookings: z.boolean().optional(),
+  // PB-SEC-02 FIX: instructor-configurable minimum advance notice for online bookings
+  minAdvanceHours: z.number().int().min(1).max(72).optional(),
 })
 
 export async function PUT(req: NextRequest) {
@@ -104,6 +106,7 @@ export async function PUT(req: NextRequest) {
     if (data.enableTravelTime !== undefined) updateData.enableTravelTime = data.enableTravelTime
     if (data.travelTimeMinutes !== undefined) updateData.travelTimeMinutes = data.travelTimeMinutes
     if (data.acceptingBookings !== undefined) updateData.acceptingBookings = data.acceptingBookings
+    if (data.minAdvanceHours !== undefined) updateData.minAdvanceHours = data.minAdvanceHours
 
     // Driving-specific fields go to extension table only (D6)
     const drivingUpdate: Record<string, unknown> = {}
@@ -184,6 +187,7 @@ export async function GET(_req: NextRequest) {
         enableTravelTime: true,
         travelTimeMinutes: true,
         acceptingBookings: true,
+        minAdvanceHours: true,
       }
     })
 

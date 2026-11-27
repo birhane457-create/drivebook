@@ -77,6 +77,7 @@ export default async function PublicBookingPage({
     testPackageDuration:  instructor.testPackageDuration ?? null,
     testPackageIncludes:  (instructor.testPackageIncludes as string[]) ?? [],
     allowedDurations,
+    minAdvanceHours: (instructor as any).minAdvanceHours ?? 2,
   };
 
   return (

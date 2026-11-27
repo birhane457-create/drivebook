@@ -168,6 +168,10 @@ model Provider {
   baseLatitude              Float?
   baseLongitude             Float?
   acceptingBookings         Boolean            @default(true)
+  // Minimum advance notice required for online bookings (hours).
+  // Slots within this window are rejected at booking creation with a clear message.
+  // Default 2 hours. Instructor configures this in dashboard settings.
+  minAdvanceHours           Int                @default(2)
   chargesEnabled            Boolean            @default(false)
   payoutHold                Boolean            @default(false)
   payoutHoldReason          String?

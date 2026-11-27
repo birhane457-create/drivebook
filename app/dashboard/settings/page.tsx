@@ -80,6 +80,7 @@ export default function SettingsPage() {
     acceptingBookings: boolean
     serviceAreas: ServiceSuburb[]
     timezone: string
+    minAdvanceHours: number
   }>({
     hourlyRate: 60,
     serviceRadiusKm: 20,
@@ -104,6 +105,7 @@ export default function SettingsPage() {
     acceptingBookings: true,
     serviceAreas: [],
     timezone: DEFAULT_TIMEZONE,
+    minAdvanceHours: 2,
   })
 
   // Load test centres on mount
@@ -217,6 +219,7 @@ export default function SettingsPage() {
             acceptingBookings: data.acceptingBookings !== false,
             serviceAreas: parseServiceAreas(data.serviceAreas),
             timezone: resolveTimezone(data.timezone) || timezoneFromState((data).state ?? ''),
+            minAdvanceHours: Number(data.minAdvanceHours ?? 2),
           })
         }
       } catch (error) {
@@ -311,6 +314,7 @@ export default function SettingsPage() {
       acceptingBookings: formData.acceptingBookings,
       serviceAreas: serialiseServiceAreas(formData.serviceAreas),
       timezone: formData.timezone,
+      minAdvanceHours: formData.minAdvanceHours,
     }
     
     
@@ -1306,6 +1310,35 @@ export default function SettingsPage() {
                   ⚠️ New bookings are paused. Save settings to apply this change.
                 </p>
               )}
+            </div>
+
+            {/* Minimum Advance Notice */}
+            <div className="bg-background rounded-2xl shadow-sm border border-border p-6">
+              <h2 className="text-xl font-bold mb-1 flex items-center gap-2 text-foreground">
+                <Clock className="h-5 w-5 text-primary" />
+                Minimum Advance Notice
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Students cannot book a slot within this window. Slots closer than this are blocked with a message
+                directing them to contact you directly.
+              </p>
+              <div className="flex items-center gap-3">
+                <select
+                  value={formData.minAdvanceHours}
+                  onChange={e => setFormData(prev => ({ ...prev, minAdvanceHours: Number(e.target.value) }))}
+                  className="bg-secondary/50 border border-border rounded-lg px-3 py-2 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  {[1, 2, 3, 4, 6, 8, 12, 24, 48].map(h => (
+                    <option key={h} value={h}>{h} hour{h === 1 ? '' : 's'}</option>
+                  ))}
+                </select>
+                <span className="text-sm text-muted-foreground">
+                  before the lesson start time
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-3">
+                Current setting: students must book at least <span className="font-semibold text-foreground">{formData.minAdvanceHours} hour{formData.minAdvanceHours === 1 ? '' : 's'}</span> in advance.
+              </p>
             </div>
 
             {/* Cancellation Policy */}

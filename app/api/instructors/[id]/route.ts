@@ -34,6 +34,7 @@ export async function GET(
         baseAddress: true,
         serviceRadiusKm: true,
         allowedDurations: true,
+        minAdvanceHours: true,
       }
     })
 

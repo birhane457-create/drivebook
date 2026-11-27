@@ -295,6 +295,7 @@ export async function POST(req: NextRequest) {
         acceptingBookings: true,
         timezone: true,
         state: true,
+        minAdvanceHours: true,
       },
     } as any) as any) as any;
 
@@ -929,11 +930,25 @@ export async function POST(req: NextRequest) {
       endTime = new Date(startTime.getTime() + firstLessonDurationMinutes * 60 * 1000);
     }
 
-    // isShortNotice is computed server-side Ã¢â‚¬â€ never trust caller input.
-    // Rule: lesson starts within 2 hours of now Ã¢â€ â€™ requires instructor approval first.
+    // PB-SEC-02 FIX: replace approval-queue with instructor-configurable minimum advance notice.
+    // A PENDING booking that accepts payment but webhook rejects is worse than a clean upfront rejection.
+    // Instructor sets minAdvanceHours in dashboard (default 2). Slots within that window are blocked.
+    const minAdvanceHours = Number((instructor as any).minAdvanceHours ?? 2);
     const isShortNotice = startTime
-      ? (startTime.getTime() - Date.now()) < 2 * 60 * 60 * 1000
+      ? (startTime.getTime() - Date.now()) < minAdvanceHours * 60 * 60 * 1000
       : false;
+
+    if (isShortNotice) {
+      const displayName = (instructor as any).businessName || instructor.name;
+      return NextResponse.json(
+        {
+          error: `This slot is too soon to book online. ${displayName} requires at least ${minAdvanceHours} hour${minAdvanceHours === 1 ? '' : 's'} notice. Please contact them directly to arrange a last-minute lesson.`,
+          code: 'SHORT_NOTICE',
+          minAdvanceHours,
+        },
+        { status: 400 }
+      );
+    }
 
     let booking: any;
     try {
