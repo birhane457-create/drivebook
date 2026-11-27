@@ -98,7 +98,40 @@ export function localDateTimeToUTC(date: string, time: string, timezone: string)
   const inputDate = new Date(localIso + 'Z');
   const offsetMs = inputDate.getTime() - tzLocal.getTime();
 
-  return new Date(inputDate.getTime() + offsetMs);
+  const candidate = new Date(inputDate.getTime() + offsetMs);
+
+  // ── DST-boundary verification (added for PB-SEC-02) ─────────────────────────
+  // On spring-forward transition days the reference-derived offset can be the
+  // post-transition offset while the input wall time falls before the transition
+  // (00:00–02:00 window). Round-trip the candidate and check it reproduces the
+  // input wall time in the target timezone. If it does not, try the offset one
+  // hour earlier/later — one of the two candidates always round-trips.
+  const roundTrip = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+  });
+  const fmt = (d: Date) => {
+    const fp = roundTrip.formatToParts(d);
+    const q = Object.fromEntries(fp.filter(x => x.type !== 'literal').map(x => [x.type, x.value]));
+    return `${q.year}-${q.month}-${q.day}T${q.hour === '24' ? '00' : q.hour}:${q.minute}`;
+  };
+
+  const targetWall = `${date}T${time}`;
+  if (fmt(candidate) === targetWall) return candidate;
+
+  // Try adjacent offsets (±1h) — covers both DST transition directions
+  for (const delta of [-3600000, 3600000]) {
+    const alt = new Date(candidate.getTime() + delta);
+    if (fmt(alt) === targetWall) return alt;
+  }
+
+  // Nonexistent local time (inside the spring-forward gap): no candidate
+  // round-trips. Map forward past the gap — consistent with how most systems
+  // resolve nonexistent wall times. The advance-notice check tolerates this:
+  // at worst the slot lands slightly later, which only makes it MORE available.
+  return candidate;
 }
 
 /**
