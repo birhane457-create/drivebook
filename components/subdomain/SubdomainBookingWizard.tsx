@@ -180,6 +180,9 @@ export default function SubdomainBookingWizard({ provider: instructor, primary, 
           scheduledBookings: bookingState.bookingType === 'now' ? bookingState.scheduledBookings : undefined,
           // PB-SEC-01: include pre-verified ownership token when email belongs to existing account
           ...(bookingState.emailOwnershipToken ? { emailOwnershipToken: bookingState.emailOwnershipToken } : {}),
+          // Send stable sessionId so the bulk route can exclude the user's own slot reservation
+          // from the conflict check — prevents an expired-but-unclaimed hold from blocking submission
+          sessionId: bookingState.sessionId,
         }),
       });
 

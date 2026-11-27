@@ -81,6 +81,8 @@ function PaymentForm({ setIsRedirecting, slotSecondsLeft }: { setIsRedirecting: 
         pricing: bookingState.pricing,
         // PB-SEC-01: forward pre-verified ownership token so bulk route skips the 409 OTP challenge
         ...(bookingState.emailOwnershipToken ? { emailOwnershipToken: bookingState.emailOwnershipToken } : {}),
+        // Send sessionId so bulk route can exclude caller's own slot reservation from conflict check
+        sessionId: bookingState.sessionId,
       };
 
       const bookingResponse = await fetch('/api/public/bookings/bulk', {

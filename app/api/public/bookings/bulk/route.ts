@@ -27,6 +27,9 @@ const bulkBookingSchema = z.object({
   hours: z.coerce.number(),
   includeTestPackage: z.boolean().default(false),
   bookingType: z.enum(['now', 'later']),
+  // sessionId from BookingContext — used to exclude the user's own slot reservation
+  // from the conflict check so an expired-but-unclaimed hold doesn't block their own booking
+  sessionId: z.string().optional(),
   scheduledBookings: z.array(z.object({
     date: z.string(),
     time: z.string(),
@@ -969,12 +972,17 @@ export async function POST(req: NextRequest) {
           });
 
           // PAY-H-04 Path B fix: also check active SlotReservation rows.
-          // The previous code only checked the Booking table, making a Path A
-          // reservation invisible to Path B concurrent callers.
+          // Exclude the caller's own session so an active or recently-expired hold
+          // from the scheduling step does not block the user's own booking submission.
+          // If another session holds an overlapping active reservation, reject.
+          const callerSessionId = data.sessionId?.trim() || idempotencyKey;
           const reservationConflict = await tx.slotReservation.findFirst({
             where: {
               providerId: resolvedInstructorId,
               expiresAt: { gt: now },
+              // Exclude the user's own reservation — expiry is a hold-release mechanism,
+              // not a booking eligibility gate. The slot may still be free.
+              ...(callerSessionId ? { NOT: { sessionId: callerSessionId } } : {}),
               AND: [
                 { startTime: { lt: endTime } },
                 { endTime:   { gt: startTime } },
@@ -983,15 +991,25 @@ export async function POST(req: NextRequest) {
           });
           if (reservationConflict) throw new Error('SLOT_TAKEN');
 
+          // Also delete any expired self-reservation so the GiST constraint
+          // doesn't fire when we create the fresh hold below.
+          if (callerSessionId) {
+            await tx.slotReservation.deleteMany({
+              where: {
+                providerId: resolvedInstructorId,
+                sessionId: callerSessionId,
+                expiresAt: { lt: now },
+              },
+            });
+          }
+
           // Create slot reservation to hold during payment
           await tx.slotReservation.create({
             data: {
               providerId: resolvedInstructorId,
-              // Use the request idempotency key as sessionId if available, else generate one.
-              // This lets the client release the server-side reservation using the same key
-              // if the user abandons before payment Ã¢â‚¬â€ without a real sessionId the only
-              // cleanup path was the 10-minute cron expiry.
-              sessionId: idempotencyKey ?? `bulk-${Date.now()}`,
+              // Use callerSessionId so the client can identify and release this hold.
+              // Falls back to idempotency key then a fresh timestamp-based key.
+              sessionId: callerSessionId ?? idempotencyKey ?? `bulk-${Date.now()}`,
               startTime,
               endTime,
               expiresAt: slotExpiresAt,
