@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.99 (all PB-SEC-01..10 and BLOCKER-001 FIX-VERIFIED: 61 logic-level tests in 6 new files, all pass; full suite 889/1459 pass, 210 fail on localhost DB auth)
-**Last Updated:** 2026-11-26 (v6.99 — 61 logic-level tests all pass; full suite 210 failures are pre-existing localhost DB auth failures, not regressions)
+**Version:** 6.99 (FIX-VERIFIED: 61 logic tests + 104 Tokyo DB/HTTP tests pass; booking-group-regression 15/15 HTTP pass against Tokyo)
+**Last Updated:** 2026-11-26 (v6.99 — Tokyo DB run: 104 pass including 15 live HTTP + 28 live DB tests; h02/h02b FK setup failures are pre-existing)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
