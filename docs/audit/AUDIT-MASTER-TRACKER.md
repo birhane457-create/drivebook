@@ -1,6 +1,6 @@
 ﻿﻿﻿﻿﻿# DriveBook Security Audit — Master Tracker
-**Version:** 6.99 (PB-SEC-02 FIX-VERIFIED; PB-SEC-03 description corrected per GPT audit; PB-SEC-10 registered: apex-hostname rewrite in wizard)
-**Last Updated:** 2026-11-26 (v6.99 — PB-SEC-03 description corrected: original defect was tokenless create-intent, not discarded checkoutUrl; hostname defect registered as PB-SEC-10)
+**Version:** 6.99 (PB-SEC-02/10 FIX-VERIFIED; BLOCKER-001 FIX-VERIFIED 2f8ac166c with canonical helper)
+**Last Updated:** 2026-11-26 (v6.99 — BLOCKER-001 FIX-VERIFIED: canonical payable-amount helper, 8/8 tests; PB-SEC-02/10 FIX-VERIFIED)
 **Process:** See `AUDIT-PROCESS.md` for stage definitions, closure rules, and Kiro enforcement rules.  
 **Authority:** This file is the single authoritative record of every finding's lifecycle state.  
 All other audit documents are evidence records that support this file.
@@ -904,6 +904,26 @@ DELETE /api/availability/check-and-reserve ... <- slot released on unmount
 **Impact:** Customers booking directly on the apex domain are redirected to `com.au` after checkout submission, losing the booking token and failing to reach the payment page.
 **Production exposure:** Depends on whether customers use the apex domain. If all public booking traffic arrives via instructor subdomains or the standard `/book/[instructorId]` path on the apex domain, the apex redirect may not be exercised. Needs production URL analysis before risk classification is finalized.
 **Recommended fix:** Do not reconstruct the host from the client-side hostname. Instead, use the absolute `checkoutUrl` returned by the backend directly — the backend already knows the correct base URL (`NEXTAUTH_URL`). The host-stripping code becomes unnecessary when the backend-provided absolute URL is used as-is.
+
+---
+
+### 8.9 — BLOCKER-001: Package booking amount mismatch (2026-11-26)
+
+**Source:** Handoff audit branch; traced and fixed 2026-11-26.
+
+| ID | Title | Risk | Finding | Verification | Fix | Fix-Verified | Status | Evidence | Phase-1-ref |
+|---|---|---|---|---|---|---|---|---|---|
+| BLOCKER-001 | `create-intent` charged `booking.price` (first-lesson rate) for package bookings while the webhook validated against `packageTotalPaid` — customer charged , webhook expected , mismatch thrown, package booking never confirmed | CRITICAL | CONFIRMED | VERIFIED — full source trace 2026-11-26: bulk route sets price=firstLessonPrice, packageTotalPaid=verifiedTotal; payment-summary returns packageTotalPaid as total; create-intent line 248 used booking.price; webhook line 1168 expected packageTotalPaid. GPT source review of a0103cf9e confirmed fix present. | ``a0103cf9e`` (paymentAmount uses packageTotalPaid) + ``2f8ac166c`` (canonical helper `lib/payments/payable-amount.ts`; both create-intent and webhook wired through getPayableAmount/getPayableAmountCents) | 8/8 tests pass ``blocker-001-payable-amount.test.ts`` 2026-11-26: T1 package uses packageTotalPaid; T2 single lesson uses price; T3 cents conversion; T4 create-intent and webhook identical (core invariant); T5 Decimal/string coercion; T6-T7 zero/NaN fallthrough | FIX-VERIFIED | Source trace 2026-11-26; GPT review of a0103cf9e; tests at 2f8ac166c | none |
+
+**Amount flow (fixed):**
+| Step | Value |
+|---|---|
+| Bulk route creates booking | price= (first lesson), packageTotalPaid= |
+| payment-summary returns total |  (packageTotalPaid) |
+| create-intent charges Stripe | `getPayableAmount(booking)` =  |
+| Webhook validates | `getPayableAmountCents(booking)` = 58500 cents — `amount_received` = 58500 — match, booking confirmed |
+
+**Design note (GPT review qualification addressed):** The GPT review flagged the absence of a shared canonical function as a future consistency risk. Fixed in `2f8ac166c`: `lib/payments/payable-amount.ts` is the single source of truth; both `create-intent` and the webhook import it. T4 in the test suite asserts the two paths produce identical amounts — the core invariant.
 
 ---
 
