@@ -1163,10 +1163,10 @@ async function handleBookingPaymentSuccess(
             return;
           }
       
-          // âœ… Validate payment amount matches what was charged
-          // For packages: Stripe charged packageTotalPaid. For single lessons: booking.price.
-          const chargedAmount = (booking as any).packageTotalPaid || booking.price;
-          const expectedAmount = Math.round(chargedAmount * 100); // Convert to cents
+          // ✅ Validate payment amount matches what was charged
+          // Use the canonical helper — must match create-intent exactly (BLOCKER-001 fix).
+          const { getPayableAmountCents } = await import('@/lib/payments/payable-amount');
+          const expectedAmount = getPayableAmountCents(booking as any);
           const receivedAmount = paymentIntent.amount_received;
       
           if (receivedAmount !== expectedAmount) {

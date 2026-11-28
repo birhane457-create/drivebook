@@ -241,16 +241,11 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
       );
     }
 
-    // BLOCKER-001 FIX: use the correct payable amount for the booking type.
-    //   - Package booking: packageTotalPaid (full package price). The webhook
-    //     validates amount_received against packageTotalPaid || booking.price.
-    //     Previously the first-lesson rate was charged instead of the package
-    //     total, causing a webhook amount mismatch and unconfirmed bookings.
-    //   - Single lesson: booking.price (per-lesson rate).
-    // Never accept amount from client — always use the DB value.
-    const paymentAmount = (booking as any).packageTotalPaid
-      ? Number((booking as any).packageTotalPaid)
-      : booking.price;
+    // BLOCKER-001 FIX: use the canonical payable-amount helper.
+    // See lib/payments/payable-amount.ts — single source of truth shared
+    // with the webhook so the two can never diverge.
+    const { getPayableAmount } = await import('@/lib/payments/payable-amount');
+    const paymentAmount = getPayableAmount(booking as any);
 
     // âœ… SECURITY FIX: PaymentIntent deduplication with DB-level advisory lock.
     //
