@@ -205,21 +205,24 @@ export default function SubdomainBookingWizard({ provider: instructor, primary, 
 
       if (res.ok) {
         const host = window.location.host;
-        const parts = host.split('.');
-        const mainHost = parts.length > 1 && !parts[0].includes(':') ? parts.slice(1).join('.') : host;
-        const baseUrl = `${window.location.protocol}//${mainHost}`;
         const fromParam = `?from=${encodeURIComponent(host)}`;
 
-        // Use checkoutUrl from bulk response — it already contains the paymentToken.
-        // Fall back to building the URL only for wallet/transaction flows.
+        // PB-SEC-10 FIX: use the backend-provided checkoutUrl unchanged.
+        // The backend constructs it from NEXTAUTH_URL (absolute, canonical domain),
+        // so it is correct on every host — apex, www, and instructor subdomains.
+        // The previous client-side host reconstruction stripped the first segment,
+        // which produced 'com.au' instead of 'drivebook.com.au' on the apex domain.
+        //
+        // The transactionId (wallet) path still builds a URL client-side because
+        // the backend does not return an absolute URL for that flow. That path's
+        // hostname construction is tracked separately as a follow-up.
         const url = data.transactionId
-          ? `${baseUrl}/payment/wallet/${data.transactionId}${fromParam}&hrs=${bookingState.hours}&rate=${bookingState.provider?.hourlyRate ?? 0}&disc=${bookingState.pricing.discountPercentage}&total=${bookingState.pricing.total}`
+          ? `${window.location.protocol}//${window.location.host}/payment/wallet/${data.transactionId}${fromParam}&hrs=${bookingState.hours}&rate=${bookingState.provider?.hourlyRate ?? 0}&disc=${bookingState.pricing.discountPercentage}&total=${bookingState.pricing.total}`
           : data.checkoutUrl
-            ? `${window.location.protocol}//${mainHost}${new URL(data.checkoutUrl).pathname}${new URL(data.checkoutUrl).search}`
-            : `${baseUrl}/booking/${data.bookingId}/payment${fromParam}`;
+            ? data.checkoutUrl  // ← absolute URL from backend; use as-is
+            : `${window.location.protocol}//${window.location.host}/booking/${data.bookingId}/payment${fromParam}`;
 
         // Navigate in the same tab — PB-SEC-04 fix.
-        // Do not use target="_blank"; the user must stay in the same window.
         window.location.href = url;
       } else {
         setError(data.error || 'Booking failed. Please try again.');
