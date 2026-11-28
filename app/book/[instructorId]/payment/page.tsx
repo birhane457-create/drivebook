@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -125,115 +125,9 @@ function PaymentForm({ setIsRedirecting, slotSecondsLeft }: { setIsRedirecting: 
         }
         throw new Error('Could not create payment session. Please try again.');
       }
-      const paymentPayload: {
-        bookingId?: string;
-        amount: number;
-      } = {
-        amount: bookingState.pricing.total
-      };
-
-      let primaryBookingId: string | null = null;
-
-      // For "book now" we get an array of booking IDs – use the first as the
-      // canonical one for payment metadata and confirmation routing.
-      if (Array.isArray(bookingResult.bookingIds) && bookingResult.bookingIds.length > 0) {
-        primaryBookingId = bookingResult.bookingIds[0];
-      } else if (bookingResult.bookingId) {
-        // Fallback for any legacy responses that still return bookingId
-        primaryBookingId = bookingResult.bookingId;
-      }
-
-      if (!primaryBookingId) {
-        throw new Error('Missing bookingId from booking response');
-      }
-
-      paymentPayload.bookingId = primaryBookingId;
-
-      const paymentResponse = await fetch('/api/payments/create-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(paymentPayload)
-      });
-
-      if (!paymentResponse.ok) {
-        throw new Error('Failed to create payment intent');
-      }
-
-      const { clientSecret } = await paymentResponse.json();
-
-      // Step 3: Confirm payment with Stripe
-      const cardElement = elements.getElement(CardNumberElement);
-      if (!cardElement) {
-        throw new Error('Card element not found');
-      }
-
-      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
-        payment_method: {
-          card: cardElement,
-          billing_details: {
-            name: bookingState.accountHolderName,
-            email: bookingState.accountHolderEmail,
-            phone: bookingState.accountHolderPhone
-          }
-        }
-      });
-
-      if (stripeError) {
-        throw new Error(stripeError.message || 'Payment failed');
-      }
-
-      // Build the confirmation URL — used by both succeeded and processing paths
-      const buildConfirmationUrl = (paymentStatus: string) => {
-        const confirmationBase = `/booking/${primaryBookingId || bookingResult.bookingId}/confirmation`;
-        const confirmParams = new URLSearchParams({ payment: paymentStatus });
-        if (bookingState.provider?.displayName || bookingState.provider?.name) confirmParams.set('provider', bookingState.provider.displayName || bookingState.provider.name);
-        if (bookingState.hours)           confirmParams.set('hours', String(bookingState.hours));
-        if (bookingState.pricing?.total)  confirmParams.set('total', bookingState.pricing.total.toFixed(2));
-        if (bookingState.scheduledBookings?.[0]?.date) confirmParams.set('date', bookingState.scheduledBookings[0].date);
-        if (bookingState.scheduledBookings?.[0]?.time) confirmParams.set('time', bookingState.scheduledBookings[0].time);
-        return bookingState.bookingType === 'later'
-          ? `/client-dashboard?payment=${paymentStatus}&bookingType=later`
-          : `${confirmationBase}?${confirmParams.toString()}`;
-      };
-
-      // Handle different payment intent statuses
-      if (paymentIntent.status === 'succeeded') {
-        setSuccess(true);
-        setError(null);
-        setIsRedirecting(true);
-        setTimeout(() => {
-          // resetBooking is called on the confirmation page mount, not here,
-          // to avoid wiping context while router.push is still in-flight.
-          router.push(buildConfirmationUrl('success'));
-        }, 1500);
-      } else if (paymentIntent.status === 'requires_action') {
-        // 3DS / SCA — must call handleNextAction to present the authentication challenge.
-        // Simply showing an error message is wrong and will fail all 3DS-enrolled cards.
-        const { error: actionError, paymentIntent: confirmedIntent } =
-          await stripe.handleNextAction({ clientSecret });
-        if (actionError) {
-          throw new Error(actionError.message || '3D Secure authentication failed. Please try again.');
-        }
-        if (confirmedIntent?.status === 'succeeded') {
-          setSuccess(true);
-          setError(null);
-          setIsRedirecting(true);
-          setTimeout(() => {
-            router.push(buildConfirmationUrl('success'));
-          }, 1500);
-        } else {
-          throw new Error('Payment was not completed after authentication. Please try again.');
-        }
-      } else if (paymentIntent.status === 'processing') {
-        setSuccess(true);
-        setError(null);
-        setIsRedirecting(true);
-        setTimeout(() => {
-          router.push(buildConfirmationUrl('processing'));
-        }, 1500);
-      } else {
-        throw new Error(`Unexpected payment status: ${paymentIntent.status}. Please try again or contact support.`);
-      }
+      // Both booking types are handled above — Book Later and Book Now both
+      // redirect to checkoutUrl or throw. Code below this point is unreachable
+      // and has been removed. See PB-SEC-03 / PB-SEC-04 fixes.
     } catch (err) {
       console.error('Payment error:', err);
       setError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
