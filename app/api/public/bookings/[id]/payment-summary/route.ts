@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GET /api/public/bookings/{id}/payment-summary?token={paymentToken}
  *
  * Lightweight endpoint for the payment page.
@@ -118,7 +118,9 @@ export async function GET(
       booking.status === 'EXPIRED' ||
       (booking.status === 'PENDING_PAYMENT' && new Date() > expiresAt)
 
-    const total = (booking as any).packageTotalPaid ?? booking.price
+    // Canonical payable-amount rule — same as create-intent and webhook (BLOCKER-001)
+    const { getPayableAmount } = await import('@/lib/payments/payable-amount')
+    const total = getPayableAmount(booking as any)
 
     return NextResponse.json({
       bookingId: booking.id,
