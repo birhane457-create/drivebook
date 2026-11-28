@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { stripeService } from '@/lib/services/stripe';
@@ -241,11 +241,16 @@ async function handleBookingPaymentIntent(bookingId: string, amount?: number, se
       );
     }
 
-    // Use booking.price always â€” never accept amount from client for booking payments.
-    // The webhook validates amount_received (from Stripe) against booking.price (from DB),
-    // so a client-supplied amount can't actually confirm a booking, but removing it here
-    // makes the intent explicit and eliminates dead code.
-    const paymentAmount = booking.price;
+    // BLOCKER-001 FIX: use the correct payable amount for the booking type.
+    //   - Package booking: packageTotalPaid (full package price). The webhook
+    //     validates amount_received against packageTotalPaid || booking.price.
+    //     Previously the first-lesson rate was charged instead of the package
+    //     total, causing a webhook amount mismatch and unconfirmed bookings.
+    //   - Single lesson: booking.price (per-lesson rate).
+    // Never accept amount from client — always use the DB value.
+    const paymentAmount = (booking as any).packageTotalPaid
+      ? Number((booking as any).packageTotalPaid)
+      : booking.price;
 
     // âœ… SECURITY FIX: PaymentIntent deduplication with DB-level advisory lock.
     //
